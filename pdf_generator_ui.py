@@ -95,6 +95,7 @@ def read_excel_original(excel_path, log_callback=print):
     return target_sheet, headers, rows
 
 def generate_pdf_original(audit_type, branch_code, branch_name, state, rows, output_path):
+    if not rows: return
     PAGE_WIDTH, PAGE_HEIGHT = landscape(A4)
     doc = SimpleDocTemplate(output_path, pagesize=(PAGE_WIDTH, PAGE_HEIGHT), leftMargin=50.2, rightMargin=50.2, topMargin=48.0, bottomMargin=15)
     cw = [22.2, 101.1, 118.5, 60.3, 67.2, 125.0, 247.3]
