@@ -1,17 +1,42 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+import sys
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
+
+# Try to find TCL/TK paths to ensure they are bundled
+tcl_lib_path = ""
+tk_lib_path = ""
+
+if sys.platform == "win32":
+    # Common paths for TCL/TK in Windows Python installations
+    base_path = os.path.dirname(sys.executable)
+    possible_tcl = os.path.join(base_path, 'tcl')
+    if os.path.exists(possible_tcl):
+        # Find the specific tcl8.6 and tk8.6 folders
+        for item in os.listdir(possible_tcl):
+            if item.startswith('tcl8'):
+                tcl_lib_path = os.path.join(possible_tcl, item)
+            if item.startswith('tk8'):
+                tk_lib_path = os.path.join(possible_tcl, item)
+
+datas = [('fonts', 'fonts')]
+if tcl_lib_path and tk_lib_path:
+    datas.append((tcl_lib_path, os.path.join('tcl', os.path.basename(tcl_lib_path))))
+    datas.append((tk_lib_path, os.path.join('tk', os.path.basename(tk_lib_path))))
 
 a = Analysis(
     ['pdf_generator_ui.py'],
     pathex=[],
     binaries=[],
-    datas=[('fonts', 'fonts')],
+    datas=datas,
     hiddenimports=[
         'tkinter',
         'tkinter.filedialog',
         'tkinter.messagebox',
         'tkinter.scrolledtext',
+        'tkinter.ttk',
         'openpyxl',
         'openpyxl.styles',
         'pandas', 
@@ -34,7 +59,7 @@ a = Analysis(
     excludes=[
         'torch', 'tensorflow', 'keras', 'scipy', 'transformers', 'cv2',
         'sklearn', 'seaborn', 'matplotlib', 'sqlalchemy', 'botocore',
-        'boto3', 'aiohttp', 'httpx', 'jinja2', 'sympy', 'customtkinter',
+        'boto3', 'aiohttp', 'httpx', 'jinja2', 'sympy',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
