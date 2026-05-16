@@ -1,0 +1,7 @@
+.venv_fix
+build
+dist
+*.xlsx
+*.pdf
+__pycache__
+*.pyc
