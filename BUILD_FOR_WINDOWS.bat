@@ -1,58 +1,64 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: 1. HANDLE UNC PATHS (Network shares/Mac folders)
-:: pushd automatically maps a UNC path to a drive letter
+:: UNIVERSAL PATH HANDLING
+:: Works on Network Shares (UNC), Shared Mac Folders, and Local Drives
 pushd "%~dp0"
 
 echo ========================================================
-echo IDFC PDF GENERATOR - NO-ADMIN WINDOWS BUILDER
+echo IDFC PDF GENERATOR - UNIVERSAL WINDOWS BUILDER
 echo ========================================================
 echo.
 
-:: 2. CHECK IF PYTHON IS ALREADY INSTALLED
+:: 1. CHECK FOR SYSTEM-WIDE PYTHON
 python --version >nul 2>&1
 if %errorlevel% equ 0 (
     set "PY_EXE=python"
+    echo [+] Using System Python.
     goto :INSTALL_LIBS
 )
 
-:: 3. SETUP PORTABLE VERSION (NO ADMIN NEEDED)
+:: 2. SETUP PORTABLE VERSION (FOR NO-ADMIN / RESTRICTED SYSTEMS)
 if not exist "py_portable" mkdir "py_portable"
 cd py_portable
 
 if not exist "python.exe" (
     echo [!] No Python found. Setting up a private portable version...
-    echo [*] Downloading...
-    curl -L -o python_zip.zip https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip
+    echo [*] Downloading components (requires internet)...
+    
+    :: Download Python 3.11 Embeddable
+    curl -L -o py.zip https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip
+    if %errorlevel% neq 0 ( echo [!] Download failed. Check internet. & pause & exit /b )
     
     echo [*] Extracting...
-    tar -xf python_zip.zip
-    del python_zip.zip
+    tar -xf py.zip
+    del py.zip
     
-    echo [*] Enabling libraries...
-    for %%f in (python311._pth) do (
+    echo [*] Configuring environment...
+    :: Dynamically find and fix the .pth file to enable libraries
+    for %%f in (*._pth) do (
+        echo [DEBUG] Configuring %%f
         echo python311.zip> "%%f"
         echo .>> "%%f"
         echo import site>> "%%f"
     )
     
-    echo [*] Setting up pip...
+    echo [*] Installing Pip...
     curl -L -o get-pip.py https://bootstrap.pypa.io/get-pip.py
-    python.exe get-pip.py --no-warn-script-location
+    .\python.exe get-pip.py --no-warn-script-location
 )
 
 set "PY_EXE=%CD%\python.exe"
 cd ..
 
 :INSTALL_LIBS
-echo [*] Using Python: "!PY_EXE!"
+echo.
 echo [*] Installing required libraries...
 "!PY_EXE!" -m pip install openpyxl pandas reportlab pyinstaller --no-warn-script-location --quiet
 
 echo.
 echo ========================================================
-echo BUILDING THE EXE FILE
+echo BUILDING THE FINAL EXE
 echo ========================================================
 if exist "dist" rd /s /q "dist"
 if exist "build" rd /s /q "build"
@@ -63,12 +69,14 @@ if %errorlevel% equ 0 (
     echo.
     echo ========================================================
     echo [+] SUCCESS! 
-    echo [+] Your Windows file is here:
+    echo [+] Your Windows file is ready in:
     echo     dist\pdf_generator_ui\pdf_generator_ui.exe
+    echo.
+    echo [+] You can now send that .exe to anyone.
     echo ========================================================
 ) else (
     echo.
-    echo [!] ERROR: The build failed. 
+    echo [!] ERROR: The build process failed.
 )
 
 pause
