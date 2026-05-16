@@ -348,8 +348,8 @@ class App:
         self.create_input(panel, "Source Master Excel", self.file_var, self.browse_in, "SELECT FILE")
         
         # 2. Audit Config Row
-        cfg_row = tk.Frame(panel, bg="#FFFFFF", pady=20)
-        cfg_row.pack(fill=tk.X)
+        cfg_row = tk.Frame(panel, bg="#FFFFFF")
+        cfg_row.pack(fill=tk.X, pady=20)
         
         # Left side: Audit Type
         type_box = tk.Frame(cfg_row, bg="#FFFFFF")
@@ -366,8 +366,8 @@ class App:
                        command=lambda: set_config("auto_open", str(self.auto_open.get()))).pack(side=tk.RIGHT)
 
         # 2b. Packaging Mode (Dynamic Storage)
-        pkg_row = tk.Frame(panel, bg="#FFFFFF", pady=(0, 10))
-        pkg_row.pack(fill=tk.X)
+        pkg_row = tk.Frame(panel, bg="#FFFFFF")
+        pkg_row.pack(fill=tk.X, pady=(0, 10))
         tk.Label(pkg_row, text="Output Mode:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
         for m in ["FOLDER", "ZIP ONLY", "BOTH"]:
             tk.Radiobutton(pkg_row, text=m, variable=self.pkg_var, value=m, 
@@ -532,6 +532,7 @@ class App:
                 else: os.system(f'open "{path}"')
 
     def export_history(self):
+        import pandas as pd
         f = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")])
         if f:
             data = get_recent_history(limit=1000)
