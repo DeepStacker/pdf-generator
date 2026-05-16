@@ -1,28 +1,29 @@
 @echo off
 setlocal enabledelayedexpansion
 
+:: 1. HANDLE UNC PATHS (Network shares/Mac folders)
+:: pushd automatically maps a UNC path to a drive letter
+pushd "%~dp0"
+
 echo ========================================================
 echo IDFC PDF GENERATOR - NO-ADMIN WINDOWS BUILDER
 echo ========================================================
 echo.
 
-:: 1. CHECK IF PYTHON IS ALREADY INSTALLED (SYSTEM WIDE)
+:: 2. CHECK IF PYTHON IS ALREADY INSTALLED
 python --version >nul 2>&1
 if %errorlevel% equ 0 (
     set "PY_EXE=python"
     goto :INSTALL_LIBS
 )
 
-:: 2. IF NO PYTHON, SETUP PORTABLE VERSION (NO ADMIN NEEDED)
-echo [!] No Python found. Setting up a private portable version...
-echo [*] This does NOT require admin password or installation.
-echo.
-
+:: 3. SETUP PORTABLE VERSION (NO ADMIN NEEDED)
 if not exist "py_portable" mkdir "py_portable"
 cd py_portable
 
 if not exist "python.exe" (
-    echo [*] Downloading Portable Python...
+    echo [!] No Python found. Setting up a private portable version...
+    echo [*] Downloading...
     curl -L -o python_zip.zip https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip
     
     echo [*] Extracting...
@@ -30,7 +31,6 @@ if not exist "python.exe" (
     del python_zip.zip
     
     echo [*] Enabling libraries...
-    :: This is the CRITICAL fix for portable python: enable 'import site'
     for %%f in (python311._pth) do (
         echo python311.zip> "%%f"
         echo .>> "%%f"
@@ -69,7 +69,7 @@ if %errorlevel% equ 0 (
 ) else (
     echo.
     echo [!] ERROR: The build failed. 
-    pause
 )
 
 pause
+popd
