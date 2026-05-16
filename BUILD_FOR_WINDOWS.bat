@@ -1,85 +1,111 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: UNIVERSAL PATH HANDLING
-pushd "%~dp0"
+:: ========================================================
+:: IDFC PDF GENERATOR - ENTERPRISE BUILDER v4.1
+:: ========================================================
+:: Designed for restricted, no-admin Windows environments.
+:: ========================================================
+
+:: 1. HANDLE UNC / NETWORK PATHS
+:: If running from \\server\path, CMD will default to C:\Windows
+:: We must use pushd to map a drive letter temporarily.
+pushd "%~dp0" >nul 2>&1
+if "%CD%"=="C:\Windows" (
+    echo [!] WARNING: Running from a restricted system path or network drive.
+    echo [!] Attempting to stabilize directory...
+)
+
+:: 2. PREVENT MULTIPLE INSTANCES (The "Hacker" Window Bug)
+set "LOCK_FILE=%TEMP%\idfc_builder_lock.tmp"
+if exist "%LOCK_FILE%" (
+    :: Check if the lock file is old (older than 1 minute)
+    :: For simplicity, we just warn and ask to continue if lock exists
+    echo [!] Another instance of the builder might be running.
+    echo [!] If you see many windows, please close them and delete:
+    echo     %LOCK_FILE%
+    set /p "cont=Continue anyway? (y/n): "
+    if /i "!cont!" neq "y" exit /b
+)
+echo %DATE% %TIME% > "%LOCK_FILE%"
 
 echo ========================================================
-echo IDFC PDF GENERATOR - ULTIMATE WINDOWS BUILDER
+:: Header
+echo [+] STARTING BUILD PROCESS...
 echo ========================================================
-echo.
 
-:: 1. CHECK FOR SYSTEM-WIDE PYTHON
+:: 3. FIND PYTHON
+set "PY_CMD="
 python --version >nul 2>&1
 if %errorlevel% equ 0 (
-    set "PY_EXE=python"
-    echo [+] Using System Python.
-    goto :CHECK_TKINTER
-)
-
-:: 2. SETUP PORTABLE VERSION (FOR NO-ADMIN / RESTRICTED SYSTEMS)
-if not exist "py_portable" mkdir "py_portable"
-cd py_portable
-
-if not exist "python.exe" (
-    echo [!] No Python found. Setting up a private portable version...
-    echo [*] Downloading components (requires internet)...
-    
-    :: NOTE: Embeddable Python does NOT have tkinter. 
-    :: If user needs tkinter, we recommend manual installation.
-    curl -L -o py.zip https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip
-    tar -xf py.zip
-    del py.zip
-    
-    for %%f in (*._pth) do (
-        echo python311.zip> "%%f"
-        echo .>> "%%f"
-        echo import site>> "%%f"
+    set "PY_CMD=python"
+    echo [+] System Python detected.
+) else (
+    py --version >nul 2>&1
+    if !errorlevel! equ 0 (
+        set "PY_CMD=py"
+        echo [+] Python Launcher detected.
     )
-    
-    curl -L -o get-pip.py https://bootstrap.pypa.io/get-pip.py
-    .\python.exe get-pip.py --no-warn-script-location
 )
 
-set "PY_EXE=%CD%\python.exe"
-cd ..
-
-:CHECK_TKINTER
-echo [*] Verifying Tkinter...
-"!PY_EXE!" -c "import tkinter" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [!] WARNING: Your Python installation does NOT have 'tkinter'.
-    echo [!] This is required for the UI.
-    echo [!] Please install Python from python.org and check "tcl/tk and IDLE" during setup.
-    pause
-    exit /b
+if "!PY_CMD!"=="" (
+    echo [!] No System Python found. Using Portable Mode...
+    if not exist "py_portable" mkdir "py_portable"
+    cd py_portable
+    if not exist "python.exe" (
+        echo [*] Downloading Portable Python (3.11)...
+        powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip', 'py.zip')"
+        echo [*] Extracting...
+        tar -xf py.zip
+        del py.zip
+        
+        :: Enable site-packages for embeddable python
+        for %%f in (*._pth) do (
+            echo python311.zip> "%%f"
+            echo .>> "%%f"
+            echo import site>> "%%f"
+        )
+        
+        echo [*] Installing Pip...
+        powershell -Command "(New-Object System.Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py', 'get-pip.py')"
+        .\python.exe get-pip.py --no-warn-script-location
+        del get-pip.py
+    )
+    set "PY_CMD=%CD%\python.exe"
+    cd ..
 )
 
-:INSTALL_LIBS
-echo.
-echo [*] Installing required libraries...
-"!PY_EXE!" -m pip install openpyxl pandas reportlab pyinstaller --no-warn-script-location --quiet
+:: 4. VERIFY LIBRARIES
+echo [*] Checking dependencies...
+"!PY_CMD!" -m pip install openpyxl pandas reportlab pyinstaller --no-warn-script-location --quiet
 
+:: 5. THE BUILD
 echo.
 echo ========================================================
-echo BUILDING THE FINAL EXE (WITH TKINTER FIX)
+echo BUILDING EXE... PLEASE WAIT (This may take 1-2 minutes)
 echo ========================================================
 if exist "dist" rd /s /q "dist"
 if exist "build" rd /s /q "build"
 
-"!PY_EXE!" -m PyInstaller --clean --noconfirm pdf_generator.spec
+"!PY_CMD!" -m PyInstaller --noconfirm --clean pdf_generator.spec
 
 if %errorlevel% equ 0 (
     echo.
     echo ========================================================
-    echo [+] SUCCESS! 
-    echo [+] Your Windows file is ready in:
-    echo     dist\IDFC_PDF_Generator\IDFC_PDF_Generator.exe
+    echo [+++] SUCCESS! [+++]
+    echo.
+    echo Location: dist\IDFC_PDF_Generator\IDFC_PDF_Generator.exe
     echo ========================================================
 ) else (
     echo.
-    echo [!] ERROR: The build process failed.
+    echo [!!!] BUILD FAILED [!!!]
+    echo Check the error messages above.
 )
 
-pause
+:: CLEANUP
+if exist "%LOCK_FILE%" del "%LOCK_FILE%"
+echo.
+echo Press any key to exit...
+pause >nul
 popd
+exit /b
