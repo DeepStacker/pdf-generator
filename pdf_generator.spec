@@ -10,11 +10,9 @@ tcl_lib_path = ""
 tk_lib_path = ""
 
 if sys.platform == "win32":
-    # Common paths for TCL/TK in Windows Python installations
     base_path = os.path.dirname(sys.executable)
     possible_tcl = os.path.join(base_path, 'tcl')
     if os.path.exists(possible_tcl):
-        # Find the specific tcl8.6 and tk8.6 folders
         for item in os.listdir(possible_tcl):
             if item.startswith('tcl8'):
                 tcl_lib_path = os.path.join(possible_tcl, item)
@@ -52,6 +50,7 @@ a = Analysis(
         'reportlab.lib.colors',
         'PIL',
         'urllib.request',
+        'multiprocessing',
     ],
     hookspath=[],
     hooksconfig={},
@@ -72,13 +71,17 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     [],
-    exclude_binaries=True,
-    name='IDFC_PDF_Generator',
+    name='IDFC_Audit_Engine_Elite',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -86,15 +89,4 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='IDFC_PDF_Generator',
 )
