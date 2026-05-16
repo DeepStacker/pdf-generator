@@ -64,7 +64,7 @@ def get_stats():
     conn.close()
     return (res[0] or 0, res[1] or 0)
 
-def get_recent_history(limit=10):
+def get_recent_history(limit=50):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT timestamp, excel_name, pdf_count, output_path FROM history ORDER BY id DESC LIMIT ?", (limit,))
@@ -170,113 +170,180 @@ def generate_pdf_original(audit_type, branch_code, branch_name, state, rows, out
     doc.build([table])
 
 # =========================================================
-# APP - ULTIMATE TRACKING DASHBOARD
+# APP - ULTIMATE MODERN ENTERPRISE UI
 # =========================================================
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("IDFC PDF Audit Professional")
-        self.root.geometry("900x900")
-        self.root.configure(bg="#F0F2F5")
+        self.root.title("IDFC First Bank Audit Engine v2.0")
+        self.root.geometry("1000x800")
+        self.root.configure(bg="#F1F5F9")
         
+        self.active_tab = "PROCESS"
+        self.log_queue = queue.Queue()
+        
+        # Styles
         self.style = ttk.Style()
         self.style.theme_use('clam')
+        self.style.configure("Treeview", background="#FFFFFF", fieldbackground="#FFFFFF", rowheight=30)
+        self.style.map("Treeview", background=[('selected', '#1E40AF')])
         
         self.setup_ui()
-        self.update_dashboard()
-        
-        self.log_queue = queue.Queue()
+        self.update_stats_labels()
         self.root.after(100, self.check_log_queue)
 
     def setup_ui(self):
-        # Header
-        header = tk.Frame(self.root, bg="#101820", height=70)
-        header.pack(fill=tk.X)
-        tk.Label(header, text="IDFC FIRST BANK AUDIT ENGINE", font=("Helvetica", 14, "bold"), bg="#101820", fg="#FFFFFF").pack(side=tk.LEFT, padx=30, pady=20)
+        # Sidebar
+        self.sidebar = tk.Frame(self.root, bg="#1E293B", width=220)
+        self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        self.sidebar.pack_propagate(False)
         
-        # Dashboard Wrapper
-        main_scroll = tk.Frame(self.root, bg="#F0F2F5")
-        main_scroll.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        tk.Label(self.sidebar, text="IDFC FIRST", font=("Inter", 16, "bold"), bg="#1E293B", fg="#FFFFFF", pady=30).pack()
+        
+        self.btn_proc = self.create_nav_item("Dashboard & Process", "PROCESS")
+        self.btn_hist = self.create_nav_item("Audit History", "HISTORY")
+        self.btn_about = self.create_nav_item("System Info", "ABOUT")
+        
+        tk.Label(self.sidebar, text="Engine v2.0.0", font=("Inter", 8), bg="#1E293B", fg="#94A3B8").pack(side=tk.BOTTOM, pady=20)
 
-        # Stats Cards
-        stats_frame = tk.Frame(main_scroll, bg="#F0F2F5")
-        stats_frame.pack(fill=tk.X, pady=(0, 20))
+        # Main Content Area
+        self.main_area = tk.Frame(self.root, bg="#F1F5F9", padx=40, pady=30)
+        self.main_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        self.lbl_stat_excels = self.create_card(stats_frame, "Excels Processed", "0", "#004B87", 0)
-        self.lbl_stat_pdfs = self.create_card(stats_frame, "PDFs Generated", "0", "#D21034", 1)
-        self.lbl_stat_status = self.create_card(stats_frame, "System Status", "READY", "#2E7D32", 2)
+        self.render_content()
 
-        # Content Area (Two Columns)
-        content = tk.Frame(main_scroll, bg="#F0F2F5")
-        content.pack(fill=tk.BOTH, expand=True)
-        
-        # Left Panel (Actions)
-        left = tk.Frame(content, bg="#FFFFFF", padx=20, pady=20, highlightthickness=1, highlightbackground="#DCDFE3")
-        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        
-        tk.Label(left, text="GENERATION WORKFLOW", font=("Helvetica", 10, "bold"), bg="#FFFFFF", fg="#101820").pack(anchor="w", pady=(0, 15))
-        
-        self.create_input(left, "Source Excel File", "file_var", self.browse_in, "Browse")
-        self.lbl_file_hint = tk.Label(left, text="No file selected", font=("Helvetica", 8), bg="#FFFFFF", fg="#606770")
-        self.lbl_file_hint.pack(anchor="w", pady=(0, 15))
+    def create_nav_item(self, text, tag):
+        bg = "#334155" if self.active_tab == tag else "#1E293B"
+        btn = tk.Button(self.sidebar, text=f"  {text}", font=("Inter", 10), bg=bg, fg="#CBD5E1", 
+                        activebackground="#475569", activeforeground="#FFFFFF", relief="flat", anchor="w", 
+                        padx=20, pady=12, cursor="hand2", command=lambda: self.switch_tab(tag))
+        btn.pack(fill=tk.X, pady=2)
+        return btn
 
-        self.create_input(left, "Output Directory", "folder_var", self.browse_out, "Set Path")
+    def switch_tab(self, tag):
+        self.active_tab = tag
+        # Reset colors
+        for b, t in [(self.btn_proc, "PROCESS"), (self.btn_hist, "HISTORY"), (self.btn_about, "ABOUT")]:
+            b.config(bg="#334155" if self.active_tab == t else "#1E293B")
+        self.render_content()
+
+    def render_content(self):
+        for widget in self.main_area.winfo_children(): widget.destroy()
+        
+        if self.active_tab == "PROCESS":
+            self.render_process_tab()
+        elif self.active_tab == "HISTORY":
+            self.render_history_tab()
+        elif self.active_tab == "ABOUT":
+            self.render_about_tab()
+
+    def render_process_tab(self):
+        tk.Label(self.main_area, text="System Dashboard", font=("Inter", 18, "bold"), bg="#F1F5F9", fg="#0F172A").pack(anchor="w")
+        
+        # Stats Row
+        stats_frame = tk.Frame(self.main_area, bg="#F1F5F9")
+        stats_frame.pack(fill=tk.X, pady=25)
+        e, p = get_stats()
+        self.card_excels = self.create_stat_card(stats_frame, "Total Excels", str(e), "#1E40AF", 0)
+        self.card_pdfs = self.create_stat_card(stats_frame, "Total PDFs", str(p), "#10B981", 1)
+        self.card_status = self.create_stat_card(stats_frame, "Engine Status", "STANDBY", "#64748B", 2)
+
+        # Action Area
+        action_card = tk.Frame(self.main_area, bg="#FFFFFF", padx=30, pady=30, highlightthickness=1, highlightbackground="#E2E8F0")
+        action_card.pack(fill=tk.X)
+        
+        tk.Label(action_card, text="Quick Batch Process", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#1E293B").pack(anchor="w", pady=(0, 20))
+        
+        self.create_input_field(action_card, "Select Excel Source File", "file_var", self.browse_in, "BROWSE")
+        self.lbl_file_info = tk.Label(action_card, text="Waiting for file...", font=("Inter", 9), bg="#FFFFFF", fg="#64748B")
+        self.lbl_file_info.pack(anchor="w", pady=(0, 15))
+
+        self.create_input_field(action_card, "Select Output Directory", "folder_var", self.browse_out, "SELECT")
         self.folder_var.set(os.path.join(os.path.expanduser("~"), "Desktop"))
-        
-        tk.Label(left, text="Audit Type", font=("Helvetica", 9, "bold"), bg="#FFFFFF", fg="#101820").pack(anchor="w", pady=(10, 5))
+        tk.Label(action_card, text=f"Target: {self.folder_var.get()}", font=("Inter", 8), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 20))
+
+        # Config Area
+        cfg_row = tk.Frame(action_card, bg="#FFFFFF")
+        cfg_row.pack(fill=tk.X, pady=10)
+        tk.Label(cfg_row, text="Audit Type:", font=("Inter", 10, "bold"), bg="#FFFFFF").pack(side=tk.LEFT)
         self.typ_var = tk.StringVar(value="POA")
-        tf = tk.Frame(left, bg="#FFFFFF")
-        tf.pack(anchor="w", pady=(0, 15))
         for t in ["POA", "TAF"]:
-            tk.Radiobutton(tf, text=t, variable=self.typ_var, value=t, bg="#FFFFFF", font=("Helvetica", 10)).pack(side=tk.LEFT, padx=(0, 20))
+            tk.Radiobutton(cfg_row, text=t, variable=self.typ_var, value=t, bg="#FFFFFF").pack(side=tk.LEFT, padx=15)
 
-        self.btn_run = tk.Button(left, text="EXECUTE BATCH GENERATION", bg="#D21034", fg="#FFFFFF", font=("Helvetica", 11, "bold"), relief="flat", padx=20, pady=12, cursor="hand2", command=self.start_process)
-        self.btn_run.pack(fill=tk.X, pady=10)
-
-        # Right Panel (Recent History)
-        right = tk.Frame(content, bg="#FFFFFF", padx=20, pady=20, highlightthickness=1, highlightbackground="#DCDFE3")
-        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
-        
-        tk.Label(right, text="RECENT ACTIVITY HISTORY", font=("Helvetica", 10, "bold"), bg="#FFFFFF", fg="#101820").pack(anchor="w", pady=(0, 10))
-        
-        self.history_tree = ttk.Treeview(right, columns=("Time", "File", "Count"), show="headings", height=10)
-        self.history_tree.heading("Time", text="Time")
-        self.history_tree.heading("File", text="Excel Filename")
-        self.history_tree.heading("Count", text="PDFs")
-        self.history_tree.column("Time", width=120)
-        self.history_tree.column("File", width=150)
-        self.history_tree.column("Count", width=50)
-        self.history_tree.pack(fill=tk.BOTH, expand=True)
-        
-        tk.Button(right, text="Open Selected Folder", command=self.open_selected_folder, bg="#F0F2F5", font=("Helvetica", 9)).pack(fill=tk.X, pady=5)
+        self.btn_run = tk.Button(action_card, text="START ENGINE", font=("Inter", 12, "bold"), bg="#1E40AF", fg="#FFFFFF", relief="flat", padx=40, pady=12, cursor="hand2", command=self.start_process)
+        self.btn_run.pack(fill=tk.X, pady=(20, 0))
 
         # Log Area
-        tk.Label(self.root, text="DETAILED PROCESS LOG", font=("Helvetica", 9, "bold"), bg="#F0F2F5", fg="#606770").pack(anchor="w", padx=20, pady=(15, 5))
-        self.log_area = scrolledtext.ScrolledText(self.root, height=10, bg="#FFFFFF", fg="#1C1E21", font=("Consolas", 9), borderwidth=0)
-        self.log_area.pack(fill=tk.X, padx=20, pady=(0, 20))
+        tk.Label(self.main_area, text="Activity Log", font=("Inter", 10, "bold"), bg="#F1F5F9", fg="#475569").pack(anchor="w", pady=(20, 5))
+        self.log_area = scrolledtext.ScrolledText(self.main_area, height=8, bg="#FFFFFF", borderwidth=0, font=("Menlo", 9), highlightthickness=1, highlightbackground="#E2E8F0")
+        self.log_area.pack(fill=tk.BOTH, expand=True)
 
-    def create_card(self, parent, title, val, color, col):
-        card = tk.Frame(parent, bg="#FFFFFF", padx=15, pady=15, highlightthickness=1, highlightbackground="#DCDFE3")
-        card.grid(row=0, column=col, sticky="nsew", padx=5)
+    def render_history_tab(self):
+        tk.Label(self.main_area, text="Audit History", font=("Inter", 18, "bold"), bg="#F1F5F9", fg="#0F172A").pack(anchor="w", pady=(0, 20))
+        
+        container = tk.Frame(self.main_area, bg="#FFFFFF", padx=20, pady=20, highlightthickness=1, highlightbackground="#E2E8F0")
+        container.pack(fill=tk.BOTH, expand=True)
+        
+        cols = ("Timestamp", "Excel Filename", "Reports", "Audit")
+        self.tree = ttk.Treeview(container, columns=cols, show="headings", height=15)
+        for c in cols: self.tree.heading(c, text=c)
+        self.tree.column("Timestamp", width=150)
+        self.tree.column("Excel Filename", width=350)
+        self.tree.column("Reports", width=100, anchor="center")
+        self.tree.column("Audit", width=100, anchor="center")
+        self.tree.pack(fill=tk.BOTH, expand=True)
+        
+        btn_bar = tk.Frame(container, bg="#FFFFFF", pady=15)
+        btn_bar.pack(fill=tk.X)
+        tk.Button(btn_bar, text="Open Result Folder", font=("Inter", 10, "bold"), bg="#F1F5F9", relief="flat", padx=20, pady=10, command=self.open_selected).pack(side=tk.LEFT)
+        tk.Label(btn_bar, text="Double-click row to open folder", font=("Inter", 8), bg="#FFFFFF", fg="#94A3B8").pack(side=tk.LEFT, padx=20)
+        
+        # Load Data
+        for h in get_recent_history():
+            self.tree.insert("", tk.END, values=(h[0], h[1], h[2], "POA"), tags=(h[3],))
+        self.tree.bind("<Double-1>", lambda e: self.open_selected())
+
+    def render_about_tab(self):
+        tk.Label(self.main_area, text="System Information", font=("Inter", 18, "bold"), bg="#F1F5F9", fg="#0F172A").pack(anchor="w", pady=(0, 30))
+        card = tk.Frame(self.main_area, bg="#FFFFFF", padx=40, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
+        card.pack(fill=tk.X)
+        
+        info = [
+            ("Application", "IDFC First Bank Audit Engine"),
+            ("Version", "2.0.0 (Enterprise)"),
+            ("Database", f"SQLite 3 ({DB_PATH})"),
+            ("PDF Engine", "ReportLab 3.6+"),
+            ("Data Engine", "Pandas & OpenPyXL"),
+            ("Status", "Operational")
+        ]
+        for k, v in info:
+            row = tk.Frame(card, bg="#FFFFFF", pady=5)
+            row.pack(fill=tk.X)
+            tk.Label(row, text=f"{k}:", font=("Inter", 10, "bold"), bg="#FFFFFF", width=15, anchor="w").pack(side=tk.LEFT)
+            tk.Label(row, text=v, font=("Inter", 10), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
+
+    def create_stat_card(self, parent, title, val, color, col):
+        card = tk.Frame(parent, bg="#FFFFFF", padx=20, pady=20, highlightthickness=1, highlightbackground="#E2E8F0")
+        card.grid(row=0, column=col, sticky="nsew", padx=8)
         parent.grid_columnconfigure(col, weight=1)
-        tk.Label(card, text=title, font=("Helvetica", 8, "bold"), bg="#FFFFFF", fg="#606770").pack(anchor="w")
-        lbl = tk.Label(card, text=val, font=("Helvetica", 16, "bold"), bg="#FFFFFF", fg=color)
+        tk.Label(card, text=title.upper(), font=("Inter", 7, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w")
+        lbl = tk.Label(card, text=val, font=("Inter", 15, "bold"), bg="#FFFFFF", fg=color)
         lbl.pack(anchor="w", pady=(5, 0))
         return lbl
 
-    def create_input(self, parent, label, var_name, cmd, btn_txt):
-        tk.Label(parent, text=label, font=("Helvetica", 9, "bold"), bg="#FFFFFF", fg="#101820").pack(anchor="w")
+    def create_input_field(self, parent, label, var_name, cmd, btn_txt):
+        tk.Label(parent, text=label, font=("Inter", 9, "bold"), bg="#FFFFFF", fg="#1E293B").pack(anchor="w")
         row = tk.Frame(parent, bg="#FFFFFF")
-        row.pack(fill=tk.X, pady=(5, 0))
+        row.pack(fill=tk.X, pady=(5, 2))
         var = tk.StringVar()
         setattr(self, var_name, var)
-        tk.Entry(row, textvariable=var, bg="#F0F2F5", relief="flat", highlightthickness=1, highlightbackground="#DCDFE3").pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=5, padx=(0, 10))
-        tk.Button(row, text=btn_txt, command=cmd, bg="#F0F2F5", font=("Helvetica", 9)).pack(side=tk.LEFT)
+        tk.Entry(row, textvariable=var, bg="#F8FAFC", font=("Inter", 10), relief="flat", highlightthickness=1, highlightbackground="#CBD5E1").pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, padx=(0, 10))
+        tk.Button(row, text=btn_txt, font=("Inter", 8, "bold"), bg="#E2E8F0", relief="flat", padx=15, pady=8, cursor="hand2", command=cmd).pack(side=tk.LEFT)
 
     def log(self, msg): self.log_queue.put(msg)
     def check_log_queue(self):
         while not self.log_queue.empty():
-            self.log_area.insert(tk.END, f"> {self.log_queue.get()}\n")
+            self.log_area.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] {self.log_queue.get()}\n")
             self.log_area.see(tk.END)
         self.root.after(100, self.check_log_queue)
 
@@ -284,35 +351,31 @@ class App:
         f = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
         if f: 
             self.file_var.set(f)
-            self.lbl_file_hint.config(text=f"Ready: {os.path.basename(f)}", fg="#2E7D32")
+            self.lbl_file_info.config(text=f"Loaded: {os.path.basename(f)}", fg="#059669")
     def browse_out(self):
         f = filedialog.askdirectory()
         if f: self.folder_var.set(f)
 
-    def update_dashboard(self):
-        e, p = get_stats()
-        self.lbl_stat_excels.config(text=str(e))
-        self.lbl_stat_pdfs.config(text=str(p))
-        
-        # Update Treeview
-        for item in self.history_tree.get_children(): self.history_tree.delete(item)
-        for h in get_recent_history():
-            self.history_tree.insert("", tk.END, values=(h[0], h[1], h[2]), tags=(h[3],))
+    def update_stats_labels(self):
+        if self.active_tab == "PROCESS":
+            e, p = get_stats()
+            self.card_excels.config(text=str(e))
+            self.card_pdfs.config(text=str(p))
 
-    def open_selected_folder(self):
-        sel = self.history_tree.selection()
+    def open_selected(self):
+        sel = self.tree.selection()
         if sel:
-            path = self.history_tree.item(sel[0], "tags")[0]
+            path = self.tree.item(sel[0], "tags")[0]
             if os.path.exists(path):
                 if sys.platform == "win32": os.startfile(path)
                 else: os.system(f'open "{path}"')
-            else: messagebox.showerror("Error", "Folder no longer exists.")
+            else: messagebox.showerror("Error", "Path not found.")
 
     def start_process(self):
         inp, out, typ = self.file_var.get().strip(), self.folder_var.get().strip(), self.typ_var.get().strip()
-        if not inp or not os.path.exists(inp): return messagebox.showerror("Error", "Please select an Excel file.")
-        self.btn_run.config(state=tk.DISABLED, text="GENERATING...")
-        self.lbl_stat_status.config(text="BUSY", fg="#D21034")
+        if not inp or not os.path.exists(inp): return messagebox.showerror("Error", "Invalid file source.")
+        self.btn_run.config(state=tk.DISABLED, text="ENGINE RUNNING...", bg="#94A3B8")
+        self.card_status.config(text="ACTIVE", fg="#1E40AF")
         threading.Thread(target=self.worker, args=(inp, out, typ), daemon=True).start()
 
     def worker(self, inp, out_base, typ):
@@ -320,33 +383,28 @@ class App:
             excel_name = os.path.splitext(os.path.basename(inp))[0]
             out = os.path.join(out_base, f"{excel_name}_{int(time.time())}")
             os.makedirs(out, exist_ok=True)
-            
             s, h, rows = read_excel_original(inp, self.log)
             groups = {}
             for r in rows:
                 b = str(r.get("CurrentBranch", "UNKNOWN")).strip()
                 groups.setdefault(b, []).append(r)
-            
             count = 0
             for c, br in sorted(groups.items()):
-                name = str(br[0].get("CurrentBranchName", ""))
-                st = str(br[0].get("State", ""))
+                name, st = str(br[0].get("CurrentBranchName", "")), str(br[0].get("State", ""))
                 safe = name.replace("/", "_").replace("\\", "_") if name else str(c)
                 path = os.path.join(out, f"{safe}_{typ}.pdf")
-                self.log(f"Saving: {os.path.basename(path)}")
+                self.log(f"Building: {os.path.basename(path)}")
                 generate_pdf_original(typ, c, name, st, br, path)
                 count += 1
-            
             log_generation(excel_name, count, out, typ)
-            self.root.after(0, self.update_dashboard)
-            self.log(f"SUCCESS: Generated {count} reports.")
-            self.root.after(0, lambda: messagebox.showinfo("Done", f"Generated {count} PDFs in:\n{out}"))
+            self.log(f"COMPLETED: {count} reports generated.")
+            self.root.after(0, self.update_stats_labels)
+            self.root.after(0, lambda: messagebox.showinfo("Engine Report", f"Batch completed successfully.\nGenerated: {count} PDFs\nSaved to: {out}"))
         except Exception as e:
-            self.log(f"ERROR: {str(e)}")
-            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+            self.log(f"ENGINE FAILURE: {str(e)}")
+            self.root.after(0, lambda: messagebox.showerror("Engine Failure", str(e)))
         finally:
-            self.root.after(0, lambda: self.btn_run.config(state=tk.NORMAL, text="EXECUTE BATCH GENERATION"))
-            self.root.after(0, lambda: self.lbl_stat_status.config(text="READY", fg="#2E7D32"))
+            self.root.after(0, lambda: (self.btn_run.config(state=tk.NORMAL, text="START ENGINE", bg="#1E40AF"), self.card_status.config(text="STANDBY", fg="#64748B")))
 
 if __name__ == "__main__":
     root = tk.Tk()
