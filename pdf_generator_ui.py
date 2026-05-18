@@ -203,16 +203,124 @@ def generate_pdf_original(audit_type, branch_code, branch_name, state, rows, out
 # =========================================================
 # APP - ANALYTICS & PROFESSIONAL SUITE
 # =========================================================
+class ScrollableFrame(tk.Frame):
+    def __init__(self, container, *args, **kwargs):
+        super().__init__(container, *args, **kwargs)
+        
+        self.canvas = tk.Canvas(self, bg=kwargs.get("bg", "#F8FAFC"), highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas, bg=kwargs.get("bg", "#F8FAFC"), padx=40, pady=30)
+        
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        self.canvas.pack(side="left", fill="both", expand=True)
+        # Scrollbar packed dynamically in update_scrollbar_visibility
+        
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+        self.scrollable_frame.bind("<Configure>", self._on_frame_configure)
+        
+        self.canvas.bind("<Enter>", self._bind_mousewheel)
+        self.canvas.bind("<Leave>", self._unbind_mousewheel)
+
+    def _on_canvas_configure(self, event):
+        self.canvas.itemconfig(self.canvas_window, width=event.width)
+        self.update_scrollbar_visibility()
+
+    def _on_frame_configure(self, event):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        self.update_scrollbar_visibility()
+
+    def update_scrollbar_visibility(self):
+        self.canvas.update_idletasks()
+        canvas_h = self.canvas.winfo_height()
+        frame_h = self.scrollable_frame.winfo_reqheight()
+        
+        if frame_h > canvas_h:
+            if not self.scrollbar.winfo_ismapped():
+                self.scrollbar.pack(side="right", fill="y")
+        else:
+            if self.scrollbar.winfo_ismapped():
+                self.scrollbar.pack_forget()
+
+    def _bind_mousewheel(self, event):
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel)
+
+    def _unbind_mousewheel(self, event):
+        self.canvas.unbind_all("<MouseWheel>")
+        self.canvas.unbind_all("<Button-4>")
+        self.canvas.unbind_all("<Button-5>")
+
+    def _on_mousewheel(self, event):
+        # Prevent outer canvas scrolling if mouse is over a nested scrollable widget (like console logs or Treeview)
+        try:
+            widget = self.canvas.winfo_containing(event.x_root, event.y_root)
+            if widget:
+                w_class = widget.winfo_class()
+                if "Text" in w_class or "Listbox" in w_class or "Treeview" in w_class:
+                    return
+        except Exception:
+            pass
+
+        if sys.platform == "darwin":
+            if abs(event.delta) >= 120:
+                self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            else:
+                self.canvas.yview_scroll(int(-1 * event.delta), "units")
+        elif event.num == 4:
+            self.canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            self.canvas.yview_scroll(1, "units")
+        else:
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
 class App:
     def __init__(self, root):
         self.root = root
         self.root.title("Audit Engine Elite v4.2")
-        self.root.geometry("1300x950") # Slightly wider
+        
+        # High DPI Awareness (Windows native)
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+            except:
+                try:
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except:
+                    pass
+        
+        # Dynamically set initial window size based on screen dimensions
+        try:
+            screen_w = self.root.winfo_screenwidth()
+            screen_h = self.root.winfo_screenheight()
+            
+            # Capped at reasonable max, and clamped to screen boundaries
+            width = min(1200, screen_w - 60)
+            height = min(800, screen_h - 100)
+            
+            # Ensure safe minimum bounds
+            width = max(1020, width)
+            height = max(680, height)
+            
+            # Center it on the screen
+            x = (screen_w - width) // 2
+            y = (screen_h - height) // 2
+            self.root.geometry(f"{width}x{height}+{x}+{y}")
+        except Exception:
+            self.root.geometry("1150x780")
+            
         self.root.configure(bg="#0F172A")
         
-        # High DPI Scaling
-        try: self.root.tk.call('tk', 'scaling', 1.5)
-        except: pass
+        # High DPI Scaling (Fallback)
+        try:
+            if sys.platform == "win32" or sys.platform == "linux":
+                self.root.tk.call('tk', 'scaling', 1.25)
+        except:
+            pass
 
         # --- PERSISTENT STATE ---
         self.file_var = tk.StringVar()
@@ -260,7 +368,7 @@ class App:
         self.sidebar.pack_propagate(False)
         
         # Logo Area
-        logo_frame = tk.Frame(self.sidebar, bg="#0F172A", pady=50)
+        logo_frame = tk.Frame(self.sidebar, bg="#0F172A", pady=30)
         logo_frame.pack(fill=tk.X)
         tk.Label(logo_frame, text="IDFC FIRST", font=("Inter", 24, "bold"), bg="#0F172A", fg="#FFFFFF").pack()
         tk.Label(logo_frame, text="AUDIT ENGINE ELITE", font=("Inter", 9, "bold"), bg="#0F172A", fg="#2563EB", pady=5).pack()
@@ -281,7 +389,7 @@ class App:
             self.nav_btns[tag] = self.create_nav_btn(f"{icon}  {label}", tag, nav_container)
 
         # Footer
-        footer = tk.Frame(self.sidebar, bg="#0F172A", pady=30)
+        footer = tk.Frame(self.sidebar, bg="#0F172A", pady=15)
         footer.pack(side=tk.BOTTOM, fill=tk.X)
         tk.Label(footer, text="v4.2.0 Enterprise Edition", font=("Inter", 8), bg="#0F172A", fg="#475569").pack()
         tk.Label(footer, text="© 2026 DeepMind Advanced", font=("Inter", 7), bg="#0F172A", fg="#334155").pack()
@@ -301,7 +409,7 @@ class App:
         btn = tk.Button(parent, text=text, font=("Inter", 12, "bold"), 
                         bg="#0F172A", fg="#94A3B8", 
                         activebackground="#1E293B", activeforeground="#FFFFFF", 
-                        relief="flat", anchor="w", padx=40, pady=22, 
+                        relief="flat", anchor="w", padx=40, pady=12, 
                         cursor="hand2", borderwidth=0,
                         command=lambda: self.switch_tab(tag))
         btn.pack(fill=tk.X)
@@ -320,8 +428,9 @@ class App:
         for w in self.content_container.winfo_children():
             if w != self.status_bar: w.destroy()
         
-        self.content = tk.Frame(self.content_container, bg="#F8FAFC", padx=50, pady=40)
-        self.content.pack(fill=tk.BOTH, expand=True)
+        self.content_scrollable = ScrollableFrame(self.content_container, bg="#F8FAFC")
+        self.content_scrollable.pack(fill=tk.BOTH, expand=True)
+        self.content = self.content_scrollable.scrollable_frame
 
         if self.active_tab == "PROCESS": self.render_process()
         elif self.active_tab == "HISTORY": self.render_history()
@@ -334,14 +443,14 @@ class App:
         tk.Label(header, text="Engine Dashboard", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
         
         stats_frame = tk.Frame(self.content, bg="#F8FAFC")
-        stats_frame.pack(fill=tk.X, pady=30)
+        stats_frame.pack(fill=tk.X, pady=15)
         e, p = get_stats()
         self.create_stat_card(stats_frame, "Total Sessions", str(e), "#0F172A", 0)
         self.create_stat_card(stats_frame, "PDF Reports", str(p), "#2563EB", 1)
         self.create_stat_card(stats_frame, "Health Status", "SECURE", "#10B981", 2)
 
         # Control Panel
-        panel = tk.Frame(self.content, bg="#FFFFFF", padx=45, pady=35, highlightthickness=1, highlightbackground="#E2E8F0")
+        panel = tk.Frame(self.content, bg="#FFFFFF", padx=30, pady=25, highlightthickness=1, highlightbackground="#E2E8F0")
         panel.pack(fill=tk.X)
         
         # 1. Excel Selection
@@ -349,7 +458,7 @@ class App:
         
         # 2. Audit Config Row
         cfg_row = tk.Frame(panel, bg="#FFFFFF")
-        cfg_row.pack(fill=tk.X, pady=20)
+        cfg_row.pack(fill=tk.X, pady=10)
         
         # Left side: Audit Type
         type_box = tk.Frame(cfg_row, bg="#FFFFFF")
@@ -367,7 +476,7 @@ class App:
 
         # 2b. Packaging Mode (Dynamic Storage)
         pkg_row = tk.Frame(panel, bg="#FFFFFF")
-        pkg_row.pack(fill=tk.X, pady=(0, 10))
+        pkg_row.pack(fill=tk.X, pady=(0, 5))
         tk.Label(pkg_row, text="Output Mode:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
         for m in ["FOLDER", "ZIP ONLY", "BOTH"]:
             tk.Radiobutton(pkg_row, text=m, variable=self.pkg_var, value=m, 
@@ -380,10 +489,10 @@ class App:
 
         # Execute Button
         self.btn_run = tk.Button(panel, text="START GENERATION ENGINE", font=("Inter", 14, "bold"), 
-                                 bg="#2563EB", fg="#FFFFFF", relief="flat", padx=50, pady=20, 
+                                 bg="#2563EB", fg="#FFFFFF", relief="flat", padx=50, pady=12, 
                                  cursor="hand2", activebackground="#1D4ED8",
                                  command=self.start_process)
-        self.btn_run.pack(fill=tk.X, pady=(25, 10))
+        self.btn_run.pack(fill=tk.X, pady=(15, 10))
 
         # Progress Bar
         self.progress = ttk.Progressbar(panel, variable=self.progress_var, maximum=100)
@@ -391,12 +500,12 @@ class App:
 
         # Console Header with Copy Button
         con_hdr = tk.Frame(self.content, bg="#F8FAFC")
-        con_hdr.pack(fill=tk.X, pady=(30, 5))
+        con_hdr.pack(fill=tk.X, pady=(15, 5))
         tk.Label(con_hdr, text="ENGINE CONSOLE LOGS", font=("Inter", 9, "bold"), bg="#F8FAFC", fg="#94A3B8").pack(side=tk.LEFT)
         tk.Button(con_hdr, text="📋 Copy Logs", font=("Inter", 8, "bold"), bg="#F1F5F9", relief="flat", padx=10, command=self.copy_logs).pack(side=tk.RIGHT)
 
         # Larger Log Area
-        self.log_area = scrolledtext.ScrolledText(self.content, height=12, bg="#1E293B", fg="#10B981", 
+        self.log_area = scrolledtext.ScrolledText(self.content, height=8, bg="#1E293B", fg="#10B981", 
                                                 borderwidth=0, font=("Menlo", 10), padx=20, pady=20)
         self.log_area.pack(fill=tk.BOTH, expand=True)
 
@@ -490,7 +599,7 @@ class App:
             messagebox.showinfo("Success", "History cleared."); self.render_tab()
 
     def create_stat_card(self, parent, title, val, color, col):
-        card = tk.Frame(parent, bg="#FFFFFF", padx=35, pady=35, highlightthickness=1, highlightbackground="#E2E8F0")
+        card = tk.Frame(parent, bg="#FFFFFF", padx=25, pady=20, highlightthickness=1, highlightbackground="#E2E8F0")
         card.grid(row=0, column=col, sticky="nsew", padx=10)
         parent.grid_columnconfigure(col, weight=1)
         tk.Label(card, text=title.upper(), font=("Inter", 9, "bold"), bg="#FFFFFF", fg="#94A3B8").pack(anchor="w")
@@ -499,9 +608,9 @@ class App:
     def create_input(self, parent, label, var, cmd, btn_txt):
         if label: tk.Label(parent, text=label, font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#1E293B").pack(anchor="w")
         row = tk.Frame(parent, bg="#FFFFFF")
-        row.pack(fill=tk.X, pady=(12, 10))
-        tk.Entry(row, textvariable=var, font=("Inter", 12), bg="#F8FAFC", relief="flat", highlightthickness=1, highlightbackground="#E2E8F0").pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15, padx=(0, 25))
-        tk.Button(row, text=btn_txt, font=("Inter", 10, "bold"), bg="#F1F5F9", relief="flat", padx=30, pady=15, command=cmd).pack(side=tk.LEFT)
+        row.pack(fill=tk.X, pady=(8, 8))
+        tk.Entry(row, textvariable=var, font=("Inter", 12), bg="#F8FAFC", relief="flat", highlightthickness=1, highlightbackground="#E2E8F0").pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, padx=(0, 20))
+        tk.Button(row, text=btn_txt, font=("Inter", 10, "bold"), bg="#F1F5F9", relief="flat", padx=25, pady=8, command=cmd).pack(side=tk.LEFT)
 
     def log(self, msg): self.log_queue.put(msg)
     def check_log_queue(self):
