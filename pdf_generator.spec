@@ -6,18 +6,22 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, coll
 block_cipher = None
 
 # ============================================================
-# Tcl/Tk DLL and data collection (Windows)
+# Windows DLL collection
 # ============================================================
-# _tkinter.pyd depends on tcl86t.dll, tk86t.dll, and possibly zlib1.dll.
-# We also need the Tcl/Tk library directories (init.tcl etc.) as data.
-tk_dlls = []
+# This section ensures ALL runtime dependencies are bundled inside the
+# single-file executable so it works on ANY Windows machine — including:
+#   - Parallels Desktop (Windows ARM64 emulating x86_64)
+#   - Locked-down corporate PCs without admin rights
+#   - Fresh Windows installs without VC++ Redistributable
+#   - Windows Sandbox / VMs
+# ============================================================
+extra_dlls = []
 tk_datas = []
 
 if sys.platform == "win32":
     import glob
 
-    # Build a comprehensive set of directories to search for DLLs.
-    # actions/setup-python, user installs, and venvs all have different layouts.
+    # --- 1. Discover search directories ---
     _bases = set()
     for _b in [os.path.dirname(sys.executable),
                sys.prefix,
@@ -28,32 +32,53 @@ if sys.platform == "win32":
 
     _search_dirs = []
     for _base in _bases:
-        for _sub in ['DLLs', 'bin', 'Library\\bin', 'Library\\lib', '.']:
+        for _sub in ['.', 'DLLs', 'bin', 'libs',
+                     'Library\\bin', 'Library\\lib']:
             _d = os.path.normpath(os.path.join(_base, _sub))
             if os.path.isdir(_d) and _d not in _search_dirs:
                 _search_dirs.append(_d)
 
-    # Patterns for all DLLs that _tkinter.pyd needs at runtime
-    _dll_patterns = ['tcl*.dll', 'tk*.dll', 'zlib*.dll']
+    # --- 2. Collect ALL required DLLs ---
+    # python312.dll depends on vcruntime140.dll + vcruntime140_1.dll
+    # _tkinter.pyd depends on tcl86t.dll + tk86t.dll
+    # Tcl depends on zlib1.dll
+    # We bundle everything so the exe is fully self-contained.
+    _dll_patterns = [
+        'python3*.dll',        # Python runtime DLL
+        'vcruntime*.dll',      # Visual C++ runtime
+        'msvcp*.dll',          # MSVC C++ standard library
+        'ucrtbase*.dll',       # Universal C runtime (usually OS-provided but bundle just in case)
+        'tcl*.dll',            # Tcl library
+        'tk*.dll',             # Tk library
+        'zlib*.dll',           # Compression library
+        'libcrypto*.dll',      # OpenSSL (for HTTPS/certifi)
+        'libssl*.dll',         # OpenSSL
+        'libffi*.dll',         # ctypes FFI
+        'sqlite3*.dll',        # SQLite (if used by any dependency)
+    ]
     for _sd in _search_dirs:
         for _pat in _dll_patterns:
-            tk_dlls.extend(glob.glob(os.path.join(_sd, _pat)))
+            for _f in glob.glob(os.path.join(_sd, _pat)):
+                if _f not in extra_dlls:
+                    extra_dlls.append(_f)
 
-    # Fallback: recursive search under all base directories
-    if not any('tcl' in os.path.basename(d).lower() for d in tk_dlls):
+    # Fallback: recursive search if critical DLLs weren't found
+    _found_names = {os.path.basename(d).lower() for d in extra_dlls}
+    _critical = ['vcruntime140.dll', 'python312.dll']
+    _missing_critical = [c for c in _critical if c not in _found_names]
+    if _missing_critical:
+        print(f"[spec] Critical DLLs not found in standard paths: {_missing_critical}")
+        print(f"[spec] Running fallback recursive search...")
         for _base in _bases:
             for _root, _dirs, _files in os.walk(_base):
                 for _f in _files:
-                    if _f.lower().endswith('.dll') and any(
-                            _f.lower().startswith(p) for p in ('tcl', 'tk', 'zlib')):
-                        tk_dlls.append(os.path.join(_root, _f))
+                    if _f.lower() in _missing_critical:
+                        _fp = os.path.join(_root, _f)
+                        if _fp not in extra_dlls:
+                            extra_dlls.append(_fp)
+                            print(f"[spec]   Found: {_fp}")
 
-    # Deduplicate
-    tk_dlls = list(set(tk_dlls))
-
-    # ---- Tcl/Tk library data files (init.tcl, pkgIndex.tcl, etc.) ----
-    # Without these, _tkinter.pyd loads but Tcl_Init() fails with:
-    #   "Can't find a usable init.tcl"
+    # --- 3. Tcl/Tk library data files (init.tcl, pkgIndex.tcl, etc.) ---
     for _base in _bases:
         _tcl_root = os.path.join(_base, 'tcl')
         if os.path.isdir(_tcl_root):
@@ -73,24 +98,26 @@ if sys.platform == "win32":
             if tk_datas:
                 break
 
-    # Debug: print what was found
-    if tk_dlls:
-        print(f"[spec] Found {len(tk_dlls)} Tcl/Tk DLL(s):")
-        for d in sorted(set(tk_dlls)):
-            print(f"  {d}")
-    else:
-        print("[spec] WARNING: No Tcl/Tk DLLs found!")
+    # --- 4. Summary ---
+    print(f"[spec] Bundling {len(extra_dlls)} DLL(s):")
+    for d in sorted(extra_dlls):
+        print(f"  {os.path.basename(d):30s}  ({d})")
     if tk_datas:
-        print(f"[spec] Found {len(tk_datas)} Tcl/Tk data dir(s):")
+        print(f"[spec] Bundling {len(tk_datas)} Tcl/Tk data dir(s):")
         for src, dst in tk_datas:
-            print(f"  {src} -> {dst}")
-    else:
-        print("[spec] WARNING: No Tcl/Tk data directories found!")
+            print(f"  {dst}")
+
+    # Verify critical DLLs were found
+    _found_names = {os.path.basename(d).lower() for d in extra_dlls}
+    for _c in ['vcruntime140.dll']:
+        if _c not in _found_names:
+            print(f"[spec] *** CRITICAL WARNING: {_c} NOT FOUND! ***")
+            print(f"[spec] *** The exe will CRASH on machines without VC++ runtime! ***")
 
 
 numpy_dlls = collect_dynamic_libs('numpy')
-tk_dll_entries = [(d, '.') for d in set(tk_dlls)]
-all_dlls = numpy_dlls + tk_dll_entries
+dll_entries = [(d, '.') for d in extra_dlls]
+all_dlls = numpy_dlls + dll_entries
 
 datas = [('fonts', 'fonts')] + collect_data_files('certifi') + tk_datas
 
@@ -164,7 +191,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,                   # CRITICAL: UPX corrupts python312.dll on some Windows configs
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
