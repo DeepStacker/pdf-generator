@@ -1397,7 +1397,6 @@ class App:
             else:
                 _install_update(zip_path, install_dir, print)
             _shutil.rmtree(tmp, ignore_errors=True)
-            self.root.after(1500, _restart_app)
         except Exception:
             pass
 
