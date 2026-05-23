@@ -456,13 +456,17 @@ def _cleanup_stale_mei():
     try:
         temp_dir = _tempfile.gettempdir()
         current_mei = getattr(sys, '_MEIPASS', '')
+        current_mei_name = os.path.basename(current_mei).lower() if current_mei else ""
         for entry in os.listdir(temp_dir):
             if not entry.startswith('_MEI'):
                 continue
-            mei_path = os.path.join(temp_dir, entry)
-            # Don't delete our own _MEI directory
-            if mei_path == current_mei:
+            
+            # Compare basenames (folder names) to avoid Windows short/long path mismatch
+            # e.g. C:\Users\DEEPST~1\... vs C:\Users\DeepStacker\...
+            if entry.lower() == current_mei_name:
                 continue
+            
+            mei_path = os.path.join(temp_dir, entry)
             if not os.path.isdir(mei_path):
                 continue
             try:
