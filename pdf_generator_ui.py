@@ -1460,7 +1460,14 @@ class App:
             current_ver = _parse_version(VERSION)
             if latest_ver <= current_ver:
                 return
-            url = binary_url if (getattr(sys, "frozen", False) and binary_url) else download_url
+            if getattr(sys, "frozen", False):
+                if not binary_url:
+                    print(f"[background] No binary asset for {latest_tag} yet; will retry in 5 min.")
+                    self.root.after(300000, self._check_updates_background)
+                    return
+                url = binary_url
+            else:
+                url = download_url
             tmp = _tempfile.mkdtemp(prefix="audit_update_")
             zip_path = os.path.join(tmp, f"update_{latest_tag}.zip")
             _download_update(url, zip_path)
@@ -1470,8 +1477,8 @@ class App:
             else:
                 _install_update(zip_path, install_dir, print)
             _shutil.rmtree(tmp, ignore_errors=True)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[background] Update failed: {e}")
 
     def _check_updates_manual(self):
         """Manual check triggered by user clicking the button."""
