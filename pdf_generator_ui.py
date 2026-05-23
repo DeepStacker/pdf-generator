@@ -2194,6 +2194,11 @@ class App:
 
 
 if __name__ == "__main__":
+    # Required for PyInstaller frozen executables on Windows —
+    # prevents pyi_rth_multiprocessing runtime hook crashes
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     root = tk.Tk()
     app = App(root)
     root.mainloop()
