@@ -24,15 +24,48 @@ if tcl_lib_path and tk_lib_path:
     datas.append((tcl_lib_path, os.path.join('tcl', os.path.basename(tcl_lib_path))))
     datas.append((tk_lib_path, os.path.join('tk', os.path.basename(tk_lib_path))))
 
-# Collect all numpy dynamic libs (.pyd files) and their submodules
-numpy_dlls = collect_dynamic_libs('numpy')
-# Also collect numpy.random submodules that are commonly missed
-np_extra = [m for m in collect_submodules('numpy.random') if isinstance(m, str)]
+
+def safe_submodules(pkg):
+    """Collect submodules, filtering out any non-string entries."""
+    try:
+        return [m for m in collect_submodules(pkg) if isinstance(m, str)]
+    except Exception:
+        return []
+
+
+# Collect dynamic libs (.pyd/.so) from all dependencies
+dlls = []
+for pkg in ['numpy', 'pandas', 'openpyxl', 'reportlab', 'PIL', 'charset_normalizer',
+            'et_xmlfile', 'dateutil']:
+    dlls.extend(collect_dynamic_libs(pkg))
+
+# Collect ALL submodules from our major dependencies
+pkg_imports = []
+for pkg in ['numpy', 'pandas', 'openpyxl', 'reportlab', 'PIL']:
+    pkg_imports.extend(safe_submodules(pkg))
+
+# Standard library C extensions that PyInstaller frequently misses on Windows
+stdlib_extensions = [
+    'pyexpat',
+    '_elementtree',
+    '_socket',
+    '_ssl',
+    '_hashlib',
+    '_multiprocessing',
+    '_csv',
+    '_json',
+    '_datetime',
+    '_decimal',
+    '_ctypes',
+    '_zlib',
+    '_bz2',
+    '_lzma',
+]
 
 a = Analysis(
     ['pdf_generator_ui.py'],
     pathex=[],
-    binaries=numpy_dlls,
+    binaries=dlls,
     datas=datas,
     hiddenimports=[
         'tkinter',
@@ -41,23 +74,12 @@ a = Analysis(
         'tkinter.scrolledtext',
         'tkinter.ttk',
         'openpyxl',
-        'openpyxl.styles',
         'pandas',
         'certifi',
-        'pyexpat',
         'reportlab',
-        'reportlab.lib',
-        'reportlab.lib.pagesizes',
-        'reportlab.platypus',
-        'reportlab.lib.styles',
-        'reportlab.lib.enums',
-        'reportlab.pdfbase',
-        'reportlab.pdfbase.pdfmetrics',
-        'reportlab.pdfbase.ttfonts',
-        'reportlab.lib.colors',
         'pdf_logic',
         'equitas_logic',
-    ] + np_extra,
+    ] + pkg_imports + stdlib_extensions,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
