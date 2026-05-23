@@ -9,7 +9,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # --- Read version ---
-VERSION=$(python3 -c "exec(open('pdf_generator_ui.py').read()); print(VERSION)")
+VERSION=$(python3 -c "
+import re
+with open('pdf_generator_ui.py') as f:
+    for line in f:
+        if line.startswith('VERSION'):
+            print(re.search(r'[\x27\"](.+)[\x27\"]', line).group(1))
+            break
+")
 TAG="v${VERSION}"
 ZIP="Audit_Engine_${TAG}.zip"
 
