@@ -1,28 +1,34 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
+import glob
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_dynamic_libs
 
 block_cipher = None
 
-# Try to find TCL/TK paths to ensure they are bundled
-tcl_lib_path = ""
-tk_lib_path = ""
+# Collect dynamic libs (.pyd/.so) from numpy only (others are auto-detected)
+dlls = collect_dynamic_libs('numpy')
 
+# On Windows, explicitly bundle Tcl/Tk DLLs so _tkinter.pyd can load them
+tk_dlls = []
 if sys.platform == "win32":
-    base_path = os.path.dirname(sys.executable)
-    possible_tcl = os.path.join(base_path, 'tcl')
-    if os.path.exists(possible_tcl):
-        for item in os.listdir(possible_tcl):
-            if item.startswith('tcl8'):
-                tcl_lib_path = os.path.join(possible_tcl, item)
-            if item.startswith('tk8'):
-                tk_lib_path = os.path.join(possible_tcl, item)
+    py_root = os.path.dirname(sys.executable)
+    # Look in DLLs folder (official Python) and bin folder (some distributions)
+    for search_dir in [os.path.join(py_root, 'DLLs'), os.path.join(py_root, 'bin')]:
+        if os.path.isdir(search_dir):
+            for dll_pattern in ['tcl*.dll', 'tk*.dll']:
+                tk_dlls.extend(glob.glob(os.path.join(search_dir, dll_pattern)))
+    # Also try the tcl/tk library directories
+    tcl_dir = os.path.join(py_root, 'tcl')
+    if os.path.isdir(tcl_dir):
+        for entry in os.listdir(tcl_dir):
+            lib_dir = os.path.join(tcl_dir, entry)
+            if os.path.isdir(lib_dir):
+                for dll_pattern in ['*.dll', '*.so']:
+                    tk_dlls.extend(glob.glob(os.path.join(lib_dir, dll_pattern)))
+    dlls.extend((dll, '.') for dll in tk_dlls if os.path.isfile(dll))
 
 datas = [('fonts', 'fonts')] + collect_data_files('certifi')
-if tcl_lib_path and tk_lib_path:
-    datas.append((tcl_lib_path, os.path.join('tcl', os.path.basename(tcl_lib_path))))
-    datas.append((tk_lib_path, os.path.join('tk', os.path.basename(tk_lib_path))))
 
 
 def safe_submodules(pkg):
@@ -32,12 +38,6 @@ def safe_submodules(pkg):
     except Exception:
         return []
 
-
-# Collect dynamic libs (.pyd/.so) from all dependencies
-dlls = []
-for pkg in ['numpy', 'pandas', 'openpyxl', 'reportlab', 'PIL', 'charset_normalizer',
-            'et_xmlfile', 'dateutil']:
-    dlls.extend(collect_dynamic_libs(pkg))
 
 # Collect ALL submodules from our major dependencies
 pkg_imports = []
