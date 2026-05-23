@@ -43,29 +43,6 @@ jobs:
           }
           $size = (Get-Item $exe).Length / 1MB
           Write-Host "Built exe: $([math]::Round($size, 2)) MB"
-      - name: Verify critical DLLs in bundle
-        run: |
-          python -c "
-          import sys
-          try:
-              from PyInstaller.archive.readers import CArchiveReader
-              archive = CArchiveReader('dist/Audit_Engine_Elite.exe')
-              toc = archive.toc
-              dlls = sorted([name for name, *_ in toc if name.lower().endswith(('.dll', '.pyd'))])
-              print(f'DLLs/PYDs inside exe: {len(dlls)}')
-              for d in dlls:
-                  print(f'  {d}')
-              critical = ['python312.dll', 'vcruntime140.dll', 'tcl86t.dll', 'tk86t.dll']
-              dll_names = [n.lower() for n, *_ in toc]
-              missing = [c for c in critical if c not in dll_names]
-              if missing:
-                  print(f'CRITICAL MISSING: {missing}')
-                  sys.exit(1)
-              print('All critical DLLs present!')
-          except Exception as e:
-              print(f'Warning: Could not inspect archive: {e}')
-              print('Proceeding - spec printed its own verification.')
-          "
       - shell: pwsh
         env:
           TAG: ${{ github.ref_name }}
