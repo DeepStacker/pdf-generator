@@ -876,8 +876,8 @@ HTML_CONTENT = """<!DOCTYPE html>
             
             let html = '';
             files.forEach(f => {
-                const filename = f.split('/').pop().split('\\').pop();
-                html += `<button onclick="selectRecentFile('${f.replace(/\\/g, '\\\\')}')" class="bg-slate-900 border border-brand-borderLine text-slate-400 hover:text-white hover:border-slate-500 rounded px-2.5 py-1 transition truncate max-w-[200px]" title="${f}">${filename}</button>`;
+                const filename = f.split('/').pop().split('\\\\').pop();
+                html += `<button onclick="selectRecentFile('${f.replace(/\\\\/g, '\\\\\\\\')}')" class="bg-slate-900 border border-brand-borderLine text-slate-400 hover:text-white hover:border-slate-500 rounded px-2.5 py-1 transition truncate max-w-[200px]" title="${f}">${filename}</button>`;
             });
             
             idfcList.innerHTML = html;
@@ -1258,7 +1258,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 
                 let html = '';
                 data.forEach(row => {
-                    const escPath = (row.full_path || row.output_path || '').replace(/\\/g, '\\\\');
+                    const escPath = (row.full_path || row.output_path || '').replace(/\\\\/g, '\\\\\\\\');
                     html += `
                         <tr class="hover:bg-slate-900/30 transition text-xs border-b border-brand-borderLine">
                             <td class="py-3.5 px-6 font-mono text-slate-400">${row.timestamp}</td>
