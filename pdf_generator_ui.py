@@ -337,8 +337,6 @@ class App:
         self.bank_selector.pack(fill=tk.X)
         self.bank_selector.bind("<<ComboboxSelected>>", self.on_bank_change)
 
-        self.update_branding()
-
         # Navigation
         self.nav_btns = {}
         nav_items = [
@@ -360,6 +358,8 @@ class App:
         tk.Label(footer, text=f"v{VERSION} Enterprise Edition", font=("Inter", 8), bg="#0F172A", fg="#475569").pack()
         self.lbl_copyright = tk.Label(footer, font=("Inter", 7), bg="#0F172A", fg="#334155")
         self.lbl_copyright.pack()
+
+        self.update_branding()
 
         # Content Area
         self.content_container = tk.Frame(self.main_container, bg="#F8FAFC")
