@@ -25,12 +25,26 @@ jobs:
           path: ~\AppData\Local\pyinstaller
           key: pyi-win-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-win-
-      - run: pip install pyinstaller reportlab openpyxl pandas
-      - name: Check Tcl/Tk DLLs
+      - run: pip install pyinstaller reportlab openpyxl pandas certifi
+      - name: Verify Tcl/Tk environment
         run: |
-          python -c "import os,glob; import sys as _s; d=next(p for p in [_s.prefix,_s.exec_prefix] if p); [print(f) for f in glob.glob(os.path.join(d,'**','*.dll'),recursive=True) if 'tcl' in f.lower() or 'tk' in f.lower()]"
-          python -c "import _tkinter, tkinter; t=tkinter.Tcl(); print('tkinter OK')"
-      - run: pyinstaller --noconfirm pdf_generator.spec
+          python -c "import sys; print('Python:', sys.executable); print('Prefix:', sys.prefix); print('Base prefix:', sys.base_prefix)"
+          python -c "import os, sys, glob; bases=[sys.prefix, getattr(sys,'base_prefix',sys.prefix)]; [print(f) for b in bases for f in glob.glob(os.path.join(b,'**','*.dll'),recursive=True) if any(x in f.lower() for x in ['tcl','tk','zlib'])]"
+          python -c "import _tkinter; print('_tkinter OK:', _tkinter.__file__)"
+          python -c "import tkinter; r=tkinter.Tk(); r.withdraw(); print('TCL_LIBRARY:', r.tk.exprstring('$tcl_library')); print('TK_LIBRARY:', r.tk.exprstring('$tk_library')); r.destroy(); print('tkinter fully operational')"
+      - run: pyinstaller --noconfirm --clean pdf_generator.spec
+      - name: Verify built exe
+        shell: pwsh
+        run: |
+          $exe = "dist\Audit_Engine_Elite.exe"
+          if (Test-Path $exe) {
+            $size = (Get-Item $exe).Length / 1MB
+            Write-Host "Built exe size: $([math]::Round($size, 2)) MB"
+            Write-Host "Built exe path: $exe"
+          } else {
+            Write-Error "Build failed: exe not found!"
+            exit 1
+          }
       - shell: pwsh
         env:
           TAG: ${{ github.ref_name }}
