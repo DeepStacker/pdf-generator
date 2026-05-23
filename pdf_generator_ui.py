@@ -374,10 +374,16 @@ def _install_binary_update(zip_path, install_dir, log_callback=print):
         )
         with open(bat_path, "w") as f:
             f.write(bat_contents)
+        startup = None
+        if sys.platform == "win32":
+            startup = subprocess.STARTUPINFO()
+            startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startup.wShowWindow = 0  # SW_HIDE
         subprocess.Popen(
             ["cmd.exe", "/c", bat_path],
             env={**os.environ, "PARENT_PID": str(os.getpid())},
             close_fds=True,
+            startupinfo=startup,
         )
         log_callback("Update deferred to batch script; exiting.")
         return
