@@ -6,25 +6,70 @@ on:
 permissions:
   contents: write
 jobs:
-  windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    outputs:
+      suffix: ${{ steps.suffix.outputs.value }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set platform suffix
+        id: suffix
+        run: |
+          case "${{ runner.os }}" in
+            Windows) echo "value=windows" ;;
+            macOS)   echo "value=macos" ;;
+            Linux)   echo "value=linux" ;;
+          esac >> "$GITHUB_OUTPUT"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/Library/Caches/pip
+            ~\AppData\Local\pip\Cache
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
+
+      - name: Cache PyInstaller
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pyinstaller
+            ~\AppData\Local\pyinstaller
+          key: pyi-${{ runner.os }}-${{ hashFiles('pdf_generator.spec') }}
+          restore-keys: pyi-${{ runner.os }}-
+
       - name: Install deps
         run: pip install pyinstaller reportlab openpyxl pandas
+
       - name: Build binary
-        run: pyinstaller --noconfirm --clean pdf_generator.spec
-      - name: Create ZIP
+        run: pyinstaller --noconfirm pdf_generator.spec
+
+      - name: Create ZIP (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $tag = "$env:TAG"
           Compress-Archive -Path dist -DestinationPath "Audit_Engine_${tag}_binary_windows.zip"
         env:
           TAG: ${{ github.ref_name }}
-      - name: Upload to release
+
+      - name: Create ZIP (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          TAG="${{ github.ref_name }}"
+          SUFFIX="${{ steps.suffix.outputs.value }}"
+          cd dist && zip -r "../Audit_Engine_${TAG}_binary_${SUFFIX}.zip" .
+
+      - name: Upload to release (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -34,50 +79,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             gh release create $env:TAG --title $env:TAG --notes "Platform binary (Windows)"
           }
-          gh release upload $env:TAG "Audit_Engine_${env:TAG}_binary_windows.zip" --clobber
+          $zip = "Audit_Engine_${env:TAG}_binary_windows.zip"
+          gh release upload $env:TAG $zip --clobber
 
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install deps
-        run: pip install pyinstaller reportlab openpyxl pandas
-      - name: Build binary
-        run: pyinstaller --noconfirm --clean pdf_generator.spec
-      - name: Create ZIP
-        run: |
-          TAG="${{ github.ref_name }}"
-          cd dist && zip -r "../Audit_Engine_${TAG}_binary_macos.zip" .
-      - name: Upload to release
+      - name: Upload to release (Unix)
+        if: runner.os != 'Windows'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.ref_name }}"
-          gh release view "$TAG" 2>/dev/null || gh release create "$TAG" --title "$TAG" --notes "Platform binary (macOS)"
-          gh release upload "$TAG" "Audit_Engine_${TAG}_binary_macos.zip" --clobber
-
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install deps
-        run: pip install pyinstaller reportlab openpyxl pandas
-      - name: Build binary
-        run: pyinstaller --noconfirm --clean pdf_generator.spec
-      - name: Create ZIP
-        run: |
-          TAG="${{ github.ref_name }}"
-          cd dist && zip -r "../Audit_Engine_${TAG}_binary_linux.zip" .
-      - name: Upload to release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="${{ github.ref_name }}"
-          gh release view "$TAG" 2>/dev/null || gh release create "$TAG" --title "$TAG" --notes "Platform binary (Linux)"
-          gh release upload "$TAG" "Audit_Engine_${TAG}_binary_linux.zip" --clobber
+          SUFFIX="${{ steps.suffix.outputs.value }}"
+          ZIP="Audit_Engine_${TAG}_binary_${SUFFIX}.zip"
+          gh release view "$TAG" 2>/dev/null || gh release create "$TAG" --title "$TAG" --notes "Platform binary (${SUFFIX})"
+          gh release upload "$TAG" "$ZIP" --clobber
