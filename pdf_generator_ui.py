@@ -226,6 +226,7 @@ UPDATE_REPO = "DeepStacker/pdf-generator"
 GITHUB_API = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
 
 import urllib.request as _urllib
+import urllib.error as _urlerror
 import json as _json
 import tempfile as _tempfile
 import shutil as _shutil
@@ -236,9 +237,27 @@ def _make_ssl_context():
     """Create SSL context using certifi CA bundle if available."""
     try:
         import certifi
-        return _ssl.create_default_context(cafile=certifi.where())
+        cafile = certifi.where()
+        if os.path.exists(cafile):
+            return _ssl.create_default_context(cafile=cafile)
     except Exception:
-        return _ssl.create_default_context()
+        pass
+    return _ssl.create_default_context()
+
+
+def _urlopen_with_fallback(req, timeout=10):
+    """Open a URL with SSL fallback: certifi → system → unverified (last resort)."""
+    try:
+        ctx = _make_ssl_context()
+        return _urllib.urlopen(req, context=ctx, timeout=timeout)
+    except _urlerror.URLError as e:
+        if "CERTIFICATE_VERIFY_FAILED" in str(e):
+            print("WARNING: SSL verification failed; retrying without verification.")
+            ctx = _ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = _ssl.CERT_NONE
+            return _urllib.urlopen(req, context=ctx, timeout=timeout)
+        raise
 
 
 def _get_platform_suffix():
@@ -252,9 +271,8 @@ def _get_platform_suffix():
 
 def _check_latest_release():
     """Check GitHub for the latest release. Returns (tag, source_url, body, binary_url)."""
-    ctx = _make_ssl_context()
     req = _urllib.Request(GITHUB_API, headers={"User-Agent": f"AuditEngine/{VERSION}"})
-    with _urllib.urlopen(req, context=ctx, timeout=10) as resp:
+    with _urlopen_with_fallback(req, timeout=10) as resp:
         data = _json.loads(resp.read().decode())
     tag = data["tag_name"]
     source_url = data["zipball_url"]
@@ -275,9 +293,8 @@ def _parse_version(tag):
 
 def _download_update(url, dest_path, progress_callback=None):
     """Download a file with optional progress callback (0-100)."""
-    ctx = _make_ssl_context()
     req = _urllib.Request(url, headers={"User-Agent": f"AuditEngine/{VERSION}"})
-    with _urllib.urlopen(req, context=ctx, timeout=60) as resp:
+    with _urlopen_with_fallback(req, timeout=60) as resp:
         total = int(resp.headers.get("Content-Length", 0))
         downloaded = 0
         with open(dest_path, "wb") as f:
