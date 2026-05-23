@@ -63,6 +63,7 @@ jobs:
           restore-keys: pyi-macos-
       - run: pip install pyinstaller reportlab openpyxl pandas
       - run: pyinstaller --noconfirm pdf_generator.spec
+      - run: codesign --force --sign - dist/Audit_Engine_Elite
       - env:
           TAG: ${{ github.ref_name }}
         run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_macos.zip" .
