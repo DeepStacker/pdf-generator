@@ -17,6 +17,7 @@ import sqlite3
 import logging
 from datetime import datetime
 import openpyxl
+import sv_ttk
 
 # Import core logic modules
 import pdf_logic
@@ -211,10 +212,10 @@ class ToolTip:
 # LOG LEVEL COLORS (for color-coded console)
 # =========================================================
 LOG_COLORS = {
-    "INFO": "#10B981",     # green
-    "OK": "#10B981",       # green
-    "WARN": "#F59E0B",     # amber
-    "ERROR": "#EF4444",    # red
+    "INFO": "#38BDF8",     # sky blue
+    "OK": "#34D399",       # mint green
+    "WARN": "#FBBF24",     # soft amber
+    "ERROR": "#F87171",    # coral red
     "DEBUG": "#64748B",    # slate
 }
 
@@ -691,23 +692,33 @@ class App:
         self.root.after(2000, self._check_updates_background)
 
     def setup_styles(self):
-        self.style = ttk.Style()
-        self.style.theme_use('clam')
-        self.style.configure("Treeview",
-                             background="#1E293B",
-                             foreground="#F8FAFC",
-                             fieldbackground="#1E293B",
-                             rowheight=50,
-                             font=("Inter", 10))
-        self.style.configure("Treeview.Heading",
-                             font=("Inter", 11, "bold"),
-                             background="#334155",
-                             foreground="#F8FAFC",
-                             relief="flat")
-        self.style.map("Treeview", background=[('selected', '#2563EB')])
+        try:
+            sv_ttk.set_theme("dark")
+        except Exception as e:
+            file_logger.warning(f"Failed to set sv-ttk dark theme: {e}")
 
-        # Equitas specific styles
-        self.style.map("TRadiobutton", background=[('active', '#FFFFFF')])
+        self.style = ttk.Style()
+        
+        # Style adjustments for dynamic dark mode
+        self.style.configure("Treeview", rowheight=36, font=("Inter", 10))
+        self.style.configure("Treeview.Heading", font=("Inter", 10, "bold"))
+        self.style.configure("TButton", font=("Inter", 10, "bold"))
+        self.style.configure("TCombobox", font=("Inter", 10))
+        self.style.configure("TEntry", font=("Inter", 10))
+        
+        self.update_styles_for_bank()
+
+    def update_styles_for_bank(self):
+        primary = self.get_theme_color("primary")
+        primary_hover = self.get_theme_color("primary_hover")
+        
+        # Configure primary Accent button style dynamically to match bank color!
+        self.style.configure("Accent.TButton", background=primary, foreground="#FFFFFF", font=("Inter", 11, "bold"))
+        self.style.map("Accent.TButton",
+                       background=[('pressed', primary_hover),
+                                   ('active', primary_hover),
+                                   ('disabled', '#2D2D2D')],
+                       foreground=[('disabled', '#6D6D6D')])
 
     def _setup_shortcuts(self):
         self.root.bind("<Control-o>", lambda e: self._shortcut_open())
@@ -772,7 +783,7 @@ class App:
         logo_frame.pack(fill=tk.X)
         self.lbl_logo1 = tk.Label(logo_frame, font=("Inter", 22, "bold"), bg="#0F172A", fg="#FFFFFF")
         self.lbl_logo1.pack()
-        self.lbl_logo2 = tk.Label(logo_frame, text="AUDIT ENGINE", font=("Inter", 9, "bold"), bg="#0F172A", fg="#2563EB", pady=5)
+        self.lbl_logo2 = tk.Label(logo_frame, text="AUDIT ENGINE", font=("Inter", 8, "bold"), bg="#0F172A", fg="#2563EB", pady=5)
         self.lbl_logo2.pack()
 
         # Bank Selector
@@ -808,16 +819,16 @@ class App:
 
         self.update_branding()
 
-        # Content Area
-        self.content_container = tk.Frame(self.main_container, bg="#F8FAFC")
+        # Content Area (Premium Space Dark)
+        self.content_container = tk.Frame(self.main_container, bg="#0B0F19")
         self.content_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Status Bar
-        self.status_bar = tk.Frame(self.content_container, bg="#FFFFFF", height=30, highlightthickness=1, highlightbackground="#E2E8F0")
+        # Status Bar (Dark Slate)
+        self.status_bar = tk.Frame(self.content_container, bg="#0F172A", height=30, highlightthickness=1, highlightbackground="#1E293B")
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-        tk.Label(self.status_bar, textvariable=self.status_msg, font=("Inter", 8, "bold"), bg="#FFFFFF", fg="#64748B", padx=20).pack(side=tk.LEFT)
+        tk.Label(self.status_bar, textvariable=self.status_msg, font=("Inter", 8, "bold"), bg="#0F172A", fg="#94A3B8", padx=20).pack(side=tk.LEFT)
         tk.Label(self.status_bar, text="Ctrl+O  Open  ·  Enter  Run  ·  Esc  Stop  ·  Ctrl+L  Clear",
-                 font=("Inter", 7), bg="#FFFFFF", fg="#CBD5E1", padx=20).pack(side=tk.RIGHT)
+                 font=("Inter", 7), bg="#0F172A", fg="#475569", padx=20).pack(side=tk.RIGHT)
 
         self.render_tab()
 
@@ -835,6 +846,14 @@ class App:
     def on_bank_change(self, event=None, preserve_file=None):
         set_config("bank", self.bank_var.get())
         self.update_branding()
+        self.update_styles_for_bank()
+        
+        # Update the active navigation indicator color dynamically
+        primary = self.get_theme_color("primary")
+        for t, widget_dict in self.nav_btns.items():
+            if self.active_tab == t:
+                widget_dict["indicator"].config(bg=primary)
+                
         if preserve_file:
             self.file_var.set(preserve_file)
         else:
@@ -845,28 +864,72 @@ class App:
         return THEME.get(self.bank_var.get(), THEME["IDFC First Bank"])[key]
 
     def create_nav_btn(self, text, tag, parent):
-        btn = tk.Button(parent, text=text, font=("Inter", 12, "bold"),
-                        bg="#0F172A", fg="#94A3B8",
-                        activebackground="#1E293B", activeforeground="#FFFFFF",
-                        relief="flat", anchor="w", padx=40, pady=12,
-                        cursor="hand2", borderwidth=0,
-                        command=lambda: self.switch_tab(tag))
-        btn.pack(fill=tk.X)
+        # Create container frame
+        frame = tk.Frame(parent, bg="#0F172A", height=50)
+        frame.pack(fill=tk.X, pady=2)
+        frame.pack_propagate(False)
+        
+        # Left-side active indicator bar (4px wide)
+        indicator = tk.Frame(frame, bg="#0F172A", width=4)
+        indicator.pack(side=tk.LEFT, fill=tk.Y)
+        
+        # Navigation label
+        lbl = tk.Label(frame, text=text, font=("Inter", 11, "bold"),
+                       bg="#0F172A", fg="#94A3B8", anchor="w", padx=36,
+                       cursor="hand2")
+        lbl.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Hover bindings
+        def on_enter(e):
+            if self.active_tab != tag:
+                frame.config(bg="#1E293B")
+                lbl.config(bg="#1E293B", fg="#FFFFFF")
+                
+        def on_leave(e):
+            if self.active_tab != tag:
+                frame.config(bg="#0F172A")
+                lbl.config(bg="#0F172A", fg="#94A3B8")
+                
+        def on_click(e):
+            self.switch_tab(tag)
+            
+        lbl.bind("<Enter>", on_enter)
+        lbl.bind("<Leave>", on_leave)
+        lbl.bind("<Button-1>", on_click)
+        frame.bind("<Enter>", on_enter)
+        frame.bind("<Leave>", on_leave)
+        frame.bind("<Button-1>", on_click)
+        
         tips = {
             "PROCESS": "Create a new audit batch from an Excel file",
             "STATS": "View generation statistics and daily activity",
             "HISTORY": "Browse and search past generation logs",
             "SETTINGS": "Manage application settings and data",
         }
-        ToolTip(btn, tips.get(tag, ""))
-        return btn
+        ToolTip(lbl, tips.get(tag, ""))
+        ToolTip(frame, tips.get(tag, ""))
+        
+        return {"frame": frame, "indicator": indicator, "label": lbl}
 
     def switch_tab(self, tag):
         self.active_tab = tag
-        for t, b in self.nav_btns.items():
+        primary = self.get_theme_color("primary")
+        
+        for t, widget_dict in self.nav_btns.items():
             is_active = (self.active_tab == t)
-            b.config(bg="#1E293B" if is_active else "#0F172A",
-                     fg="#FFFFFF" if is_active else "#94A3B8")
+            frame = widget_dict["frame"]
+            indicator = widget_dict["indicator"]
+            lbl = widget_dict["label"]
+            
+            if is_active:
+                frame.config(bg="#162032")
+                lbl.config(bg="#162032", fg="#FFFFFF")
+                indicator.config(bg=primary)
+            else:
+                frame.config(bg="#0F172A")
+                lbl.config(bg="#0F172A", fg="#94A3B8")
+                indicator.config(bg="#0F172A")
+                
         self.render_tab()
 
     def render_tab(self):
@@ -874,7 +937,7 @@ class App:
             if w != self.status_bar:
                 w.destroy()
 
-        self.content_scrollable = ScrollableFrame(self.content_container, bg="#F8FAFC")
+        self.content_scrollable = ScrollableFrame(self.content_container, bg="#0B0F19")
         self.content_scrollable.pack(fill=tk.BOTH, expand=True)
         self.content = self.content_scrollable.scrollable_frame
 
@@ -894,97 +957,91 @@ class App:
     # TAB: NEW BATCH (PROCESS) - IDFC
     # ---------------------------------------------------------
     def render_process_idfc(self):
-        header = tk.Frame(self.content, bg="#F8FAFC")
+        header = tk.Frame(self.content, bg="#0B0F19")
         header.pack(fill=tk.X)
-        tk.Label(header, text="Generate Reports", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
-        tk.Label(header, text="IDFC FIRST Bank", font=("Inter", 14, "bold"), bg="#DBEAFE", fg="#1E40AF", padx=10, pady=5).pack(side=tk.RIGHT)
+        tk.Label(header, text="Generate Reports", font=("Inter", 26, "bold"), bg="#0B0F19", fg="#F8FAFC").pack(side=tk.LEFT)
+        tk.Label(header, text="IDFC FIRST Bank", font=("Inter", 12, "bold"), bg="#1E3A8A", fg="#93C5FD", padx=12, pady=6).pack(side=tk.RIGHT)
 
-        stats_frame = tk.Frame(self.content, bg="#F8FAFC")
+        stats_frame = tk.Frame(self.content, bg="#0B0F19")
         stats_frame.pack(fill=tk.X, pady=15)
         e, p = get_stats()
-        self.create_stat_card(stats_frame, "Total Sessions", str(e), "#0F172A", 0)
+        self.create_stat_card(stats_frame, "Total Sessions", str(e), "#38BDF8", 0)
         last_run = get_recent_history(limit=1)
         status_text = last_run[0][1] if last_run else "No activity yet"
         status_color = "#10B981" if last_run else "#94A3B8"
         self.create_stat_card(stats_frame, "Last Run", status_text[:19], status_color, 1)
         self.create_stat_card(stats_frame, "PDF Reports", str(p), self.get_theme_color("primary"), 2)
 
-        self.panel = tk.Frame(self.content, bg="#FFFFFF", padx=30, pady=25, highlightthickness=1, highlightbackground="#E2E8F0")
+        self.panel = tk.Frame(self.content, bg="#162032", padx=30, pady=25, highlightthickness=1, highlightbackground="#1E293B")
         self.panel.pack(fill=tk.X)
 
         self.create_input(self.panel, "Source Master Excel", self.file_var, self.browse_in_idfc, "Browse...")
 
-        self.validate_label = tk.Label(self.panel, text="", font=("Inter", 10), bg="#FFFFFF")
+        self.validate_label = tk.Label(self.panel, text="", font=("Inter", 10), bg="#162032")
         self.validate_label.pack(anchor="w", pady=(0, 5))
 
-        self.recent_frame = tk.Frame(self.panel, bg="#FFFFFF")
+        self.recent_frame = tk.Frame(self.panel, bg="#162032")
         self.recent_frame.pack(fill=tk.X, pady=(0, 5))
         self._refresh_recent_files()
 
-        self.preview_frame = tk.Frame(self.panel, bg="#FFFFFF")
+        self.preview_frame = tk.Frame(self.panel, bg="#162032")
         self.preview_frame.pack(fill=tk.X)
 
         if self.file_var.get().strip() and os.path.exists(self.file_var.get().strip()):
             self._preview_file_idfc(self.file_var.get().strip())
 
-        cfg_row = tk.Frame(self.panel, bg="#FFFFFF")
+        cfg_row = tk.Frame(self.panel, bg="#162032")
         cfg_row.pack(fill=tk.X, pady=10)
 
-        type_box = tk.Frame(cfg_row, bg="#FFFFFF")
+        type_box = tk.Frame(cfg_row, bg="#162032")
         type_box.pack(side=tk.LEFT)
-        tk.Label(type_box, text="Audit Type:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
+        tk.Label(type_box, text="Audit Type:", font=("Inter", 10, "bold"), bg="#162032", fg="#94A3B8").pack(side=tk.LEFT, padx=(0, 10))
         for t in ["POA", "TAF"]:
-            rb = tk.Radiobutton(type_box, text=t, variable=self.typ_var, value=t,
-                           bg="#FFFFFF", font=("Inter", 11), selectcolor="#FFFFFF",
-                           padx=15, command=lambda: set_config("audit_type", self.typ_var.get()))
-            rb.pack(side=tk.LEFT)
+            rb = ttk.Radiobutton(type_box, text=t, variable=self.typ_var, value=t,
+                                 command=lambda: set_config("audit_type", self.typ_var.get()))
+            rb.pack(side=tk.LEFT, padx=10)
             ToolTip(rb, f"Generate {t} audit worksheets")
 
-        tk.Checkbutton(cfg_row, text="Auto-open destination folder", variable=self.auto_open,
-                       bg="#FFFFFF", font=("Inter", 10), activebackground="#FFFFFF",
-                       command=lambda: set_config("auto_open", str(self.auto_open.get()))).pack(side=tk.RIGHT)
+        cb = ttk.Checkbutton(cfg_row, text="Auto-open destination folder", variable=self.auto_open,
+                             command=lambda: set_config("auto_open", str(self.auto_open.get())))
+        cb.pack(side=tk.RIGHT)
 
-        pkg_row = tk.Frame(self.panel, bg="#FFFFFF")
-        pkg_row.pack(fill=tk.X, pady=(0, 5))
-        tk.Label(pkg_row, text="Output Mode:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
+        pkg_row = tk.Frame(self.panel, bg="#162032")
+        pkg_row.pack(fill=tk.X, pady=(0, 10))
+        tk.Label(pkg_row, text="Output Mode:", font=("Inter", 10, "bold"), bg="#162032", fg="#94A3B8").pack(side=tk.LEFT, padx=(0, 10))
         tips_map = {"FOLDER": "Save PDFs directly to a folder", "ZIP ONLY": "Compress PDFs into a ZIP archive (saves ~50% space)", "BOTH": "Keep folder + create ZIP archive"}
         for m in ["FOLDER", "ZIP ONLY", "BOTH"]:
-            rb = tk.Radiobutton(pkg_row, text=m, variable=self.pkg_var, value=m,
-                           bg="#FFFFFF", font=("Inter", 10), selectcolor="#FFFFFF",
-                           padx=15, command=lambda: set_config("pkg_mode", self.pkg_var.get()))
-            rb.pack(side=tk.LEFT)
+            rb = ttk.Radiobutton(pkg_row, text=m, variable=self.pkg_var, value=m,
+                                 command=lambda: set_config("pkg_mode", self.pkg_var.get()))
+            rb.pack(side=tk.LEFT, padx=10)
             ToolTip(rb, tips_map[m])
-        tk.Label(pkg_row, text="(ZIP ONLY saves 50% space)", font=("Inter", 8, "italic"), bg="#FFFFFF", fg="#94A3B8").pack(side=tk.LEFT, padx=10)
+        tk.Label(pkg_row, text="(ZIP ONLY saves 50% space)", font=("Inter", 8, "italic"), bg="#162032", fg="#64748B").pack(side=tk.LEFT, padx=10)
 
         self.create_input(self.panel, "Output Directory", self.folder_var, self.browse_out, "Browse...")
 
-        btn_row = tk.Frame(self.panel, bg="#FFFFFF")
+        btn_row = tk.Frame(self.panel, bg="#162032")
         btn_row.pack(fill=tk.X, pady=(15, 10))
 
-        self.btn_run = tk.Button(btn_row, text="Generate Reports", font=("Inter", 14, "bold"),
-                                 bg=self.get_theme_color("primary"), fg="#FFFFFF", relief="flat", padx=50, pady=12,
-                                 cursor="hand2", activebackground=self.get_theme_color("primary_hover"),
-                                 command=self.start_process_idfc)
-        self.btn_run.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        self.btn_run = ttk.Button(btn_row, text="Generate Reports", style="Accent.TButton",
+                                  command=self.start_process_idfc)
+        self.btn_run.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10), ipady=6)
         ToolTip(self.btn_run, "Generate audit PDFs from the selected Excel file")
         self.btn_run.bind("<Control-Return>", lambda e: self.start_process_idfc())
 
-        self.btn_cancel = tk.Button(btn_row, text="Stop", font=("Inter", 11, "bold"),
-                                    bg="#DC2626", fg="#FFFFFF", relief="flat", padx=25, pady=12,
-                                    cursor="hand2", activebackground="#B91C1C",
-                                    state=tk.DISABLED, command=self.cancel_process)
-        self.btn_cancel.pack(side=tk.RIGHT)
+        self.btn_cancel = ttk.Button(btn_row, text="Stop", state=tk.DISABLED,
+                                     command=self.cancel_process)
+        self.btn_cancel.pack(side=tk.RIGHT, ipady=6)
         ToolTip(self.btn_cancel, "Stop the current generation")
 
-        prog_row = tk.Frame(self.panel, bg="#FFFFFF")
-        prog_row.pack(fill=tk.X, pady=(0, 5))
+        prog_row = tk.Frame(self.panel, bg="#162032")
+        prog_row.pack(fill=tk.X, pady=(10, 5))
         self.progress = ttk.Progressbar(prog_row, variable=self.progress_var, maximum=100)
         self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.prog_label = tk.Label(prog_row, text="0%", font=("Inter", 9, "bold"),
-                                   bg="#FFFFFF", fg="#64748B", width=6, anchor="e")
+                                   bg="#162032", fg="#94A3B8", width=6, anchor="e")
         self.prog_label.pack(side=tk.RIGHT, padx=(10, 0))
         self.branch_label = tk.Label(self.panel, text="", font=("Inter", 9, "italic"),
-                                     bg="#FFFFFF", fg="#64748B", anchor="w")
+                                     bg="#162032", fg="#94A3B8", anchor="w")
         self.branch_label.pack(fill=tk.X, pady=(0, 5))
 
         self.render_console()
@@ -1030,16 +1087,16 @@ class App:
     # TAB: NEW BATCH (PROCESS) - EQUITAS
     # ---------------------------------------------------------
     def render_process_equitas(self):
-        header = tk.Frame(self.content, bg="#F8FAFC")
+        header = tk.Frame(self.content, bg="#0B0F19")
         header.pack(fill=tk.X)
-        tk.Label(header, text="Generate Reports", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
-        tk.Label(header, text="Equitas Small Finance Bank", font=("Inter", 14, "bold"), bg="#FEF3C7", fg="#92400E", padx=10, pady=5).pack(side=tk.RIGHT)
+        tk.Label(header, text="Generate Reports", font=("Inter", 26, "bold"), bg="#0B0F19", fg="#F8FAFC").pack(side=tk.LEFT)
+        tk.Label(header, text="Equitas Small Finance Bank", font=("Inter", 12, "bold"), bg="#78350F", fg="#FDE68A", padx=12, pady=6).pack(side=tk.RIGHT)
 
         # Stage Selector
-        stage_frame = tk.Frame(self.content, bg="#F8FAFC")
+        stage_frame = tk.Frame(self.content, bg="#0B0F19")
         stage_frame.pack(fill=tk.X, pady=(15, 0))
 
-        stage_box = tk.Frame(stage_frame, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E2E8F0", padx=5, pady=5)
+        stage_box = tk.Frame(stage_frame, bg="#162032", highlightthickness=1, highlightbackground="#1E293B", padx=5, pady=5)
         stage_box.pack(side=tk.LEFT)
 
         def switch_stage():
@@ -1067,44 +1124,40 @@ class App:
                         self._clear_preview()
 
         for s in ["STAGE 1", "STAGE 2"]:
-            rb = tk.Radiobutton(stage_box, text=s, variable=self.equitas_stage_var, value=s,
-                           bg="#FFFFFF", font=("Inter", 11, "bold" if self.equitas_stage_var.get() == s else "normal"),
-                           selectcolor="#FFFFFF", activebackground="#FFFFFF", indicatoron=0,
-                           fg=self.get_theme_color("primary") if self.equitas_stage_var.get() == s else "#64748B",
-                           relief="flat", padx=20, pady=5, command=switch_stage)
-            rb.pack(side=tk.LEFT)
+            rb = ttk.Radiobutton(stage_box, text=s, variable=self.equitas_stage_var, value=s,
+                                 style="Toolbutton", command=switch_stage)
+            rb.pack(side=tk.LEFT, padx=2)
             stage_tips = {"STAGE 1": "Generate branch-level PDFs and Excel templates from master data",
                           "STAGE 2": "Consolidate audited Stage 1 Excel into a final account-level report"}
             ToolTip(rb, stage_tips.get(s, ""))
 
         # Panel
-        self.panel = tk.Frame(self.content, bg="#FFFFFF", padx=30, pady=25, highlightthickness=1, highlightbackground="#E2E8F0")
+        self.panel = tk.Frame(self.content, bg="#162032", padx=30, pady=25, highlightthickness=1, highlightbackground="#1E293B")
         self.panel.pack(fill=tk.X, pady=(10, 0))
 
         stage = self.equitas_stage_var.get()
 
         if stage == "STAGE 1":
-            tk.Label(self.panel, text="Stage 1: Generate Branch Audits & Excels", font=("Inter", 12, "bold"), bg="#FFFFFF", fg="#0F172A").pack(anchor="w", pady=(0, 15))
+            tk.Label(self.panel, text="Stage 1: Generate Branch Audits & Excels", font=("Inter", 11, "bold"), bg="#162032", fg="#F8FAFC").pack(anchor="w", pady=(0, 15))
             self.create_input(self.panel, "Source Excel (Normal + JSR sheets)", self.file_var, self.browse_in_equitas, "Browse...")
 
             # --- Format & Packaging options ---
-            eq_cfg_frame = tk.Frame(self.panel, bg="#FFFFFF")
+            eq_cfg_frame = tk.Frame(self.panel, bg="#162032")
             eq_cfg_frame.pack(fill=tk.X, pady=(0, 10))
 
-            format_frame = tk.Frame(eq_cfg_frame, bg="#FFFFFF")
+            format_frame = tk.Frame(eq_cfg_frame, bg="#162032")
             format_frame.pack(side=tk.LEFT)
-            tk.Label(format_frame, text="Output Format:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
+            tk.Label(format_frame, text="Output Format:", font=("Inter", 10, "bold"), bg="#162032", fg="#94A3B8").pack(side=tk.LEFT, padx=(0, 10))
             fmt_tips = {"PDF ONLY": "Generate only PDF audit worksheets", "EXCEL ONLY": "Generate only Excel templates with formulas", "BOTH": "Generate both PDF and Excel outputs"}
             for m in ["PDF ONLY", "EXCEL ONLY", "BOTH"]:
-                rb = tk.Radiobutton(format_frame, text=m, variable=self.equitas_format_var, value=m,
-                               bg="#FFFFFF", font=("Inter", 10), selectcolor="#FFFFFF",
-                               padx=10, command=lambda: set_config("equitas_format", self.equitas_format_var.get()))
-                rb.pack(side=tk.LEFT)
+                rb = ttk.Radiobutton(format_frame, text=m, variable=self.equitas_format_var, value=m,
+                                     command=lambda: set_config("equitas_format", self.equitas_format_var.get()))
+                rb.pack(side=tk.LEFT, padx=8)
                 ToolTip(rb, fmt_tips[m])
 
-            pack_frame = tk.Frame(eq_cfg_frame, bg="#FFFFFF")
+            pack_frame = tk.Frame(eq_cfg_frame, bg="#162032")
             pack_frame.pack(side=tk.RIGHT)
-            tk.Label(pack_frame, text="Packaging:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT, padx=(10, 5))
+            tk.Label(pack_frame, text="Packaging:", font=("Inter", 10, "bold"), bg="#162032", fg="#94A3B8").pack(side=tk.LEFT, padx=(10, 10))
             self.equitas_pack_combo = ttk.Combobox(
                 pack_frame, textvariable=self.equitas_pack_var,
                 values=[
@@ -1122,17 +1175,17 @@ class App:
             self.equitas_pack_combo.bind("<<ComboboxSelected>>", lambda e: set_config("equitas_pack", self.equitas_pack_var.get()))
             ToolTip(self.equitas_pack_combo, "Choose how to package the generated output files")
         else:
-            tk.Label(self.panel, text="Stage 2: Consolidate Audited Excels", font=("Inter", 12, "bold"), bg="#FFFFFF", fg="#0F172A").pack(anchor="w", pady=(0, 15))
+            tk.Label(self.panel, text="Stage 2: Consolidate Audited Excels", font=("Inter", 11, "bold"), bg="#162032", fg="#F8FAFC").pack(anchor="w", pady=(0, 15))
             self.create_input(self.panel, "Audited Stage 1 Excel", self.file_var, self.browse_in_equitas, "Browse...")
 
-        self.validate_label = tk.Label(self.panel, text="", font=("Inter", 10), bg="#FFFFFF")
+        self.validate_label = tk.Label(self.panel, text="", font=("Inter", 10), bg="#162032")
         self.validate_label.pack(anchor="w", pady=(0, 5))
 
-        self.recent_frame = tk.Frame(self.panel, bg="#FFFFFF")
+        self.recent_frame = tk.Frame(self.panel, bg="#162032")
         self.recent_frame.pack(fill=tk.X, pady=(0, 5))
         self._refresh_recent_files()
 
-        self.preview_frame = tk.Frame(self.panel, bg="#FFFFFF")
+        self.preview_frame = tk.Frame(self.panel, bg="#162032")
         self.preview_frame.pack(fill=tk.X)
 
         if self.file_var.get().strip() and os.path.exists(self.file_var.get().strip()):
@@ -1141,44 +1194,40 @@ class App:
             else:
                 self._preview_file_equitas_s2(self.file_var.get().strip())
 
-        tk.Frame(self.panel, bg="#E2E8F0", height=1).pack(fill=tk.X, pady=15)
+        tk.Frame(self.panel, bg="#1E293B", height=1).pack(fill=tk.X, pady=15)
 
         self.create_input(self.panel, "Output Directory", self.folder_var, self.browse_out, "Browse...")
 
-        cfg_row = tk.Frame(self.panel, bg="#FFFFFF")
+        cfg_row = tk.Frame(self.panel, bg="#162032")
         cfg_row.pack(fill=tk.X, pady=(0, 5))
-        tk.Checkbutton(cfg_row, text="Auto-open destination folder", variable=self.auto_open,
-                       bg="#FFFFFF", font=("Inter", 10), activebackground="#FFFFFF",
-                       command=lambda: set_config("auto_open", str(self.auto_open.get()))).pack(side=tk.RIGHT)
+        cb = ttk.Checkbutton(cfg_row, text="Auto-open destination folder", variable=self.auto_open,
+                             command=lambda: set_config("auto_open", str(self.auto_open.get())))
+        cb.pack(side=tk.RIGHT)
 
-        btn_row = tk.Frame(self.panel, bg="#FFFFFF")
+        btn_row = tk.Frame(self.panel, bg="#162032")
         btn_row.pack(fill=tk.X, pady=(15, 10))
 
         btn_text = "Generate (Stage 1)" if stage == "STAGE 1" else "Consolidate (Stage 2)"
 
-        self.btn_run = tk.Button(btn_row, text=btn_text, font=("Inter", 14, "bold"),
-                                 bg=self.get_theme_color("primary"), fg="#FFFFFF", relief="flat", padx=50, pady=12,
-                                 cursor="hand2", activebackground=self.get_theme_color("primary_hover"),
-                                 command=self.start_process_equitas)
-        self.btn_run.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        self.btn_run = ttk.Button(btn_row, text=btn_text, style="Accent.TButton",
+                                  command=self.start_process_equitas)
+        self.btn_run.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10), ipady=6)
         ToolTip(self.btn_run, f"Run Equitas {stage} processing")
 
-        self.btn_cancel = tk.Button(btn_row, text="Stop", font=("Inter", 11, "bold"),
-                                    bg="#DC2626", fg="#FFFFFF", relief="flat", padx=25, pady=12,
-                                    cursor="hand2", activebackground="#B91C1C",
-                                    state=tk.DISABLED, command=self.cancel_process)
-        self.btn_cancel.pack(side=tk.RIGHT)
+        self.btn_cancel = ttk.Button(btn_row, text="Stop", state=tk.DISABLED,
+                                     command=self.cancel_process)
+        self.btn_cancel.pack(side=tk.RIGHT, ipady=6)
         ToolTip(self.btn_cancel, "Stop the current generation")
 
-        prog_row = tk.Frame(self.panel, bg="#FFFFFF")
-        prog_row.pack(fill=tk.X, pady=(0, 5))
+        prog_row = tk.Frame(self.panel, bg="#162032")
+        prog_row.pack(fill=tk.X, pady=(10, 5))
         self.progress = ttk.Progressbar(prog_row, variable=self.progress_var, maximum=100)
         self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.prog_label = tk.Label(prog_row, text="0%", font=("Inter", 9, "bold"),
-                                   bg="#FFFFFF", fg="#64748B", width=6, anchor="e")
+                                   bg="#162032", fg="#94A3B8", width=6, anchor="e")
         self.prog_label.pack(side=tk.RIGHT, padx=(10, 0))
         self.branch_label = tk.Label(self.panel, text="", font=("Inter", 9, "italic"),
-                                     bg="#FFFFFF", fg="#64748B", anchor="w")
+                                     bg="#162032", fg="#94A3B8", anchor="w")
         self.branch_label.pack(fill=tk.X, pady=(0, 5))
 
         self.render_console()
@@ -1335,15 +1384,17 @@ class App:
                 self._preview_file_equitas_s2(f)
 
     def render_console(self):
-        con_hdr = tk.Frame(self.content, bg="#F8FAFC")
+        con_hdr = tk.Frame(self.content, bg="#0B0F19")
         con_hdr.pack(fill=tk.X, pady=(15, 5))
-        tk.Label(con_hdr, text="Console Logs", font=("Inter", 9, "bold"), bg="#F8FAFC", fg="#94A3B8").pack(side=tk.LEFT)
-        copy_btn = tk.Button(con_hdr, text="Copy", font=("Inter", 8, "bold"), bg="#F1F5F9", relief="flat", padx=10, command=self.copy_logs)
+        tk.Label(con_hdr, text="CONSOLE LOGS", font=("Inter", 8, "bold"), bg="#0B0F19", fg="#64748B").pack(side=tk.LEFT)
+        
+        copy_btn = ttk.Button(con_hdr, text="Copy", command=self.copy_logs)
         copy_btn.pack(side=tk.RIGHT)
         ToolTip(copy_btn, "Copy all console logs to clipboard")
 
-        self.log_area = scrolledtext.ScrolledText(self.content, height=8, bg="#1E293B", fg="#10B981",
-                                                  borderwidth=0, font=("Menlo", 10), padx=20, pady=20)
+        self.log_area = scrolledtext.ScrolledText(self.content, height=8, bg="#050811", fg="#F8FAFC",
+                                                  borderwidth=1, relief="solid", highlightthickness=1,
+                                                  highlightbackground="#1E293B", font=("Menlo", 9), padx=15, pady=15)
         self.log_area.pack(fill=tk.BOTH, expand=True)
 
     def browse_out(self):
@@ -1356,63 +1407,63 @@ class App:
     # TAB: ANALYTICS, HISTORY, SETTINGS (SHARED)
     # ---------------------------------------------------------
     def render_stats(self):
-        header = tk.Frame(self.content, bg="#F8FAFC")
-        header.pack(fill=tk.X, pady=(0, 40))
-        tk.Label(header, text="Insight Analytics", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
-        refresh_btn = tk.Button(header, text="Refresh", font=("Inter", 10), bg="#F1F5F9", relief="flat", command=lambda: self.render_tab())
+        header = tk.Frame(self.content, bg="#0B0F19")
+        header.pack(fill=tk.X, pady=(0, 20))
+        tk.Label(header, text="Insight Analytics", font=("Inter", 26, "bold"), bg="#0B0F19", fg="#F8FAFC").pack(side=tk.LEFT)
+        
+        refresh_btn = ttk.Button(header, text="Refresh", command=lambda: self.render_tab())
         refresh_btn.pack(side=tk.RIGHT)
         ToolTip(refresh_btn, "Refresh analytics data")
 
         types, trend = get_analytics()
-        grid = tk.Frame(self.content, bg="#F8FAFC")
+        grid = tk.Frame(self.content, bg="#0B0F19")
         grid.pack(fill=tk.BOTH, expand=True)
 
-        dist_card = tk.Frame(grid, bg="#FFFFFF", padx=40, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
+        dist_card = tk.Frame(grid, bg="#162032", padx=30, pady=30, highlightthickness=1, highlightbackground="#1E293B")
         dist_card.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
-        tk.Label(dist_card, text="Audit Type Distribution", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 30))
+        tk.Label(dist_card, text="Audit Type Distribution", font=("Inter", 11, "bold"), bg="#162032", fg="#94A3B8").pack(anchor="w", pady=(0, 20))
 
         total = sum(types.values()) if types else 0
         for t in ["POA", "TAF", "Equitas-S1", "Equitas-S2"]:
             count = types.get(t, 0)
             if count == 0 and total > 0: continue
             pct = (count / total * 100) if total > 0 else 0
-            row = tk.Frame(dist_card, bg="#FFFFFF", pady=10)
+            row = tk.Frame(dist_card, bg="#162032", pady=5)
             row.pack(fill=tk.X)
-            tk.Label(row, text=t, font=("Inter", 12), bg="#FFFFFF").pack(side=tk.LEFT)
-            tk.Label(row, text=f"{count}", font=("Inter", 12, "bold"), bg="#FFFFFF", fg=self.get_theme_color("primary")).pack(side=tk.RIGHT)
+            tk.Label(row, text=t, font=("Inter", 11), bg="#162032", fg="#E2E8F0").pack(side=tk.LEFT)
+            tk.Label(row, text=f"{count}", font=("Inter", 11, "bold"), bg="#162032", fg=self.get_theme_color("primary")).pack(side=tk.RIGHT)
+            
             p = ttk.Progressbar(dist_card, value=pct)
-            p.pack(fill=tk.X, pady=(0, 20))
+            p.pack(fill=tk.X, pady=(0, 15))
 
-        trend_card = tk.Frame(grid, bg="#FFFFFF", padx=40, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
+        trend_card = tk.Frame(grid, bg="#162032", padx=30, pady=30, highlightthickness=1, highlightbackground="#1E293B")
         trend_card.grid(row=0, column=1, sticky="nsew")
-        tk.Label(trend_card, text="Daily Activity (7 Days)", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 30))
+        tk.Label(trend_card, text="Daily Activity (7 Days)", font=("Inter", 11, "bold"), bg="#162032", fg="#94A3B8").pack(anchor="w", pady=(0, 25))
         if trend:
             for d, c in trend:
-                r = tk.Frame(trend_card, bg="#FFFFFF", pady=8)
+                r = tk.Frame(trend_card, bg="#162032", pady=8)
                 r.pack(fill=tk.X)
-                tk.Label(r, text=d, font=("Inter", 11), bg="#FFFFFF").pack(side=tk.LEFT)
-                tk.Label(r, text=f"{c} Batches", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#059669").pack(side=tk.RIGHT)
+                tk.Label(r, text=d, font=("Inter", 10), bg="#162032", fg="#E2E8F0").pack(side=tk.LEFT)
+                tk.Label(r, text=f"{c} Batches", font=("Inter", 10, "bold"), bg="#162032", fg="#10B981").pack(side=tk.RIGHT)
         else:
-            tk.Label(trend_card, text="No activity yet", font=("Inter", 11), bg="#FFFFFF", fg="#94A3B8").pack(anchor="w")
+            tk.Label(trend_card, text="No activity yet", font=("Inter", 11), bg="#162032", fg="#64748B").pack(anchor="w")
 
         grid.grid_columnconfigure(0, weight=1)
         grid.grid_columnconfigure(1, weight=1)
 
     def render_history(self):
-        header = tk.Frame(self.content, bg="#F8FAFC")
-        header.pack(fill=tk.X, pady=(0, 30))
-        tk.Label(header, text="History", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
+        header = tk.Frame(self.content, bg="#0B0F19")
+        header.pack(fill=tk.X, pady=(0, 20))
+        tk.Label(header, text="History", font=("Inter", 26, "bold"), bg="#0B0F19", fg="#F8FAFC").pack(side=tk.LEFT)
 
-        search_f = tk.Frame(self.content, bg="#F8FAFC")
-        search_f.pack(fill=tk.X, pady=(0, 25))
-        search_entry = tk.Entry(search_f, textvariable=self.search_var, font=("Inter", 12),
-                                bg="#FFFFFF", highlightthickness=1, highlightbackground="#E2E8F0", relief="flat")
-        search_entry.pack(fill=tk.X, ipady=12)
-        if not self.search_var.get():
-            search_entry.insert(0, "")
-            search_entry.config(fg="#94A3B8")
+        search_f = tk.Frame(self.content, bg="#0B0F19")
+        search_f.pack(fill=tk.X, pady=(0, 15))
+        
+        search_entry = ttk.Entry(search_f, textvariable=self.search_var, font=("Inter", 10))
+        search_entry.pack(fill=tk.X, ipady=4)
+        ToolTip(search_entry, "Type branch or file name to search logs")
 
-        table_container = tk.Frame(self.content, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E2E8F0")
+        table_container = tk.Frame(self.content, bg="#162032", highlightthickness=1, highlightbackground="#1E293B")
         table_container.pack(fill=tk.BOTH, expand=True)
 
         cols = ("Time", "Filename", "Items", "Type")
@@ -1431,99 +1482,108 @@ class App:
 
         self.refresh_history()
 
-        btn_bar = tk.Frame(self.content, bg="#F8FAFC", pady=30)
+        btn_bar = tk.Frame(self.content, bg="#0B0F19", pady=20)
         btn_bar.pack(fill=tk.X)
-        open_btn = tk.Button(btn_bar, text="Open Folder", bg=self.get_theme_color("primary"), fg="#FFFFFF", font=("Inter", 11, "bold"),
-                  relief="flat", padx=30, pady=12, command=self.open_sel)
+        
+        open_btn = ttk.Button(btn_bar, text="Open Folder", command=self.open_sel)
         open_btn.pack(side=tk.LEFT, padx=(0, 10))
         ToolTip(open_btn, "Open output folder of selected entry")
-        re_run_btn = tk.Button(btn_bar, text="Re-run", bg="#2563EB", fg="#FFFFFF", font=("Inter", 11, "bold"),
-                  relief="flat", padx=30, pady=12, command=self.re_run_history)
-        re_run_btn.pack(side=tk.LEFT)
+        
+        re_run_btn = ttk.Button(btn_bar, text="Re-run", command=self.re_run_history)
+        re_run_btn.pack(side=tk.LEFT, padx=(0, 10))
         ToolTip(re_run_btn, "Re-run generation with the same file and settings")
-        export_btn = tk.Button(btn_bar, text="Export to Excel", bg="#059669", fg="#FFFFFF", font=("Inter", 11, "bold"),
-                  relief="flat", padx=30, pady=12, command=self.export_history)
+        
+        export_btn = ttk.Button(btn_bar, text="Export to Excel", command=self.export_history)
         export_btn.pack(side=tk.RIGHT)
         ToolTip(export_btn, "Export history to Excel spreadsheet")
 
     def render_settings(self):
-        tk.Label(self.content, text="Settings", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(anchor="w", pady=(0, 40))
+        tk.Label(self.content, text="Settings", font=("Inter", 26, "bold"), bg="#0B0F19", fg="#F8FAFC").pack(anchor="w", pady=(0, 30))
 
         # --- Naming Configuration ---
-        naming_card = tk.Frame(self.content, bg="#FFFFFF", padx=50, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
+        naming_card = tk.Frame(self.content, bg="#162032", padx=30, pady=25, highlightthickness=1, highlightbackground="#1E293B")
         naming_card.pack(fill=tk.X, pady=(0, 20))
-        tk.Label(naming_card, text="Output Naming", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 15))
-        tk.Label(naming_card, text="Pattern:  {branch} = branch name,  {type} = audit type", font=("Inter", 9), bg="#FFFFFF", fg="#94A3B8").pack(anchor="w")
-        naming_row = tk.Frame(naming_card, bg="#FFFFFF")
+        tk.Label(naming_card, text="Output Naming", font=("Inter", 11, "bold"), bg="#162032", fg="#94A3B8").pack(anchor="w", pady=(0, 10))
+        tk.Label(naming_card, text="Pattern:  {branch} = branch name,  {type} = audit type", font=("Inter", 9), bg="#162032", fg="#64748B").pack(anchor="w")
+        
+        naming_row = tk.Frame(naming_card, bg="#162032")
         naming_row.pack(fill=tk.X, pady=(10, 5))
         self.naming_var = tk.StringVar(value=get_config("naming_pattern", "{branch}_{type}"))
-        tk.Entry(naming_row, textvariable=self.naming_var, font=("Inter", 12), bg="#F8FAFC", relief="flat",
-                 highlightthickness=1, highlightbackground="#E2E8F0").pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, padx=(0, 15))
+        
+        naming_entry = ttk.Entry(naming_row, textvariable=self.naming_var, font=("Inter", 10))
+        naming_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=4, padx=(0, 15))
+        
         def save_naming():
             set_config("naming_pattern", self.naming_var.get())
             self.status_msg.set("Naming pattern saved!")
             self.root.after(2000, lambda: self.status_msg.set("Ready"))
-        save_btn = tk.Button(naming_row, text="Save", font=("Inter", 10, "bold"), bg=self.get_theme_color("primary"),
-                             fg="#FFFFFF", relief="flat", padx=25, pady=8, command=save_naming)
+            
+        save_btn = ttk.Button(naming_row, text="Save", command=save_naming)
         save_btn.pack(side=tk.LEFT)
         ToolTip(save_btn, "Save custom output file naming pattern")
+        
         preview_naming = f"e.g. {self.naming_var.get().replace('{branch}', 'BRANCH_A').replace('{type}', 'POA')}.pdf"
-        tk.Label(naming_card, text=preview_naming, font=("Inter", 9, "italic"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(5, 0))
+        self.lbl_preview_naming = tk.Label(naming_card, text=preview_naming, font=("Inter", 9, "italic"), bg="#162032", fg="#64748B")
+        self.lbl_preview_naming.pack(anchor="w", pady=(5, 0))
 
         # --- Updates ---
-        update_card = tk.Frame(self.content, bg="#FFFFFF", padx=50, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
+        update_card = tk.Frame(self.content, bg="#162032", padx=30, pady=25, highlightthickness=1, highlightbackground="#1E293B")
         update_card.pack(fill=tk.X, pady=(0, 20))
-        tk.Label(update_card, text="Updates", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 15))
-        ver_row = tk.Frame(update_card, bg="#FFFFFF")
+        tk.Label(update_card, text="Updates", font=("Inter", 11, "bold"), bg="#162032", fg="#94A3B8").pack(anchor="w", pady=(0, 10))
+        
+        ver_row = tk.Frame(update_card, bg="#162032")
         ver_row.pack(fill=tk.X, pady=5)
-        tk.Label(ver_row, text=f"Current version: v{VERSION}", font=("Inter", 10), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
-        self.update_status = tk.Label(ver_row, text="", font=("Inter", 10), bg="#FFFFFF")
+        tk.Label(ver_row, text=f"Current version: v{VERSION}", font=("Inter", 10), bg="#162032", fg="#E2E8F0").pack(side=tk.LEFT)
+        self.update_status = tk.Label(ver_row, text="", font=("Inter", 10), bg="#162032")
         self.update_status.pack(side=tk.LEFT, padx=(15, 0))
-        btn_row = tk.Frame(update_card, bg="#FFFFFF")
+        
+        btn_row = tk.Frame(update_card, bg="#162032")
         btn_row.pack(fill=tk.X, pady=10)
-        self.update_btn = tk.Button(btn_row, text="Check for Updates", font=("Inter", 10, "bold"),
-                                     bg=self.get_theme_color("primary"), fg="#FFFFFF", relief="flat",
-                                     padx=20, pady=8, command=self._check_updates_manual)
+        self.update_btn = ttk.Button(btn_row, text="Check for Updates", command=self._check_updates_manual)
         self.update_btn.pack(side=tk.LEFT)
         ToolTip(self.update_btn, "Check GitHub for a newer version")
+        
         self.update_progress = ttk.Progressbar(btn_row, length=200, mode="determinate")
         self.update_progress.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(15, 0))
 
         # --- Default Preferences ---
-        prefs_card = tk.Frame(self.content, bg="#FFFFFF", padx=50, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
+        prefs_card = tk.Frame(self.content, bg="#162032", padx=30, pady=25, highlightthickness=1, highlightbackground="#1E293B")
         prefs_card.pack(fill=tk.X, pady=(0, 20))
-        tk.Label(prefs_card, text="Default Preferences", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 15))
+        tk.Label(prefs_card, text="Default Preferences", font=("Inter", 11, "bold"), bg="#162032", fg="#94A3B8").pack(anchor="w", pady=(0, 10))
 
         # Auto-open default
-        auto_row = tk.Frame(prefs_card, bg="#FFFFFF")
+        auto_row = tk.Frame(prefs_card, bg="#162032")
         auto_row.pack(fill=tk.X, pady=8)
         self.auto_open_saved = tk.BooleanVar(value=get_config("auto_open", "True") == "True")
-        tk.Checkbutton(auto_row, text="Auto-open destination folder after generation", variable=self.auto_open_saved,
-                       bg="#FFFFFF", font=("Inter", 10), activebackground="#FFFFFF",
-                       command=lambda: set_config("auto_open", str(self.auto_open_saved.get()))).pack(side=tk.LEFT)
+        
+        cb_auto = ttk.Checkbutton(auto_row, text="Auto-open destination folder after generation", variable=self.auto_open_saved,
+                                  command=lambda: set_config("auto_open", str(self.auto_open_saved.get())))
+        cb_auto.pack(side=tk.LEFT)
         ToolTip(auto_row, "When checked, the output folder opens automatically after each generation")
 
         # Recent files control
-        recent_row = tk.Frame(prefs_card, bg="#FFFFFF")
+        recent_row = tk.Frame(prefs_card, bg="#162032")
         recent_row.pack(fill=tk.X, pady=8)
         tk.Label(recent_row, text=f"Recent files: {len(_get_recent_files())} saved", font=("Inter", 10),
-                 bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT, padx=(0, 15))
+                 bg="#162032", fg="#E2E8F0").pack(side=tk.LEFT, padx=(0, 15))
+        
         def clear_recent():
             for i in range(MAX_RECENT_FILES):
                 set_config(f"recent_file_{i}", "")
             self.status_msg.set("Recent files cleared")
             self.render_tab()
-        tk.Button(recent_row, text="Clear Recent Files", font=("Inter", 9, "bold"), bg="#F1F5F9", fg="#E11D48",
-                  relief="flat", padx=16, pady=6, command=clear_recent).pack(side=tk.LEFT)
+            
+        clear_recent_btn = ttk.Button(recent_row, text="Clear Recent Files", command=clear_recent)
+        clear_recent_btn.pack(side=tk.LEFT)
 
         # --- Database Management ---
-        card = tk.Frame(self.content, bg="#FFFFFF", padx=50, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
+        card = tk.Frame(self.content, bg="#162032", padx=30, pady=25, highlightthickness=1, highlightbackground="#1E293B")
         card.pack(fill=tk.X)
-        tk.Label(card, text="Database Management", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 20))
-        tk.Label(card, text=f"DB: {DB_PATH}", font=("Inter", 10), bg="#FFFFFF", fg="#94A3B8").pack(anchor="w", pady=(5, 5))
-        tk.Label(card, text=f"Log: {LOG_FILE}", font=("Inter", 10), bg="#FFFFFF", fg="#94A3B8").pack(anchor="w", pady=(0, 30))
-        clear_btn = tk.Button(card, text="Clear History", font=("Inter", 10, "bold"), bg="#F1F5F9", fg="#E11D48",
-                  relief="flat", padx=24, pady=10, command=self.clear_history)
+        tk.Label(card, text="Database Management", font=("Inter", 11, "bold"), bg="#162032", fg="#94A3B8").pack(anchor="w", pady=(0, 10))
+        tk.Label(card, text=f"DB: {DB_PATH}", font=("Inter", 9), bg="#162032", fg="#64748B").pack(anchor="w", pady=(5, 5))
+        tk.Label(card, text=f"Log: {LOG_FILE}", font=("Inter", 9), bg="#162032", fg="#64748B").pack(anchor="w", pady=(0, 15))
+        
+        clear_btn = ttk.Button(card, text="Clear History", command=self.clear_history)
         clear_btn.pack(anchor="w")
         ToolTip(clear_btn, "Delete all history records")
 
@@ -1841,34 +1901,34 @@ class App:
         """Show a generation summary in a custom dialog."""
         win = tk.Toplevel(self.root)
         win.title(title)
-        win.configure(bg="#FFFFFF")
+        win.configure(bg="#0B0F19")
         win.geometry("520x400")
         win.resizable(False, False)
         win.transient(self.root)
         win.grab_set()
 
-        container = tk.Frame(win, bg="#FFFFFF", padx=30, pady=25)
+        container = tk.Frame(win, bg="#0B0F19", padx=30, pady=25)
         container.pack(fill=tk.BOTH, expand=True)
 
-        tk.Label(container, text=title, font=("Inter", 16, "bold"),
-                 bg="#FFFFFF", fg="#0F172A").pack(anchor="w", pady=(0, 15))
+        tk.Label(container, text=title, font=("Inter", 14, "bold"),
+                 bg="#0B0F19", fg="#F8FAFC").pack(anchor="w", pady=(0, 15))
 
-        text = tk.Text(container, font=("Menlo", 10), bg="#F8FAFC", fg="#1E293B",
-                       relief="flat", highlightthickness=1, highlightbackground="#E2E8F0",
+        text = tk.Text(container, font=("Menlo", 9), bg="#050811", fg="#F8FAFC",
+                       relief="solid", borderwidth=1, highlightthickness=1, highlightbackground="#1E293B",
                        padx=15, pady=15, height=10, wrap=tk.WORD)
         text.pack(fill=tk.BOTH, expand=True)
         for level, msg in lines:
             tag = f"sum_{level}"
-            color = {"info": "#475569", "ok": "#16A34A", "warn": "#D97706", "err": "#DC2626"}.get(level, "#475569")
+            color = {"info": "#38BDF8", "ok": "#34D399", "warn": "#FBBF24", "err": "#F87171"}.get(level, "#F8FAFC")
             text.tag_configure(tag, foreground=color)
             text.insert(tk.END, msg + "\n", tag)
         text.configure(state=tk.DISABLED)
 
-        btn_frame = tk.Frame(container, bg="#FFFFFF", pady=(15, 0))
+        btn_frame = tk.Frame(container, bg="#0B0F19", pady=(15, 0))
         btn_frame.pack(fill=tk.X)
-        tk.Button(btn_frame, text="Close", font=("Inter", 10, "bold"),
-                  bg="#F1F5F9", relief="flat", padx=30, pady=8,
-                  command=win.destroy).pack(side=tk.RIGHT)
+        
+        close_btn = ttk.Button(btn_frame, text="Close", command=win.destroy)
+        close_btn.pack(side=tk.RIGHT)
 
     def _on_close(self):
         if self.btn_run and self.btn_run.cget("state") == tk.DISABLED:

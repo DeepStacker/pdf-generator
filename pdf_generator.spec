@@ -92,7 +92,7 @@ numpy_dlls = collect_dynamic_libs('numpy')
 tk_dll_entries = [(d, '.') for d in set(tk_dlls)]
 all_dlls = numpy_dlls + tk_dll_entries
 
-datas = [('fonts', 'fonts')] + collect_data_files('certifi') + tk_datas
+datas = [('fonts', 'fonts')] + collect_data_files('certifi') + collect_data_files('sv_ttk') + tk_datas
 
 # Only collect numpy.random submodules (proven safe)
 np_extra = [m for m in collect_submodules('numpy.random') if isinstance(m, str)]
