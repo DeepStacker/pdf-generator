@@ -25,7 +25,7 @@ jobs:
           path: ~\AppData\Local\pyinstaller
           key: pyi-win-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-win-
-      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" certifi
+      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
       - name: Verify Tcl/Tk environment
         run: |
           python -c "import sys; print('Python:', sys.executable); print('Prefix:', sys.prefix); print('Base prefix:', sys.base_prefix)"
@@ -79,7 +79,7 @@ jobs:
           path: ~/Library/Caches/pyinstaller
           key: pyi-macos-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-macos-
-      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2"
+      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - run: codesign --force --sign - dist/Audit_Engine_Elite
       - env:
@@ -113,7 +113,7 @@ jobs:
           path: ~/.cache/pyinstaller
           key: pyi-linux-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-linux-
-      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2"
+      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - env:
           TAG: ${{ github.ref_name }}
