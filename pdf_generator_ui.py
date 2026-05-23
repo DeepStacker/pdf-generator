@@ -1724,10 +1724,11 @@ class App:
             if not messagebox.askyesno("Exit?", "A generation is in progress. Exit anyway? Partial results may be lost."):
                 return
             self.cancel_event.set()
+        self.root.update_idletasks()
         self.root.destroy()
-        # Force exit — tk.destroy() may not fully terminate the process on Windows
-        if sys.platform == "win32":
-            os._exit(0)
+        # Let Python run atexit handlers (PyInstaller cleans up _MEI temp dir here)
+        # then fully terminate the process
+        sys.exit(0)
 
     def cancel_process(self):
         if not messagebox.askyesno("Confirm Cancel", "Are you sure you want to stop the current generation?\nPartial results will be saved."):
