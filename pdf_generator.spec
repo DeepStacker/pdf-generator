@@ -44,6 +44,7 @@ a = Analysis(
         'openpyxl.styles',
         'pandas',
         'certifi',
+        'pyexpat',
         'reportlab',
         'reportlab.lib',
         'reportlab.lib.pagesizes',
