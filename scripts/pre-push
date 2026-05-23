@@ -55,7 +55,11 @@ with open('pdf_generator_ui.py') as f:
     exit 1
   fi
 
-  # Push tag to remote first, then create release
+  # Create tag locally
+  git tag "$TAG"
+  echo "==> [pre-push] Created local tag $TAG"
+
+  # Push tag to remote so release can reference it
   echo "==> [pre-push] Pushing tag ..."
   git push origin "$TAG"
 
