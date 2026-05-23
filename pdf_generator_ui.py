@@ -1719,6 +1719,9 @@ class App:
                 return
             self.cancel_event.set()
         self.root.destroy()
+        # Force exit — tk.destroy() may not fully terminate the process on Windows
+        if sys.platform == "win32":
+            os._exit(0)
 
     def cancel_process(self):
         if not messagebox.askyesno("Confirm Cancel", "Are you sure you want to stop the current generation?\nPartial results will be saved."):
