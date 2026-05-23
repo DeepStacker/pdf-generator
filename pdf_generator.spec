@@ -19,7 +19,7 @@ if sys.platform == "win32":
             if item.startswith('tk8'):
                 tk_lib_path = os.path.join(possible_tcl, item)
 
-datas = [('fonts', 'fonts')]
+datas = [('fonts', 'fonts')] + collect_data_files('certifi')
 if tcl_lib_path and tk_lib_path:
     datas.append((tcl_lib_path, os.path.join('tcl', os.path.basename(tcl_lib_path))))
     datas.append((tk_lib_path, os.path.join('tk', os.path.basename(tk_lib_path))))
@@ -38,6 +38,7 @@ a = Analysis(
         'openpyxl',
         'openpyxl.styles',
         'pandas',
+        'certifi',
         'reportlab',
         'reportlab.lib',
         'reportlab.lib.pagesizes',

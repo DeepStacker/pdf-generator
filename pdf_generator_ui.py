@@ -232,6 +232,15 @@ import shutil as _shutil
 import ssl as _ssl
 
 
+def _make_ssl_context():
+    """Create SSL context using certifi CA bundle if available."""
+    try:
+        import certifi
+        return _ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return _ssl.create_default_context()
+
+
 def _get_platform_suffix():
     """Return the platform string used in binary ZIP filenames."""
     if sys.platform == "darwin":
@@ -243,7 +252,7 @@ def _get_platform_suffix():
 
 def _check_latest_release():
     """Check GitHub for the latest release. Returns (tag, source_url, body, binary_url)."""
-    ctx = _ssl.create_default_context()
+    ctx = _make_ssl_context()
     req = _urllib.Request(GITHUB_API, headers={"User-Agent": f"AuditEngine/{VERSION}"})
     with _urllib.urlopen(req, context=ctx, timeout=10) as resp:
         data = _json.loads(resp.read().decode())
@@ -266,7 +275,7 @@ def _parse_version(tag):
 
 def _download_update(url, dest_path, progress_callback=None):
     """Download a file with optional progress callback (0-100)."""
-    ctx = _ssl.create_default_context()
+    ctx = _make_ssl_context()
     req = _urllib.Request(url, headers={"User-Agent": f"AuditEngine/{VERSION}"})
     with _urllib.urlopen(req, context=ctx, timeout=60) as resp:
         total = int(resp.headers.get("Content-Length", 0))
@@ -361,6 +370,9 @@ def _install_binary_update(zip_path, install_dir, log_callback=print):
     os.makedirs(os.path.dirname(old_exe), exist_ok=True)
     shutil.copy2(src, old_exe)
     os.chmod(old_exe, 0o755)
+    # Remove quarantine attribute so next launch doesn't trigger Gatekeeper
+    if sys.platform == "darwin":
+        subprocess.run(["xattr", "-dr", "com.apple.quarantine", old_exe], check=False)
     if os.path.exists(backup):
         os.remove(backup)
     shutil.rmtree(extract_to, ignore_errors=True)
