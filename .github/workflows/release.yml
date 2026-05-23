@@ -3,10 +3,10 @@ name: Build & Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   release:
-    if: github.repository == 'DeepStacker/pdf-generator'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
