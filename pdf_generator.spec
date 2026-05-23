@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_dynamic_libs, collect_all
 
 block_cipher = None
 
@@ -24,11 +24,14 @@ if tcl_lib_path and tk_lib_path:
     datas.append((tcl_lib_path, os.path.join('tcl', os.path.basename(tcl_lib_path))))
     datas.append((tk_lib_path, os.path.join('tk', os.path.basename(tk_lib_path))))
 
+# numpy C extensions are often missed by static analysis
+np_imports, np_binaries, np_datas = collect_all('numpy')
+
 a = Analysis(
     ['pdf_generator_ui.py'],
     pathex=[],
-    binaries=[],
-    datas=datas,
+    binaries=np_binaries + collect_dynamic_libs('pandas'),
+    datas=datas + np_datas,
     hiddenimports=[
         'tkinter',
         'tkinter.filedialog',
@@ -39,15 +42,6 @@ a = Analysis(
         'openpyxl.styles',
         'pandas',
         'certifi',
-        'numpy.random._generator',
-        'numpy.random._pickle',
-        'numpy.random._mt19937',
-        'numpy.random._pcg64',
-        'numpy.random._philox',
-        'numpy.random._sfc64',
-        'numpy.random._common',
-        'numpy.random._bounded_integers',
-        'numpy.random.bit_generator',
         'reportlab',
         'reportlab.lib',
         'reportlab.lib.pagesizes',
@@ -60,7 +54,7 @@ a = Analysis(
         'reportlab.lib.colors',
         'pdf_logic',
         'equitas_logic',
-    ],
+    ] + np_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
