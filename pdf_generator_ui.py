@@ -328,7 +328,20 @@ def _install_update(zip_path, install_dir, log_callback=print):
 
 
 def _install_binary_update(zip_path, install_dir, log_callback=print):
-    """Extract a platform-specific binary ZIP over the running executable."""
+    """Extract a platform-specific binary ZIP over the running executable.
+
+    On Windows (frozen), this creates a batch script that:
+      1. Waits for the current process to exit cleanly
+      2. Waits extra time for PyInstaller _MEI temp dir cleanup
+      3. Copies the new exe over the old one (with retries)
+      4. Cleans up stale _MEI temp directories
+      5. Launches the updated application
+      6. Cleans up the staging directory
+
+    Returns the path to the batch script on Windows (caller must exit
+    cleanly via sys.exit so atexit handlers run and _MEI is released),
+    or None on other platforms (update applied in-place).
+    """
     import shutil
     import stat
     import subprocess
@@ -355,38 +368,59 @@ def _install_binary_update(zip_path, install_dir, log_callback=print):
     old_exe = sys.executable
     log_callback(f"Replacing {old_exe} with {src}")
     if sys.platform == "win32":
-        # Windows: can't rename/overwrite a running exe. Defer via batch script.
+        # Windows: can't rename/overwrite a running exe directly.
+        # Stage the new exe and create a batch script to perform the swap
+        # AFTER this process exits cleanly (so _MEI temp dir is released).
         new_exe = os.path.join(extract_to, os.path.basename(old_exe))
         if src != new_exe:
             shutil.copy2(src, new_exe)
         bat_path = os.path.join(extract_to, "_update.bat")
+        # Batch script: wait for parent → retry copy → clean _MEI → launch → cleanup
         bat_contents = (
             "@echo off\r\n"
-            ":wait\r\n"
+            "REM === Audit Engine Auto-Update Script ===\r\n"
+            "REM Wait for the parent process to exit cleanly\r\n"
+            ":wait_exit\r\n"
             'tasklist /fi "PID eq %PARENT_PID%" 2>nul | find "%PARENT_PID%" >nul\r\n'
             "if not errorlevel 1 (\r\n"
             "  timeout /t 1 /nobreak >nul\r\n"
-            "  goto wait\r\n"
+            "  goto wait_exit\r\n"
             ")\r\n"
-            'copy /y "' + new_exe + '" "' + old_exe + '" >nul\r\n'
-            'del /f /q "' + new_exe + '" >nul 2>&1\r\n'
-            'del /f /q "%~f0" >nul 2>&1\r\n'
+            "REM Extra wait for PyInstaller _MEI temp dir cleanup\r\n"
+            "timeout /t 3 /nobreak >nul\r\n"
+            "REM Copy new exe over old with retry (antivirus may briefly lock)\r\n"
+            "set RETRIES=0\r\n"
+            ":retry_copy\r\n"
+            'copy /y "' + new_exe.replace('/', '\\') + '" "' + old_exe.replace('/', '\\') + '" >nul 2>&1\r\n'
+            "if errorlevel 1 (\r\n"
+            "  set /a RETRIES+=1\r\n"
+            "  if %RETRIES% lss 10 (\r\n"
+            "    timeout /t 2 /nobreak >nul\r\n"
+            "    goto retry_copy\r\n"
+            "  )\r\n"
+            "  REM Copy failed after retries — launch old exe anyway\r\n"
+            ")\r\n"
+            "REM Clean up stale _MEI temp directories from previous runs\r\n"
+            'for /d %%D in ("%TEMP%\\_MEI*") do rd /s /q "%%D" 2>nul\r\n'
+            "REM Launch the updated application\r\n"
+            'start "" "' + old_exe.replace('/', '\\') + '"\r\n'
+            "REM Clean up staging directory and self-delete\r\n"
+            'rd /s /q "' + extract_to.replace('/', '\\') + '" 2>nul\r\n'
         )
         with open(bat_path, "w") as f:
             f.write(bat_contents)
-        startup = None
-        if sys.platform == "win32":
-            startup = subprocess.STARTUPINFO()
-            startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startup.wShowWindow = 0  # SW_HIDE
+        startup = subprocess.STARTUPINFO()
+        startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startup.wShowWindow = 0  # SW_HIDE
         subprocess.Popen(
             ["cmd.exe", "/c", bat_path],
             env={**os.environ, "PARENT_PID": str(os.getpid())},
             close_fds=True,
             startupinfo=startup,
         )
-        log_callback("Update deferred to batch script; exiting.")
-        return
+        log_callback("Update staged; batch script launched. Waiting for clean exit.")
+        return bat_path  # Signal caller that a batch script is handling the restart
+    # macOS / Linux: replace in-place
     backup = old_exe + ".bak"
     if os.path.exists(old_exe):
         os.rename(old_exe, backup)
@@ -400,6 +434,7 @@ def _install_binary_update(zip_path, install_dir, log_callback=print):
         os.remove(backup)
     shutil.rmtree(extract_to, ignore_errors=True)
     log_callback(f"Binary updated at {old_exe}")
+    return None
 
 
 def _get_install_dir():
@@ -409,12 +444,46 @@ def _get_install_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 
+def _cleanup_stale_mei():
+    """Remove orphaned _MEI* temp directories from previous PyInstaller crashes.
+
+    When the app is killed via os._exit() or crashes, PyInstaller's atexit
+    handler doesn't run and the _MEI extraction directory is left behind.
+    This cleans those up on the next launch.
+    """
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    try:
+        temp_dir = _tempfile.gettempdir()
+        current_mei = getattr(sys, '_MEIPASS', '')
+        for entry in os.listdir(temp_dir):
+            if not entry.startswith('_MEI'):
+                continue
+            mei_path = os.path.join(temp_dir, entry)
+            # Don't delete our own _MEI directory
+            if mei_path == current_mei:
+                continue
+            if not os.path.isdir(mei_path):
+                continue
+            try:
+                _shutil.rmtree(mei_path)
+            except (PermissionError, OSError):
+                pass  # Still locked by another instance — skip
+    except Exception:
+        pass
+
+
 def _restart_app():
-    """Restart the application, replacing the current process."""
+    """Restart the application, replacing the current process.
+
+    Uses sys.exit(0) on Windows instead of os._exit(0) so that
+    PyInstaller's atexit handlers can clean up the _MEI temp directory.
+    """
     import subprocess
     if sys.platform == "win32":
         subprocess.Popen([sys.executable] + (sys.argv if not getattr(sys, "frozen", False) else []))
-        os._exit(0)
+        # sys.exit allows atexit handlers to run (PyInstaller _MEI cleanup)
+        sys.exit(0)
     if getattr(sys, "frozen", False):
         os.execl(sys.executable, sys.executable)
     else:
@@ -602,11 +671,19 @@ class App:
 
         self.search_var.trace_add("write", lambda *_: self._debounced_search())
 
+        # Track pending update (batch script path on Windows)
+        self._pending_update_bat = None
+
         self.setup_styles()
         self.setup_ui()
         self._setup_shortcuts()
         self.root.after(100, self.check_log_queue)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Clean up stale _MEI directories from previous crashed updates
+        if getattr(sys, "frozen", False):
+            threading.Thread(target=_cleanup_stale_mei, daemon=True).start()
+
         self.root.after(2000, self._check_updates_background)
 
     def setup_styles(self):
@@ -1450,7 +1527,7 @@ class App:
     # AUTO-UPDATER
     # ---------------------------------------------------------
     def _check_updates_background(self):
-        """Silent background check on startup — downloads and applies without any UI changes."""
+        """Silent background check on startup — downloads and shows notification."""
         threading.Thread(target=self._do_background_update, daemon=True).start()
 
     def _do_background_update(self):
@@ -1473,12 +1550,64 @@ class App:
             _download_update(url, zip_path)
             install_dir = _get_install_dir()
             if getattr(sys, "frozen", False):
-                _install_binary_update(zip_path, install_dir, print)
+                result = _install_binary_update(zip_path, install_dir, print)
+                if result and sys.platform == "win32":
+                    # Batch script is staged — show notification to user
+                    self._pending_update_bat = result
+                    self.root.after(0, lambda: self._show_update_banner(latest_tag))
+                    return
             else:
                 _install_update(zip_path, install_dir, print)
             _shutil.rmtree(tmp, ignore_errors=True)
+            # Non-Windows or source mode: restart directly
+            self.root.after(0, lambda: self._show_update_banner(latest_tag))
         except Exception as e:
             print(f"[background] Update failed: {e}")
+
+    def _show_update_banner(self, tag):
+        """Show a non-intrusive notification banner that an update is ready."""
+        try:
+            # Create a banner at the top of the content area
+            self._update_banner = tk.Frame(self.content_container, bg="#059669", height=40)
+            self._update_banner.pack(side=tk.TOP, fill=tk.X, before=self.content_scrollable)
+            self._update_banner.pack_propagate(False)
+
+            inner = tk.Frame(self._update_banner, bg="#059669")
+            inner.pack(expand=True)
+
+            tk.Label(inner, text=f"✓ Update {tag} downloaded — ",
+                     font=("Inter", 10, "bold"), bg="#059669", fg="#FFFFFF").pack(side=tk.LEFT)
+
+            restart_btn = tk.Button(inner, text="Restart Now", font=("Inter", 10, "bold"),
+                                    bg="#FFFFFF", fg="#059669", relief="flat", padx=12, pady=2,
+                                    cursor="hand2", command=self._exit_for_update)
+            restart_btn.pack(side=tk.LEFT, padx=(0, 10))
+
+            dismiss_btn = tk.Button(inner, text="Later", font=("Inter", 9),
+                                    bg="#059669", fg="#D1FAE5", relief="flat", padx=8, pady=2,
+                                    cursor="hand2", activebackground="#047857", activeforeground="#FFFFFF",
+                                    command=lambda: self._update_banner.pack_forget())
+            dismiss_btn.pack(side=tk.LEFT)
+
+            self.status_msg.set(f"Update {tag} ready — restart to apply")
+        except (tk.TclError, AttributeError):
+            pass
+
+    def _exit_for_update(self):
+        """Cleanly exit the application so the update batch script can take over.
+
+        Uses sys.exit(0) so PyInstaller's atexit handlers run and release
+        the _MEI temp directory. On Windows frozen builds, the batch script
+        (launched by _install_binary_update) will then copy the new exe,
+        clean up, and relaunch the app.
+        """
+        try:
+            self.root.update_idletasks()
+            self.root.destroy()
+        except (tk.TclError, AttributeError):
+            pass
+        # sys.exit runs atexit handlers → PyInstaller cleans up _MEI
+        sys.exit(0)
 
     def _check_updates_manual(self):
         """Manual check triggered by user clicking the button."""
@@ -1541,7 +1670,18 @@ class App:
             install_dir = _get_install_dir()
 
             if getattr(sys, "frozen", False):
-                _install_binary_update(zip_path, install_dir, self.log)
+                result = _install_binary_update(zip_path, install_dir, self.log)
+                if result and sys.platform == "win32":
+                    # Windows frozen: batch script is now running in background
+                    # waiting for us to exit. Don't call _restart_app — the batch
+                    # script handles copy + restart. Just exit cleanly.
+                    self._pending_update_bat = result
+                    _shutil.rmtree(tmp, ignore_errors=True)
+                    self.root.after(0, lambda: self.update_status.config(
+                        text="Update ready! Restarting...", fg="#10B981"))
+                    self.root.after(0, lambda: self.update_progress.configure(value=0))
+                    self.root.after(1500, self._exit_for_update)
+                    return
             else:
                 _install_update(zip_path, install_dir, self.log)
 
@@ -1731,10 +1871,15 @@ class App:
             if not messagebox.askyesno("Exit?", "A generation is in progress. Exit anyway? Partial results may be lost."):
                 return
             self.cancel_event.set()
+        # If there's a pending update (batch script waiting for us to exit),
+        # inform the user that the update will apply now.
+        if self._pending_update_bat:
+            file_logger.info("Exiting with pending update — batch script will apply it.")
         self.root.update_idletasks()
         self.root.destroy()
-        # Let Python run atexit handlers (PyInstaller cleans up _MEI temp dir here)
-        # then fully terminate the process
+        # sys.exit runs atexit handlers → PyInstaller cleans up _MEI temp dir
+        # If an update batch script is waiting, it will detect our exit,
+        # copy the new exe, clean up, and relaunch.
         sys.exit(0)
 
     def cancel_process(self):
