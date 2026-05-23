@@ -36,13 +36,11 @@ jobs:
       - name: Verify built exe
         shell: pwsh
         run: |
-          $exe = "dist\Audit_Engine_Elite\Audit_Engine_Elite.exe"
+          $exe = "dist\Audit_Engine_Elite.exe"
           if (Test-Path $exe) {
             $size = (Get-Item $exe).Length / 1MB
             Write-Host "Built exe size: $([math]::Round($size, 2)) MB"
             Write-Host "Built exe path: $exe"
-            Write-Host "Folder contents:"
-            Get-ChildItem -Path "dist\Audit_Engine_Elite" | ForEach-Object { Write-Host "  $($_.Name) ($([math]::Round($_.Length/1KB,1)) KB)" }
           } else {
             Write-Error "Build failed: exe not found!"
             exit 1
@@ -50,7 +48,7 @@ jobs:
       - shell: pwsh
         env:
           TAG: ${{ github.ref_name }}
-        run: Compress-Archive -Path "dist\Audit_Engine_Elite\*" -DestinationPath "Audit_Engine_${env:TAG}_binary_windows.zip"
+        run: Compress-Archive -Path dist\* -DestinationPath "Audit_Engine_${env:TAG}_binary_windows.zip"
       - if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
@@ -82,11 +80,11 @@ jobs:
           key: pyi-macos-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-macos-
       - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2"
-      - run: pyinstaller --noconfirm --clean pdf_generator.spec
-      - run: codesign --force --sign - dist/Audit_Engine_Elite/Audit_Engine_Elite
+      - run: pyinstaller --noconfirm pdf_generator.spec
+      - run: codesign --force --sign - dist/Audit_Engine_Elite
       - env:
           TAG: ${{ github.ref_name }}
-        run: cd dist/Audit_Engine_Elite && zip -r "../../Audit_Engine_${TAG}_binary_macos.zip" .
+        run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_macos.zip" .
       - if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -116,10 +114,10 @@ jobs:
           key: pyi-linux-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-linux-
       - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2"
-      - run: pyinstaller --noconfirm --clean pdf_generator.spec
+      - run: pyinstaller --noconfirm pdf_generator.spec
       - env:
           TAG: ${{ github.ref_name }}
-        run: cd dist/Audit_Engine_Elite && zip -r "../../Audit_Engine_${TAG}_binary_linux.zip" .
+        run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_linux.zip" .
       - if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

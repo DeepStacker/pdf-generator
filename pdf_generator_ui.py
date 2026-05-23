@@ -26,7 +26,7 @@ import equitas_logic
 # =========================================================
 # VERSION & APP CONSTANTS
 # =========================================================
-VERSION = "5.2.139"
+VERSION = "5.2.135"
 APP_TITLE = "Audit Engine v5.0"
 
 # Colors for theming
@@ -328,16 +328,18 @@ def _install_update(zip_path, install_dir, log_callback=print):
 
 
 def _install_binary_update(zip_path, install_dir, log_callback=print):
-    """Extract a platform-specific binary ZIP over the running application.
+    """Extract a platform-specific binary ZIP over the running executable.
 
-    On Windows (frozen onedir), this creates a batch script that:
+    On Windows (frozen), this creates a batch script that:
       1. Waits for the current process to exit cleanly
-      2. Copies ALL files (exe + DLLs + _internal/) from the update over the old install
-      3. Launches the updated application
-      4. Cleans up the staging directory
+      2. Waits extra time for PyInstaller _MEI temp dir cleanup
+      3. Copies the new exe over the old one (with retries)
+      4. Cleans up stale _MEI temp directories
+      5. Launches the updated application
+      6. Cleans up the staging directory
 
     Returns the path to the batch script on Windows (caller must exit
-    cleanly via sys.exit so file locks are released),
+    cleanly via sys.exit so atexit handlers run and _MEI is released),
     or None on other platforms (update applied in-place).
     """
     import shutil
@@ -352,46 +354,61 @@ def _install_binary_update(zip_path, install_dir, log_callback=print):
             fp = os.path.join(root, f)
             st = os.stat(fp)
             os.chmod(fp, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-
+    src = None
+    for root, dirs, files in os.walk(extract_to):
+        for f in files:
+            fp = os.path.join(root, f)
+            if os.access(fp, os.X_OK):
+                src = fp
+                break
+        if src:
+            break
+    if not src:
+        raise RuntimeError("No executable found in update ZIP")
     old_exe = sys.executable
-    log_callback(f"Updating {install_dir} from {extract_to}")
-
+    log_callback(f"Replacing {old_exe} with {src}")
     if sys.platform == "win32":
-        # Windows onedir: copy ALL files from extract_to into install_dir
-        staging_dir = extract_to.replace('/', os.sep)
-        target_dir = install_dir.replace('/', os.sep)
-        exe_name = os.path.basename(old_exe)
+        # Windows: can't rename/overwrite a running exe directly.
+        # Stage the new exe and create a batch script to perform the swap
+        # AFTER this process exits cleanly (so _MEI temp dir is released).
+        new_exe = os.path.join(extract_to, os.path.basename(old_exe))
+        if src != new_exe:
+            shutil.copy2(src, new_exe)
         bat_path = os.path.join(extract_to, "_update.bat")
-        lines = [
-            "@echo off",
-            "REM === Audit Engine Auto-Update Script (onedir) ===",
-            "REM Wait for the parent process to exit cleanly",
-            ":wait_exit",
-            'tasklist /fi "PID eq %PARENT_PID%" 2>nul | find "%PARENT_PID%" >nul',
-            "if not errorlevel 1 (",
-            "  timeout /t 1 /nobreak >nul",
-            "  goto wait_exit",
-            ")",
-            "REM Extra wait for any file lock release",
-            "timeout /t 2 /nobreak >nul",
-            "REM Copy all updated files over the install directory with retry",
-            "set RETRIES=0",
-            ":retry_copy",
-            'xcopy /s /y /q "' + staging_dir + '" "' + target_dir + '" >nul 2>&1',
-            "if errorlevel 1 (",
-            "  set /a RETRIES+=1",
-            "  if %RETRIES% lss 10 (",
-            "    timeout /t 2 /nobreak >nul",
-            "    goto retry_copy",
-            "  )",
-            ")",
-            "REM Launch the updated application",
-            'start "" "' + os.path.join(target_dir, exe_name) + '"',
-            "REM Clean up staging directory",
-            'rd /s /q "' + staging_dir + '" 2>nul',
-        ]
-        with open(bat_path, "w", newline="\r\n") as f:
-            f.write("\r\n".join(lines) + "\r\n")
+        # Batch script: wait for parent → retry copy → clean _MEI → launch → cleanup
+        bat_contents = (
+            "@echo off\r\n"
+            "REM === Audit Engine Auto-Update Script ===\r\n"
+            "REM Wait for the parent process to exit cleanly\r\n"
+            ":wait_exit\r\n"
+            'tasklist /fi "PID eq %PARENT_PID%" 2>nul | find "%PARENT_PID%" >nul\r\n'
+            "if not errorlevel 1 (\r\n"
+            "  timeout /t 1 /nobreak >nul\r\n"
+            "  goto wait_exit\r\n"
+            ")\r\n"
+            "REM Extra wait for PyInstaller _MEI temp dir cleanup\r\n"
+            "timeout /t 3 /nobreak >nul\r\n"
+            "REM Copy new exe over old with retry (antivirus may briefly lock)\r\n"
+            "set RETRIES=0\r\n"
+            ":retry_copy\r\n"
+            'copy /y "' + new_exe.replace('/', '\\') + '" "' + old_exe.replace('/', '\\') + '" >nul 2>&1\r\n'
+            "if errorlevel 1 (\r\n"
+            "  set /a RETRIES+=1\r\n"
+            "  if %RETRIES% lss 10 (\r\n"
+            "    timeout /t 2 /nobreak >nul\r\n"
+            "    goto retry_copy\r\n"
+            "  )\r\n"
+            "  REM Copy failed after retries — launch old exe anyway\r\n"
+            ")\r\n"
+            "REM Clean up stale _MEI temp directories from previous runs\r\n"
+            'for /d %%D in ("%TEMP%\\_MEI*") do rd /s /q "%%D" 2>nul\r\n'
+            "REM Launch the updated application\r\n"
+            'start "" "' + old_exe.replace('/', '\\') + '"\r\n'
+            "REM Clean up staging directory and self-delete\r\n"
+            'rd /s /q "' + extract_to.replace('/', '\\') + '" 2>nul\r\n'
+        )
+        with open(bat_path, "w") as f:
+            f.write(bat_contents)
         startup = subprocess.STARTUPINFO()
         startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startup.wShowWindow = 0  # SW_HIDE
@@ -403,22 +420,20 @@ def _install_binary_update(zip_path, install_dir, log_callback=print):
         )
         log_callback("Update staged; batch script launched. Waiting for clean exit.")
         return bat_path  # Signal caller that a batch script is handling the restart
-
-    # macOS / Linux onedir: copy all files in-place
-    for item in os.listdir(extract_to):
-        src_path = os.path.join(extract_to, item)
-        dst_path = os.path.join(install_dir, item)
-        if os.path.isdir(src_path):
-            if os.path.exists(dst_path):
-                shutil.rmtree(dst_path)
-            shutil.copytree(src_path, dst_path)
-        else:
-            shutil.copy2(src_path, dst_path)
-    # Remove quarantine on macOS
+    # macOS / Linux: replace in-place
+    backup = old_exe + ".bak"
+    if os.path.exists(old_exe):
+        os.rename(old_exe, backup)
+    os.makedirs(os.path.dirname(old_exe), exist_ok=True)
+    shutil.copy2(src, old_exe)
+    os.chmod(old_exe, 0o755)
+    # Remove quarantine attribute so next launch doesn't trigger Gatekeeper
     if sys.platform == "darwin":
-        subprocess.run(["xattr", "-dr", "com.apple.quarantine", install_dir], check=False)
+        subprocess.run(["xattr", "-dr", "com.apple.quarantine", old_exe], check=False)
+    if os.path.exists(backup):
+        os.remove(backup)
     shutil.rmtree(extract_to, ignore_errors=True)
-    log_callback(f"Binary updated at {install_dir}")
+    log_callback(f"Binary updated at {old_exe}")
     return None
 
 
@@ -439,31 +454,25 @@ def _cleanup_stale_mei():
     if sys.platform != "win32" or not getattr(sys, "frozen", False):
         return
     try:
-        temp_dirs = [_tempfile.gettempdir()]
-        user_profile = os.environ.get('USERPROFILE')
-        if user_profile:
-            custom_tmp = os.path.join(user_profile, 'AppData', 'Local', 'AuditEngineTemp')
-            if os.path.exists(custom_tmp):
-                temp_dirs.append(custom_tmp)
-        
+        temp_dir = _tempfile.gettempdir()
         current_mei = getattr(sys, '_MEIPASS', '')
         current_mei_name = os.path.basename(current_mei).lower() if current_mei else ""
-        
-        for t_dir in temp_dirs:
-            if not os.path.exists(t_dir):
+        for entry in os.listdir(temp_dir):
+            if not entry.startswith('_MEI'):
                 continue
-            for entry in os.listdir(t_dir):
-                if not entry.startswith('_MEI'):
-                    continue
-                if entry.lower() == current_mei_name:
-                    continue
-                mei_path = os.path.join(t_dir, entry)
-                if not os.path.isdir(mei_path):
-                    continue
-                try:
-                    _shutil.rmtree(mei_path)
-                except (PermissionError, OSError):
-                    pass
+            
+            # Compare basenames (folder names) to avoid Windows short/long path mismatch
+            # e.g. C:\Users\DEEPST~1\... vs C:\Users\DeepStacker\...
+            if entry.lower() == current_mei_name:
+                continue
+            
+            mei_path = os.path.join(temp_dir, entry)
+            if not os.path.isdir(mei_path):
+                continue
+            try:
+                _shutil.rmtree(mei_path)
+            except (PermissionError, OSError):
+                pass  # Still locked by another instance — skip
     except Exception:
         pass
 
