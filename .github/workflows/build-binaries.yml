@@ -44,6 +44,39 @@ jobs:
             gh release upload $env:TAG $zip --clobber
           }
 
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip
+          key: pip-macos-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-macos-
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pyinstaller
+          key: pyi-macos-${{ hashFiles('pdf_generator.spec') }}
+          restore-keys: pyi-macos-
+      - run: pip install pyinstaller reportlab openpyxl pandas
+      - run: pyinstaller --noconfirm pdf_generator.spec
+      - env:
+          TAG: ${{ github.ref_name }}
+        run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_macos.zip" .
+      - if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          ZIP="Audit_Engine_${TAG}_binary_macos.zip"
+          gh release upload "$TAG" "$ZIP" --clobber 2>/dev/null || {
+            gh release create "$TAG" --title "$TAG" --notes "macOS binary" 2>/dev/null || true
+            gh release upload "$TAG" "$ZIP" --clobber
+          }
+
   linux:
     runs-on: ubuntu-latest
     steps:

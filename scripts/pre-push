@@ -59,11 +59,15 @@ with open('pdf_generator_ui.py') as f:
   echo "==> [pre-push] Source ZIP built: $SRC_ZIP"
 
   # --- Build macOS binary (fast: ~30s on dev machine) ---
-  echo "==> [pre-push] Building macOS binary..."
-  rm -rf dist build
-  pyinstaller --noconfirm pdf_generator.spec
-  (cd dist && zip -r "../$BIN_ZIP" .)
-  echo "==> [pre-push] Binary ZIP built: $BIN_ZIP"
+  if python3 -c "import tkinter" 2>/dev/null; then
+    echo "==> [pre-push] Building macOS binary..."
+    rm -rf dist build
+    pyinstaller --noconfirm pdf_generator.spec
+    (cd dist && zip -r "../$BIN_ZIP" .)
+    echo "==> [pre-push] Binary ZIP built: $BIN_ZIP"
+  else
+    echo "!!> [pre-push] tkinter not available — skipping macOS binary. GH Actions will build it."
+  fi
 
   # --- Create tag and push it (triggers GH Actions for Windows + Linux) ---
   git tag "$TAG"
