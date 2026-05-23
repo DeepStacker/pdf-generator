@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-IDFC Audit Engine Elite - Clean Distribution Zip Packager
+Audit Engine - Clean Distribution Zip Packager
 Creates a clean, ready-to-distribute ZIP archive of the source code.
 Excludes build artifacts, virtual environments, caches, logs, and databases.
 """
 
 import os
+import re
 import zipfile
 import sys
 
-# Target zip file name
-ZIP_NAME = "Audit_Engine_Elite_v5.0.0.zip"
+def _read_version():
+    """Extract version from pdf_generator_ui.py."""
+    ui_path = os.path.join(os.path.dirname(__file__), "pdf_generator_ui.py")
+    with open(ui_path) as f:
+        content = f.read()
+    m = re.search(r'^VERSION\s*=\s*"([^"]+)"', content, re.M)
+    return m.group(1) if m else "unknown"
+
+def _zip_name():
+    return f"Audit_Engine_v{_read_version()}.zip"
 
 # Excluded directory names (exact match or prefix match)
 EXCLUDE_DIRS = {
@@ -56,14 +65,17 @@ def is_excluded_file(file_name):
     return False
 
 def create_zip(root_dir):
+    zip_name = _zip_name()
+    version = _read_version()
     print("=" * 60)
-    print("[-] IDFC AUDIT ENGINE ELITE - ZIP PACKAGER")
+    print("[-] AUDIT ENGINE - ZIP PACKAGER")
     print("=" * 60)
     print(f"[*] Root Directory: {root_dir}")
-    print(f"[*] Target Archive:  {ZIP_NAME}")
+    print(f"[*] Target Archive:  {zip_name}")
+    print(f"[*] Version:         v{version}")
     print("[-] Scanning files...")
 
-    zip_path = os.path.join(root_dir, ZIP_NAME)
+    zip_path = os.path.join(root_dir, zip_name)
     
     # Remove existing zip if it exists to avoid self-inclusion or conflicts
     if os.path.exists(zip_path):
@@ -105,7 +117,8 @@ def create_zip(root_dir):
     print("=" * 60)
     if added_files_count > 0:
         archive_size = os.path.getsize(zip_path)
-        print(f"[+++] SUCCESS: Created {ZIP_NAME} successfully!")
+        zip_name = _zip_name()
+        print(f"[+++] SUCCESS: Created {zip_name} successfully!")
         print(f"[+] Total files packed:  {added_files_count}")
         print(f"[+] Uncompressed size:   {total_size:,} bytes")
         print(f"[+] Compressed ZIP size: {archive_size:,} bytes")

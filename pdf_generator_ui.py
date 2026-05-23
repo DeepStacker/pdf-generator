@@ -215,6 +215,86 @@ LOG_COLORS = {
 }
 
 
+# =========================================================
+# AUTO-UPDATER
+# =========================================================
+UPDATE_REPO = "anomalyco/pdf_generator"
+GITHUB_API = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
+
+import urllib.request as _urllib
+import json as _json
+import tempfile as _tempfile
+import shutil as _shutil
+import ssl as _ssl
+
+
+def _check_latest_release():
+    """Check GitHub for the latest release. Returns (tag, download_url, body)."""
+    ctx = _ssl.create_default_context()
+    req = _urllib.Request(GITHUB_API, headers={"User-Agent": f"AuditEngine/{VERSION}"})
+    with _urllib.urlopen(req, context=ctx, timeout=10) as resp:
+        data = _json.loads(resp.read().decode())
+    return data["tag_name"], data["zipball_url"], data.get("body", "")
+
+
+def _parse_version(tag):
+    """Parse version tag like 'v5.1.0' into tuple (5, 1, 0)."""
+    return tuple(int(x) for x in tag.lstrip("vV").split("."))
+
+
+def _download_update(url, dest_path, progress_callback=None):
+    """Download a file with optional progress callback (0-100)."""
+    ctx = _ssl.create_default_context()
+    req = _urllib.Request(url, headers={"User-Agent": f"AuditEngine/{VERSION}"})
+    with _urllib.urlopen(req, context=ctx, timeout=60) as resp:
+        total = int(resp.headers.get("Content-Length", 0))
+        downloaded = 0
+        with open(dest_path, "wb") as f:
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                if progress_callback and total:
+                    progress_callback(downloaded / total * 100)
+    return dest_path
+
+
+def _install_update(zip_path, install_dir, log_callback=print):
+    """Extract a GitHub source zipball over the install directory."""
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        members = zf.infolist()
+        prefix = members[0].filename if members else ""
+        for m in members:
+            rel = m.filename[len(prefix):] if prefix else m.filename
+            if not rel or m.is_dir():
+                if rel and rel.strip("/"):
+                    os.makedirs(os.path.join(install_dir, rel), exist_ok=True)
+                continue
+            dest = os.path.join(install_dir, rel)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "wb") as f:
+                f.write(zf.read(m))
+    log_callback(f"Update extracted to {install_dir}")
+
+
+def _get_install_dir():
+    """Return the directory where the application is installed."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _restart_app():
+    """Restart the application, replacing the current process."""
+    log_path = os.path.join(os.path.expanduser("~"), ".idfc_audit_engine.log")
+    if getattr(sys, "frozen", False):
+        os.execl(sys.executable, sys.executable)
+    else:
+        os.execl(sys.executable, sys.executable, *sys.argv)
+
+
 class ScrollableFrame(tk.Frame):
     def __init__(self, container, *args, **kwargs):
         super().__init__(container, *args, **kwargs)
@@ -401,6 +481,7 @@ class App:
         self._setup_shortcuts()
         self.root.after(100, self.check_log_queue)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.root.after(2000, self._check_updates_background)
 
     def setup_styles(self):
         self.style = ttk.Style()
@@ -1133,6 +1214,25 @@ class App:
         preview_naming = f"e.g. {self.naming_var.get().replace('{branch}', 'BRANCH_A').replace('{type}', 'POA')}.pdf"
         tk.Label(naming_card, text=preview_naming, font=("Inter", 9, "italic"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(5, 0))
 
+        # --- Updates ---
+        update_card = tk.Frame(self.content, bg="#FFFFFF", padx=50, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
+        update_card.pack(fill=tk.X, pady=(0, 20))
+        tk.Label(update_card, text="Updates", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 15))
+        ver_row = tk.Frame(update_card, bg="#FFFFFF")
+        ver_row.pack(fill=tk.X, pady=5)
+        tk.Label(ver_row, text=f"Current version: v{VERSION}", font=("Inter", 10), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
+        self.update_status = tk.Label(ver_row, text="", font=("Inter", 10), bg="#FFFFFF")
+        self.update_status.pack(side=tk.LEFT, padx=(15, 0))
+        btn_row = tk.Frame(update_card, bg="#FFFFFF")
+        btn_row.pack(fill=tk.X, pady=10)
+        self.update_btn = tk.Button(btn_row, text="Check for Updates", font=("Inter", 10, "bold"),
+                                     bg=self.get_theme_color("primary"), fg="#FFFFFF", relief="flat",
+                                     padx=20, pady=8, command=self._check_updates_manual)
+        self.update_btn.pack(side=tk.LEFT)
+        ToolTip(self.update_btn, "Check GitHub for a newer version")
+        self.update_progress = ttk.Progressbar(btn_row, length=200, mode="determinate")
+        self.update_progress.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(15, 0))
+
         # --- Default Preferences ---
         prefs_card = tk.Frame(self.content, bg="#FFFFFF", padx=50, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
         prefs_card.pack(fill=tk.X, pady=(0, 20))
@@ -1170,6 +1270,80 @@ class App:
                   relief="flat", padx=24, pady=10, command=self.clear_history)
         clear_btn.pack(anchor="w")
         ToolTip(clear_btn, "Delete all history records")
+
+    # ---------------------------------------------------------
+    # AUTO-UPDATER
+    # ---------------------------------------------------------
+    def _check_updates_background(self):
+        """Silent background check on startup — only notifies if update found."""
+        threading.Thread(target=self._do_check_updates, args=(True,), daemon=True).start()
+
+    def _check_updates_manual(self):
+        """Manual check triggered by user clicking the button."""
+        self.update_btn.config(state=tk.DISABLED, text="Checking...")
+        self.update_status.config(text="", fg="#475569")
+        threading.Thread(target=self._do_check_updates, args=(False,), daemon=True).start()
+
+    def _do_check_updates(self, background=False):
+        try:
+            latest_tag, download_url, notes = _check_latest_release()
+            latest_ver = _parse_version(latest_tag)
+            current_ver = _parse_version(VERSION)
+
+            if latest_ver <= current_ver:
+                if not background:
+                    self.root.after(0, lambda: self.update_status.config(text="Up to date", fg="#10B981"))
+                    self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text="Check for Updates"))
+                return
+
+            self.root.after(0, lambda: self._show_update_dialog(latest_tag, download_url, notes))
+
+        except Exception as e:
+            if not background:
+                self.root.after(0, lambda: self.update_status.config(text=f"Failed: {e}", fg="#EF4444"))
+                self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text="Check for Updates"))
+
+    def _show_update_dialog(self, tag, url, notes):
+        """Show the update-available dialog."""
+        short_notes = notes[:500] + "..." if notes and len(notes) > 500 else (notes or "")
+        msg = f"Version {tag} is available (you have v{VERSION}).\n\nWhat's new:\n{short_notes}\n\nDownload and install now?"
+        if not messagebox.askyesno("Update Available", msg, icon=messagebox.INFO):
+            self.update_status.config(text=f"v{tag} available", fg="#D97706")
+            self.update_btn.config(state=tk.NORMAL, text="Check for Updates")
+            return
+        self._start_update(tag, url)
+
+    def _start_update(self, tag, url):
+        """Begin downloading and installing the update."""
+        self.update_btn.config(state=tk.DISABLED, text="Downloading...")
+        self.update_status.config(text="Downloading update...", fg="#2563EB")
+        threading.Thread(target=self._do_download_install, args=(tag, url), daemon=True).start()
+
+    def _do_download_install(self, tag, url):
+        try:
+            tmp = _tempfile.mkdtemp(prefix="audit_update_")
+            zip_path = os.path.join(tmp, f"update_{tag}.zip")
+
+            def prog(val):
+                self.root.after(0, lambda: self.update_progress.configure(value=val))
+                if val >= 100:
+                    self.root.after(0, lambda: self.update_status.config(text="Installing...", fg="#2563EB"))
+
+            _download_update(url, zip_path, prog)
+
+            install_dir = _get_install_dir()
+            _install_update(zip_path, install_dir, self.log)
+
+            _shutil.rmtree(tmp, ignore_errors=True)
+
+            self.root.after(0, lambda: self.update_status.config(text="Update installed! Restarting...", fg="#10B981"))
+            self.root.after(0, lambda: self.update_progress.configure(value=0))
+            self.root.after(1500, _restart_app)
+
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status.config(text=f"Update failed: {e}", fg="#EF4444"))
+            self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text="Check for Updates"))
+            self.log(f"Update failed: {e}", "ERROR")
 
     # ---------------------------------------------------------
     # HELPERS
