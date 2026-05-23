@@ -74,7 +74,10 @@ Auto-generated release.
 - \`*_binary_windows.zip\` — Pre-compiled binary for Windows (built by CI)
 - \`*_binary_linux.zip\` — Pre-compiled binary for Linux (built by CI)"
 
-  gh release create "$TAG" --title "$TAG" --notes "$RELEASE_NOTES" "$SRC_ZIP"
+  gh release create "$TAG" --title "$TAG" --notes "$RELEASE_NOTES" "$SRC_ZIP" 2>/dev/null || {
+    echo "==> [pre-push] Release $TAG already exists, uploading source ZIP to it..."
+    gh release upload "$TAG" "$SRC_ZIP" --clobber
+  }
 
   # --- Clean up ---
   rm -f "$SRC_ZIP"
