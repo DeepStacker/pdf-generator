@@ -218,7 +218,7 @@ LOG_COLORS = {
 # =========================================================
 # AUTO-UPDATER
 # =========================================================
-UPDATE_REPO = "anomalyco/pdf_generator"
+UPDATE_REPO = "DeepStacker/pdf-generator"
 GITHUB_API = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
 
 import urllib.request as _urllib
