@@ -39,15 +39,16 @@ if sys.platform == "win32":
                 _search_dirs.append(_d)
 
     # --- 2. Collect ALL required DLLs ---
-    # python312.dll depends on vcruntime140.dll + vcruntime140_1.dll
-    # _tkinter.pyd depends on tcl86t.dll + tk86t.dll
-    # Tcl depends on zlib1.dll
-    # We bundle everything so the exe is fully self-contained.
+    # - vcruntime/msvcp: VC runtime
+    # - ucrtbase: Universal C runtime
+    # - api-ms-win-*: UCRT and Core API forwards (critical for Parallels ARM64 emulation)
     _dll_patterns = [
         'python3*.dll',        # Python runtime DLL
         'vcruntime*.dll',      # Visual C++ runtime
         'msvcp*.dll',          # MSVC C++ standard library
-        'ucrtbase*.dll',       # Universal C runtime (usually OS-provided but bundle just in case)
+        'ucrtbase*.dll',       # Universal C runtime
+        'api-ms-win-crt-*.dll',# UCRT forwards
+        'api-ms-win-core-*.dll',# Core API forwards
         'tcl*.dll',            # Tcl library
         'tk*.dll',             # Tk library
         'zlib*.dll',           # Compression library
