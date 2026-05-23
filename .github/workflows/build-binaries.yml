@@ -14,8 +14,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
-          architecture: "x86"
+          python-version: "3.12"
       - uses: actions/cache@v4
         with:
           path: ~\AppData\Local\pip\Cache
@@ -26,24 +25,26 @@ jobs:
           path: ~\AppData\Local\pyinstaller
           key: pyi-win-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-win-
-      - run: pip install pyinstaller reportlab openpyxl "pandas<2.1" certifi
-      - name: Verify Python environment and DLLs
+      - run: pip install pyinstaller reportlab openpyxl pandas certifi
+      - name: Verify Tcl/Tk environment
         run: |
           python -c "import sys; print('Python:', sys.executable); print('Prefix:', sys.prefix); print('Base prefix:', sys.base_prefix)"
+          python -c "import os, sys, glob; bases=[sys.prefix, getattr(sys,'base_prefix',sys.prefix)]; [print(f) for b in bases for f in glob.glob(os.path.join(b,'**','*.dll'),recursive=True) if any(x in f.lower() for x in ['tcl','tk','zlib'])]"
           python -c "import _tkinter; print('_tkinter OK:', _tkinter.__file__)"
           python -c "import tkinter; r=tkinter.Tk(); r.withdraw(); print('TCL_LIBRARY:', r.tk.exprstring('$tcl_library')); print('TK_LIBRARY:', r.tk.exprstring('$tk_library')); r.destroy(); print('tkinter fully operational')"
-          python -c "import os, sys, glob; base=os.path.dirname(sys.executable); [print(f) for f in sorted(glob.glob(os.path.join(base,'*.dll')))]"
       - run: pyinstaller --noconfirm --clean pdf_generator.spec
-      - name: Verify built exe has all critical DLLs
+      - name: Verify built exe
         shell: pwsh
         run: |
           $exe = "dist\Audit_Engine_Elite.exe"
-          if (-not (Test-Path $exe)) {
+          if (Test-Path $exe) {
+            $size = (Get-Item $exe).Length / 1MB
+            Write-Host "Built exe size: $([math]::Round($size, 2)) MB"
+            Write-Host "Built exe path: $exe"
+          } else {
             Write-Error "Build failed: exe not found!"
             exit 1
           }
-          $size = (Get-Item $exe).Length / 1MB
-          Write-Host "Built exe: $([math]::Round($size, 2)) MB"
       - shell: pwsh
         env:
           TAG: ${{ github.ref_name }}
@@ -67,7 +68,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - uses: actions/cache@v4
         with:
           path: ~/Library/Caches/pip
@@ -101,7 +102,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
