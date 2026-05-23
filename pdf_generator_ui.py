@@ -454,25 +454,31 @@ def _cleanup_stale_mei():
     if sys.platform != "win32" or not getattr(sys, "frozen", False):
         return
     try:
-        temp_dir = _tempfile.gettempdir()
+        temp_dirs = [_tempfile.gettempdir()]
+        user_profile = os.environ.get('USERPROFILE')
+        if user_profile:
+            custom_tmp = os.path.join(user_profile, 'AppData', 'Local', 'AuditEngineTemp')
+            if os.path.exists(custom_tmp):
+                temp_dirs.append(custom_tmp)
+        
         current_mei = getattr(sys, '_MEIPASS', '')
         current_mei_name = os.path.basename(current_mei).lower() if current_mei else ""
-        for entry in os.listdir(temp_dir):
-            if not entry.startswith('_MEI'):
+        
+        for t_dir in temp_dirs:
+            if not os.path.exists(t_dir):
                 continue
-            
-            # Compare basenames (folder names) to avoid Windows short/long path mismatch
-            # e.g. C:\Users\DEEPST~1\... vs C:\Users\DeepStacker\...
-            if entry.lower() == current_mei_name:
-                continue
-            
-            mei_path = os.path.join(temp_dir, entry)
-            if not os.path.isdir(mei_path):
-                continue
-            try:
-                _shutil.rmtree(mei_path)
-            except (PermissionError, OSError):
-                pass  # Still locked by another instance — skip
+            for entry in os.listdir(t_dir):
+                if not entry.startswith('_MEI'):
+                    continue
+                if entry.lower() == current_mei_name:
+                    continue
+                mei_path = os.path.join(t_dir, entry)
+                if not os.path.isdir(mei_path):
+                    continue
+                try:
+                    _shutil.rmtree(mei_path)
+                except (PermissionError, OSError):
+                    pass
     except Exception:
         pass
 
