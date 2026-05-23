@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Git pre-push hook — auto-bump version, build source + binary ZIPs, create GitHub release
+# Git pre-push hook — auto-bump version, build source ZIP, create GitHub release.
+# Platform binaries (macOS, Windows, Linux) are built by GH Actions on tag push.
 set -euo pipefail
 
 REMOTE="$1"
@@ -48,15 +49,6 @@ with open('pdf_generator_ui.py') as f:
   TAG="v${NEW_VER}"
   SRC_ZIP="Audit_Engine_${TAG}.zip"
 
-  # Detect platform for binary ZIP naming
-  case "$(uname)" in
-    Darwin) PLATFORM="macos" ;;
-    Linux)  PLATFORM="linux" ;;
-    MINGW*|MSYS*) PLATFORM="windows" ;;
-    *)      PLATFORM="" ;;
-  esac
-  [ -n "$PLATFORM" ] && BIN_ZIP="Audit_Engine_${TAG}_binary_${PLATFORM}.zip" || BIN_ZIP=""
-
   # --- Build source distribution ---
   python3 create_distribution_zip.py
 
@@ -66,52 +58,31 @@ with open('pdf_generator_ui.py') as f:
   fi
   echo "==> [pre-push] Source ZIP built: $SRC_ZIP"
 
-  # --- Build compiled binary distribution (platform-specific) ---
-  if [ -n "$BIN_ZIP" ]; then
-    echo "==> [pre-push] Building compiled binary for $PLATFORM (PyInstaller)..."
-    rm -rf dist build
-    BUILD_VENV=$(mktemp -d)
-    python3 -m venv "$BUILD_VENV"
-    source "$BUILD_VENV/bin/activate"
-    pip install --quiet pyinstaller openpyxl pandas reportlab 2>/dev/null
-    if python -m PyInstaller --noconfirm --clean pdf_generator.spec 2>/dev/null; then
-      if [ -d "dist" ]; then
-        (cd dist && zip -r "../$BIN_ZIP" .)
-        echo "==> [pre-push] Binary ZIP built: $BIN_ZIP"
-      fi
-    else
-      echo "!!> [pre-push] PyInstaller build failed — continuing with source-only release"
-    fi
-    deactivate 2>/dev/null || true
-    rm -rf "$BUILD_VENV"
-  fi
-
-  # --- Create tag and push it ---
+  # --- Create tag and push it (triggers GH Actions for platform binaries) ---
   git tag "$TAG"
   echo "==> [pre-push] Created local tag $TAG"
   git push origin "$TAG"
 
-  # --- Create GitHub release with assets ---
-  echo "==> [pre-push] Creating GitHub release ..."
+  # --- Create GitHub release with source ZIP ---
+  echo "==> [pre-push] Creating GitHub release..."
   RELEASE_NOTES="## Audit Engine ${NEW_VER}
 
 Auto-generated release.
 
 - Commit: $(git rev-parse --short HEAD)
 - \`${SRC_ZIP}\` — Source distribution (requires Python)
-$(if [ -n "$BIN_ZIP" ]; then echo "- \`${BIN_ZIP}\` — Pre-compiled binary for ${PLATFORM}"; fi)"
+- \`*_binary_windows.zip\` — Pre-compiled binary for Windows (built by CI)
+- \`*_binary_macos.zip\` — Pre-compiled binary for macOS (built by CI)
+- \`*_binary_linux.zip\` — Pre-compiled binary for Linux (built by CI)"
 
-  RELEASE_ARGS=("$TAG" --title "$TAG" --notes "$RELEASE_NOTES" "$SRC_ZIP")
-  [ -n "$BIN_ZIP" ] && [ -f "$BIN_ZIP" ] && RELEASE_ARGS+=("$BIN_ZIP")
-
-  gh release create "${RELEASE_ARGS[@]}"
+  gh release create "$TAG" --title "$TAG" --notes "$RELEASE_NOTES" "$SRC_ZIP"
 
   # --- Clean up ---
-  rm -f "$SRC_ZIP" ${BIN_ZIP:+"$BIN_ZIP"}
-  rm -rf dist build
+  rm -f "$SRC_ZIP"
 
-  echo "==> [pre-push] Release $TAG published."
-  echo "==> [pre-push] Push proceeding with version bump commit and tag."
+  echo "==> [pre-push] Release $TAG published (source only)."
+  echo "     Platform binaries will be added by GH Actions."
+  echo "==> [pre-push] Push proceeding with version bump commit."
 
   break
 done
