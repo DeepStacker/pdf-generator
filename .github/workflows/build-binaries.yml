@@ -30,16 +30,7 @@ jobs:
         shell: pwsh
         run: |
           python -c "import os,glob; d=os.path.dirname(__import__('sys').executable); [print(f) for f in glob.glob(os.path.join(d, '**', '*.dll'), recursive=True) if 'tcl' in f.lower() or 'tk' in f.lower()]"
-          python -c "try:
-            import _tkinter
-            print(f'_tkinter.__file__: {_tkinter.__file__}')
-            import tkinter
-            tcl = tkinter.Tcl()
-            print(f'Tcl library dir: {tcl.eval(\"info library\")}')
-            print(f'Tcl version: {_tkinter.TCL_VERSION}')
-          except Exception as e:
-            print(f'tkinter import error: {e}')
-          import sys; print(f'sys.prefix: {sys.prefix}')"
+          python -c "import _tkinter; import tkinter; tcl=tkinter.Tcl(); print(f'_tkinter: {_tkinter.__file__}'); print(f'Tcl lib: {tcl.eval(\"info library\")}'); print(f'Tcl ver: {_tkinter.TCL_VERSION}')"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - shell: pwsh
         env:
