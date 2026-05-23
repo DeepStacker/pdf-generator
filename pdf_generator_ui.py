@@ -16,6 +16,7 @@ import zipfile
 import sqlite3
 import logging
 from datetime import datetime
+import openpyxl
 
 # Import core logic modules
 import pdf_logic
@@ -26,7 +27,7 @@ import equitas_logic
 # VERSION & APP CONSTANTS
 # =========================================================
 VERSION = "5.0.0"
-APP_TITLE = "Audit Engine Elite v5.0"
+APP_TITLE = "Audit Engine v5.0"
 
 # Colors for theming
 THEME = {
@@ -164,6 +165,56 @@ init_db()
 # =========================================================
 # SCROLLABLE FRAME WIDGET
 # =========================================================
+# =========================================================
+# TOOLTIP WIDGET
+# =========================================================
+class ToolTip:
+    def __init__(self, widget, text, delay=400):
+        self.widget = widget
+        self.text = text
+        self.delay = delay
+        self.tip_window = None
+        self._after_id = None
+        widget.bind("<Enter>", self.schedule)
+        widget.bind("<Leave>", self.hide)
+
+    def schedule(self, event=None):
+        self._after_id = self.widget.after(self.delay, self.show)
+
+    def show(self):
+        if self.tip_window:
+            return
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        tk.Label(tw, text=self.text, justify=tk.LEFT,
+                 background="#1E293B", foreground="#F8FAFC",
+                 font=("Inter", 9), padx=12, pady=6,
+                 wraplength=350).pack()
+
+    def hide(self, event=None):
+        if self._after_id:
+            self.widget.after_cancel(self._after_id)
+            self._after_id = None
+        if self.tip_window:
+            self.tip_window.destroy()
+            self.tip_window = None
+
+
+# =========================================================
+# LOG LEVEL COLORS (for color-coded console)
+# =========================================================
+LOG_COLORS = {
+    "INFO": "#10B981",     # green
+    "OK": "#10B981",       # green
+    "WARN": "#F59E0B",     # amber
+    "ERROR": "#EF4444",    # red
+    "DEBUG": "#64748B",    # slate
+}
+
+
 class ScrollableFrame(tk.Frame):
     def __init__(self, container, *args, **kwargs):
         super().__init__(container, *args, **kwargs)
@@ -233,6 +284,58 @@ class ScrollableFrame(tk.Frame):
 # =========================================================
 # MAIN APPLICATION
 # =========================================================
+# Recent files helpers
+MAX_RECENT_FILES = 8
+
+# Bank auto-detection column fingerprints
+IDFC_FINGERPRINT_COLS = {"prospectno", "cuid", "tare weight", "currentbranch"}
+EQUITAS_FINGERPRINT_COLS = {"svs_loan_no", "sole_id", "branch_name", "loan no"}
+
+def _detect_bank_from_file(filepath):
+    """Peek at Excel headers to determine which bank the file is for."""
+    try:
+        wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
+        try:
+            for sname in wb.sheetnames:
+                ws = wb[sname]
+                try:
+                    header_row = [
+                        str(cell.value).strip().lower().replace("\n", "") if cell.value else ""
+                        for cell in next(ws.iter_rows(min_row=1, max_row=1))
+                    ]
+                    headers_set = set(header_row)
+                    idfc_score = len(IDFC_FINGERPRINT_COLS & headers_set)
+                    equitas_score = len(EQUITAS_FINGERPRINT_COLS & headers_set)
+                    if idfc_score >= 3:
+                        return "IDFC First Bank"
+                    if equitas_score >= 3:
+                        return "Equitas Small Finance Bank"
+                except StopIteration:
+                    continue
+        finally:
+            wb.close()
+    except Exception:
+        pass
+    return None
+
+def _get_recent_files():
+    files = []
+    for i in range(MAX_RECENT_FILES):
+        f = get_config(f"recent_file_{i}", "")
+        if f and os.path.exists(f) and f not in files:
+            files.append(f)
+    return files
+
+def _add_recent_file(filepath):
+    files = _get_recent_files()
+    filepath = os.path.abspath(os.path.normpath(filepath))
+    files = [f for f in files if f != filepath]
+    files.insert(0, filepath)
+    files = files[:MAX_RECENT_FILES]
+    for i, f in enumerate(files):
+        set_config(f"recent_file_{i}", f)
+
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -270,7 +373,9 @@ class App:
 
         # --- PERSISTENT STATE ---
         self.bank_var = tk.StringVar(value=get_config("bank", "IDFC First Bank"))
-        self.file_var = tk.StringVar()
+        last_file = get_config("last_file", "")
+        self.file_var = tk.StringVar(value=last_file if os.path.exists(last_file) else "")
+        self.file_var.trace_add("write", lambda *_: self._save_file_var())
         self.folder_var = tk.StringVar(value=get_config("out_path", os.path.join(os.path.expanduser("~"), "Desktop")))
         self.typ_var = tk.StringVar(value=get_config("audit_type", "POA"))
         self.auto_open = tk.BooleanVar(value=get_config("auto_open", "True") == "True")
@@ -281,7 +386,7 @@ class App:
 
         self.progress_var = tk.DoubleVar(value=0)
         self.search_var = tk.StringVar()
-        self.status_msg = tk.StringVar(value="System Ready")
+        self.status_msg = tk.StringVar(value="Ready")
 
         # --- THREADING ---
         self.active_tab = "PROCESS"
@@ -293,7 +398,9 @@ class App:
 
         self.setup_styles()
         self.setup_ui()
+        self._setup_shortcuts()
         self.root.after(100, self.check_log_queue)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def setup_styles(self):
         self.style = ttk.Style()
@@ -314,6 +421,55 @@ class App:
         # Equitas specific styles
         self.style.map("TRadiobutton", background=[('active', '#FFFFFF')])
 
+    def _setup_shortcuts(self):
+        self.root.bind("<Control-o>", lambda e: self._shortcut_open())
+        self.root.bind("<Control-O>", lambda e: self._shortcut_open())
+        self.root.bind("<Control-R>", lambda e: self._shortcut_run())
+        self.root.bind("<Control-r>", lambda e: self._shortcut_run())
+        self.root.bind("<Return>", lambda e: self._shortcut_run())
+        self.root.bind("<Escape>", lambda e: self._shortcut_cancel())
+        self.root.bind("<Control-l>", lambda e: self._shortcut_clear_logs())
+        self.root.bind("<Control-L>", lambda e: self._shortcut_clear_logs())
+
+    def _shortcut_open(self):
+        if self.active_tab != "PROCESS":
+            self.switch_tab("PROCESS")
+        if self.bank_var.get() == "IDFC First Bank":
+            self.browse_in_idfc()
+        else:
+            stage = self.equitas_stage_var.get()
+            if stage == "STAGE 1":
+                self.browse_in_equitas_s1()
+            else:
+                self.browse_in_equitas_s2()
+
+    def _shortcut_run(self):
+        if self.active_tab != "PROCESS":
+            return
+        if self.btn_run.cget("state") != tk.DISABLED:
+            if self.bank_var.get() == "IDFC First Bank":
+                self.start_process_idfc()
+            else:
+                self.start_process_equitas()
+
+    def _shortcut_cancel(self):
+        if hasattr(self, 'btn_cancel') and self.btn_cancel.cget("state") != tk.DISABLED:
+            self.cancel_process()
+
+    def _save_file_var(self):
+        path = self.file_var.get().strip()
+        if path and os.path.exists(path):
+            set_config("last_file", path)
+
+    def _shortcut_clear_logs(self):
+        if hasattr(self, 'log_area'):
+            try:
+                self.log_area.delete(1.0, tk.END)
+                self.status_msg.set("Console cleared")
+                self.root.after(2000, lambda: self.status_msg.set("Ready"))
+            except (tk.TclError, AttributeError):
+                pass
+
     def setup_ui(self):
         self.main_container = tk.Frame(self.root, bg="#0F172A")
         self.main_container.pack(fill=tk.BOTH, expand=True)
@@ -328,36 +484,37 @@ class App:
         logo_frame.pack(fill=tk.X)
         self.lbl_logo1 = tk.Label(logo_frame, font=("Inter", 22, "bold"), bg="#0F172A", fg="#FFFFFF")
         self.lbl_logo1.pack()
-        self.lbl_logo2 = tk.Label(logo_frame, text="AUDIT ENGINE ELITE", font=("Inter", 9, "bold"), bg="#0F172A", fg="#2563EB", pady=5)
+        self.lbl_logo2 = tk.Label(logo_frame, text="AUDIT ENGINE", font=("Inter", 9, "bold"), bg="#0F172A", fg="#2563EB", pady=5)
         self.lbl_logo2.pack()
 
         # Bank Selector
         bank_frame = tk.Frame(self.sidebar, bg="#0F172A", padx=20)
         bank_frame.pack(fill=tk.X, pady=(10, 20))
-        tk.Label(bank_frame, text="ACTIVE PROFILE", font=("Inter", 8, "bold"), bg="#0F172A", fg="#475569").pack(anchor="w", pady=(0, 5))
+        tk.Label(bank_frame, text="BANK PROFILE", font=("Inter", 8, "bold"), bg="#0F172A", fg="#475569").pack(anchor="w", pady=(0, 5))
         self.bank_selector = ttk.Combobox(bank_frame, textvariable=self.bank_var, values=["IDFC First Bank", "Equitas Small Finance Bank"], state="readonly", font=("Inter", 10))
         self.bank_selector.pack(fill=tk.X)
         self.bank_selector.bind("<<ComboboxSelected>>", self.on_bank_change)
+        ToolTip(self.bank_selector, "Switch between IDFC First Bank and Equitas Small Finance Bank workflows")
 
         # Navigation
         self.nav_btns = {}
         nav_items = [
-            ("rocket", "New Batch", "PROCESS", "🚀"),
-            ("chart", "Analytics", "STATS", "📈"),
-            ("folder", "History", "HISTORY", "📂"),
-            ("settings", "Settings", "SETTINGS", "⚙️")
+            ("New Batch", "PROCESS"),
+            ("Analytics", "STATS"),
+            ("History", "HISTORY"),
+            ("Settings", "SETTINGS"),
         ]
 
         nav_container = tk.Frame(self.sidebar, bg="#0F172A")
         nav_container.pack(fill=tk.X, expand=True, anchor="n")
 
-        for _, label, tag, icon in nav_items:
-            self.nav_btns[tag] = self.create_nav_btn(f"{icon}  {label}", tag, nav_container)
+        for label, tag in nav_items:
+            self.nav_btns[tag] = self.create_nav_btn(label, tag, nav_container)
 
         # Footer
         footer = tk.Frame(self.sidebar, bg="#0F172A", pady=15)
         footer.pack(side=tk.BOTTOM, fill=tk.X)
-        tk.Label(footer, text=f"v{VERSION} Enterprise Edition", font=("Inter", 8), bg="#0F172A", fg="#475569").pack()
+        tk.Label(footer, text=f"v{VERSION}", font=("Inter", 8), bg="#0F172A", fg="#475569").pack()
         self.lbl_copyright = tk.Label(footer, font=("Inter", 7), bg="#0F172A", fg="#334155")
         self.lbl_copyright.pack()
 
@@ -371,6 +528,8 @@ class App:
         self.status_bar = tk.Frame(self.content_container, bg="#FFFFFF", height=30, highlightthickness=1, highlightbackground="#E2E8F0")
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
         tk.Label(self.status_bar, textvariable=self.status_msg, font=("Inter", 8, "bold"), bg="#FFFFFF", fg="#64748B", padx=20).pack(side=tk.LEFT)
+        tk.Label(self.status_bar, text="Ctrl+O  Open  ·  Enter  Run  ·  Esc  Stop  ·  Ctrl+L  Clear",
+                 font=("Inter", 7), bg="#FFFFFF", fg="#CBD5E1", padx=20).pack(side=tk.RIGHT)
 
         self.render_tab()
 
@@ -385,10 +544,13 @@ class App:
             self.lbl_logo2.config(fg="#D97706")
             self.lbl_copyright.config(text="© 2026 Equitas Small Finance Bank")
 
-    def on_bank_change(self, event=None):
+    def on_bank_change(self, event=None, preserve_file=None):
         set_config("bank", self.bank_var.get())
         self.update_branding()
-        self.file_var.set("")  # Clear selected file as it might be invalid for other bank
+        if preserve_file:
+            self.file_var.set(preserve_file)
+        else:
+            self.file_var.set("")
         self.render_tab()
 
     def get_theme_color(self, key):
@@ -402,6 +564,13 @@ class App:
                         cursor="hand2", borderwidth=0,
                         command=lambda: self.switch_tab(tag))
         btn.pack(fill=tk.X)
+        tips = {
+            "PROCESS": "Create a new audit batch from an Excel file",
+            "STATS": "View generation statistics and daily activity",
+            "HISTORY": "Browse and search past generation logs",
+            "SETTINGS": "Manage application settings and data",
+        }
+        ToolTip(btn, tips.get(tag, ""))
         return btn
 
     def switch_tab(self, tag):
@@ -439,20 +608,30 @@ class App:
     def render_process_idfc(self):
         header = tk.Frame(self.content, bg="#F8FAFC")
         header.pack(fill=tk.X)
-        tk.Label(header, text="Engine Dashboard", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
+        tk.Label(header, text="Generate Reports", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
         tk.Label(header, text="IDFC FIRST Bank", font=("Inter", 14, "bold"), bg="#DBEAFE", fg="#1E40AF", padx=10, pady=5).pack(side=tk.RIGHT)
 
         stats_frame = tk.Frame(self.content, bg="#F8FAFC")
         stats_frame.pack(fill=tk.X, pady=15)
         e, p = get_stats()
         self.create_stat_card(stats_frame, "Total Sessions", str(e), "#0F172A", 0)
-        self.create_stat_card(stats_frame, "PDF Reports", str(p), self.get_theme_color("primary"), 1)
-        self.create_stat_card(stats_frame, "Health Status", "SECURE", "#10B981", 2)
+        last_run = get_recent_history(limit=1)
+        status_text = last_run[0][1] if last_run else "No activity yet"
+        status_color = "#10B981" if last_run else "#94A3B8"
+        self.create_stat_card(stats_frame, "Last Run", status_text[:19], status_color, 1)
+        self.create_stat_card(stats_frame, "PDF Reports", str(p), self.get_theme_color("primary"), 2)
 
         self.panel = tk.Frame(self.content, bg="#FFFFFF", padx=30, pady=25, highlightthickness=1, highlightbackground="#E2E8F0")
         self.panel.pack(fill=tk.X)
 
-        self.create_input(self.panel, "Source Master Excel", self.file_var, self.browse_in_idfc, "SELECT FILE")
+        self.create_input(self.panel, "Source Master Excel", self.file_var, self.browse_in_idfc, "Browse...")
+
+        self.validate_label = tk.Label(self.panel, text="", font=("Inter", 10), bg="#FFFFFF")
+        self.validate_label.pack(anchor="w", pady=(0, 5))
+
+        self.recent_frame = tk.Frame(self.panel, bg="#FFFFFF")
+        self.recent_frame.pack(fill=tk.X, pady=(0, 5))
+        self._refresh_recent_files()
 
         self.preview_frame = tk.Frame(self.panel, bg="#FFFFFF")
         self.preview_frame.pack(fill=tk.X)
@@ -467,9 +646,11 @@ class App:
         type_box.pack(side=tk.LEFT)
         tk.Label(type_box, text="Audit Type:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
         for t in ["POA", "TAF"]:
-            tk.Radiobutton(type_box, text=t, variable=self.typ_var, value=t,
+            rb = tk.Radiobutton(type_box, text=t, variable=self.typ_var, value=t,
                            bg="#FFFFFF", font=("Inter", 11), selectcolor="#FFFFFF",
-                           padx=15, command=lambda: set_config("audit_type", self.typ_var.get())).pack(side=tk.LEFT)
+                           padx=15, command=lambda: set_config("audit_type", self.typ_var.get()))
+            rb.pack(side=tk.LEFT)
+            ToolTip(rb, f"Generate {t} audit worksheets")
 
         tk.Checkbutton(cfg_row, text="Auto-open destination folder", variable=self.auto_open,
                        bg="#FFFFFF", font=("Inter", 10), activebackground="#FFFFFF",
@@ -478,45 +659,71 @@ class App:
         pkg_row = tk.Frame(self.panel, bg="#FFFFFF")
         pkg_row.pack(fill=tk.X, pady=(0, 5))
         tk.Label(pkg_row, text="Output Mode:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
+        tips_map = {"FOLDER": "Save PDFs directly to a folder", "ZIP ONLY": "Compress PDFs into a ZIP archive (saves ~50% space)", "BOTH": "Keep folder + create ZIP archive"}
         for m in ["FOLDER", "ZIP ONLY", "BOTH"]:
-            tk.Radiobutton(pkg_row, text=m, variable=self.pkg_var, value=m,
+            rb = tk.Radiobutton(pkg_row, text=m, variable=self.pkg_var, value=m,
                            bg="#FFFFFF", font=("Inter", 10), selectcolor="#FFFFFF",
-                           padx=15, command=lambda: set_config("pkg_mode", self.pkg_var.get())).pack(side=tk.LEFT)
+                           padx=15, command=lambda: set_config("pkg_mode", self.pkg_var.get()))
+            rb.pack(side=tk.LEFT)
+            ToolTip(rb, tips_map[m])
         tk.Label(pkg_row, text="(ZIP ONLY saves 50% space)", font=("Inter", 8, "italic"), bg="#FFFFFF", fg="#94A3B8").pack(side=tk.LEFT, padx=10)
 
-        self.create_input(self.panel, "Output Directory", self.folder_var, self.browse_out, "CHANGE LOCATION")
+        self.create_input(self.panel, "Output Directory", self.folder_var, self.browse_out, "Browse...")
 
         btn_row = tk.Frame(self.panel, bg="#FFFFFF")
         btn_row.pack(fill=tk.X, pady=(15, 10))
 
-        self.btn_run = tk.Button(btn_row, text="START GENERATION ENGINE", font=("Inter", 14, "bold"),
+        self.btn_run = tk.Button(btn_row, text="Generate Reports", font=("Inter", 14, "bold"),
                                  bg=self.get_theme_color("primary"), fg="#FFFFFF", relief="flat", padx=50, pady=12,
                                  cursor="hand2", activebackground=self.get_theme_color("primary_hover"),
                                  command=self.start_process_idfc)
         self.btn_run.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        ToolTip(self.btn_run, "Generate audit PDFs from the selected Excel file")
+        self.btn_run.bind("<Control-Return>", lambda e: self.start_process_idfc())
 
-        self.btn_cancel = tk.Button(btn_row, text="⏹ CANCEL", font=("Inter", 11, "bold"),
+        self.btn_cancel = tk.Button(btn_row, text="Stop", font=("Inter", 11, "bold"),
                                     bg="#DC2626", fg="#FFFFFF", relief="flat", padx=25, pady=12,
                                     cursor="hand2", activebackground="#B91C1C",
                                     state=tk.DISABLED, command=self.cancel_process)
         self.btn_cancel.pack(side=tk.RIGHT)
+        ToolTip(self.btn_cancel, "Stop the current generation")
 
-        self.progress = ttk.Progressbar(self.panel, variable=self.progress_var, maximum=100)
-        self.progress.pack(fill=tk.X, pady=(0, 5))
+        prog_row = tk.Frame(self.panel, bg="#FFFFFF")
+        prog_row.pack(fill=tk.X, pady=(0, 5))
+        self.progress = ttk.Progressbar(prog_row, variable=self.progress_var, maximum=100)
+        self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.prog_label = tk.Label(prog_row, text="0%", font=("Inter", 9, "bold"),
+                                   bg="#FFFFFF", fg="#64748B", width=6, anchor="e")
+        self.prog_label.pack(side=tk.RIGHT, padx=(10, 0))
+        self.branch_label = tk.Label(self.panel, text="", font=("Inter", 9, "italic"),
+                                     bg="#FFFFFF", fg="#64748B", anchor="w")
+        self.branch_label.pack(fill=tk.X, pady=(0, 5))
 
         self.render_console()
-
+ 
     def browse_in_idfc(self):
         f = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
         if f:
+            _add_recent_file(f)
+            detected = _detect_bank_from_file(f)
+            if detected and detected != self.bank_var.get():
+                self.bank_var.set(detected)
+                self.on_bank_change(preserve_file=f)
+                return
             self.file_var.set(f)
             self.status_msg.set(f"Loaded: {os.path.basename(f)}")
+            valid, err = pdf_logic.validate_excel(f)
+            if valid:
+                self.validate_label.config(text="Valid file — all required columns found", fg="#16A34A")
+            else:
+                self.validate_label.config(text=err, fg="#DC2626")
             self._preview_file_idfc(f)
+            self._refresh_recent_files()
 
     def _preview_file_idfc(self, filepath):
         valid, err = pdf_logic.validate_excel(filepath)
         if not valid:
-            self.status_msg.set(f"⚠ {err}")
+            self.status_msg.set(err)
             self._clear_preview()
             return
         threading.Thread(target=self._do_preview_idfc, args=(filepath,), daemon=True).start()
@@ -537,7 +744,7 @@ class App:
     def render_process_equitas(self):
         header = tk.Frame(self.content, bg="#F8FAFC")
         header.pack(fill=tk.X)
-        tk.Label(header, text="Engine Dashboard", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
+        tk.Label(header, text="Generate Reports", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
         tk.Label(header, text="Equitas Small Finance Bank", font=("Inter", 14, "bold"), bg="#FEF3C7", fg="#92400E", padx=10, pady=5).pack(side=tk.RIGHT)
 
         # Stage Selector
@@ -552,11 +759,15 @@ class App:
             self.render_tab()
 
         for s in ["STAGE 1", "STAGE 2"]:
-            tk.Radiobutton(stage_box, text=s, variable=self.equitas_stage_var, value=s,
+            rb = tk.Radiobutton(stage_box, text=s, variable=self.equitas_stage_var, value=s,
                            bg="#FFFFFF", font=("Inter", 11, "bold" if self.equitas_stage_var.get() == s else "normal"),
                            selectcolor="#FFFFFF", activebackground="#FFFFFF", indicatoron=0,
                            fg=self.get_theme_color("primary") if self.equitas_stage_var.get() == s else "#64748B",
-                           relief="flat", padx=20, pady=5, command=switch_stage).pack(side=tk.LEFT)
+                           relief="flat", padx=20, pady=5, command=switch_stage)
+            rb.pack(side=tk.LEFT)
+            stage_tips = {"STAGE 1": "Generate branch-level PDFs and Excel templates from master data",
+                          "STAGE 2": "Consolidate audited Stage 1 Excel into a final account-level report"}
+            ToolTip(rb, stage_tips.get(s, ""))
 
         # Panel
         self.panel = tk.Frame(self.content, bg="#FFFFFF", padx=30, pady=25, highlightthickness=1, highlightbackground="#E2E8F0")
@@ -566,7 +777,7 @@ class App:
 
         if stage == "STAGE 1":
             tk.Label(self.panel, text="Stage 1: Generate Branch Audits & Excels", font=("Inter", 12, "bold"), bg="#FFFFFF", fg="#0F172A").pack(anchor="w", pady=(0, 15))
-            self.create_input(self.panel, "Master Source Excel (Normal + JSR sheets)", self.file_var, self.browse_in_equitas_s1, "SELECT FILE")
+            self.create_input(self.panel, "Source Excel (Normal + JSR sheets)", self.file_var, self.browse_in_equitas_s1, "Browse...")
 
             # --- Format & Packaging options ---
             eq_cfg_frame = tk.Frame(self.panel, bg="#FFFFFF")
@@ -575,10 +786,13 @@ class App:
             format_frame = tk.Frame(eq_cfg_frame, bg="#FFFFFF")
             format_frame.pack(side=tk.LEFT)
             tk.Label(format_frame, text="Output Format:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
+            fmt_tips = {"PDF ONLY": "Generate only PDF audit worksheets", "EXCEL ONLY": "Generate only Excel templates with formulas", "BOTH": "Generate both PDF and Excel outputs"}
             for m in ["PDF ONLY", "EXCEL ONLY", "BOTH"]:
-                tk.Radiobutton(format_frame, text=m, variable=self.equitas_format_var, value=m,
+                rb = tk.Radiobutton(format_frame, text=m, variable=self.equitas_format_var, value=m,
                                bg="#FFFFFF", font=("Inter", 10), selectcolor="#FFFFFF",
-                               padx=10, command=lambda: set_config("equitas_format", self.equitas_format_var.get())).pack(side=tk.LEFT)
+                               padx=10, command=lambda: set_config("equitas_format", self.equitas_format_var.get()))
+                rb.pack(side=tk.LEFT)
+                ToolTip(rb, fmt_tips[m])
 
             pack_frame = tk.Frame(eq_cfg_frame, bg="#FFFFFF")
             pack_frame.pack(side=tk.RIGHT)
@@ -598,9 +812,17 @@ class App:
             )
             self.equitas_pack_combo.pack(side=tk.LEFT)
             self.equitas_pack_combo.bind("<<ComboboxSelected>>", lambda e: set_config("equitas_pack", self.equitas_pack_var.get()))
+            ToolTip(self.equitas_pack_combo, "Choose how to package the generated output files")
         else:
             tk.Label(self.panel, text="Stage 2: Consolidate Audited Excels", font=("Inter", 12, "bold"), bg="#FFFFFF", fg="#0F172A").pack(anchor="w", pady=(0, 15))
-            self.create_input(self.panel, "Audited Stage 1 Excel", self.file_var, self.browse_in_equitas_s2, "SELECT FILE")
+            self.create_input(self.panel, "Audited Stage 1 Excel", self.file_var, self.browse_in_equitas_s2, "Browse...")
+
+        self.validate_label = tk.Label(self.panel, text="", font=("Inter", 10), bg="#FFFFFF")
+        self.validate_label.pack(anchor="w", pady=(0, 5))
+
+        self.recent_frame = tk.Frame(self.panel, bg="#FFFFFF")
+        self.recent_frame.pack(fill=tk.X, pady=(0, 5))
+        self._refresh_recent_files()
 
         self.preview_frame = tk.Frame(self.panel, bg="#FFFFFF")
         self.preview_frame.pack(fill=tk.X)
@@ -613,7 +835,7 @@ class App:
 
         tk.Frame(self.panel, bg="#E2E8F0", height=1).pack(fill=tk.X, pady=15)
 
-        self.create_input(self.panel, "Output Directory", self.folder_var, self.browse_out, "CHANGE LOCATION")
+        self.create_input(self.panel, "Output Directory", self.folder_var, self.browse_out, "Browse...")
 
         cfg_row = tk.Frame(self.panel, bg="#FFFFFF")
         cfg_row.pack(fill=tk.X, pady=(0, 5))
@@ -624,38 +846,72 @@ class App:
         btn_row = tk.Frame(self.panel, bg="#FFFFFF")
         btn_row.pack(fill=tk.X, pady=(15, 10))
 
-        btn_text = "START GENERATION (STAGE 1)" if stage == "STAGE 1" else "START CONSOLIDATION (STAGE 2)"
+        btn_text = "Generate (Stage 1)" if stage == "STAGE 1" else "Consolidate (Stage 2)"
 
         self.btn_run = tk.Button(btn_row, text=btn_text, font=("Inter", 14, "bold"),
                                  bg=self.get_theme_color("primary"), fg="#FFFFFF", relief="flat", padx=50, pady=12,
                                  cursor="hand2", activebackground=self.get_theme_color("primary_hover"),
                                  command=self.start_process_equitas)
         self.btn_run.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        ToolTip(self.btn_run, f"Run Equitas {stage} processing")
 
-        self.btn_cancel = tk.Button(btn_row, text="⏹ CANCEL", font=("Inter", 11, "bold"),
+        self.btn_cancel = tk.Button(btn_row, text="Stop", font=("Inter", 11, "bold"),
                                     bg="#DC2626", fg="#FFFFFF", relief="flat", padx=25, pady=12,
                                     cursor="hand2", activebackground="#B91C1C",
                                     state=tk.DISABLED, command=self.cancel_process)
         self.btn_cancel.pack(side=tk.RIGHT)
+        ToolTip(self.btn_cancel, "Stop the current generation")
 
-        self.progress = ttk.Progressbar(self.panel, variable=self.progress_var, maximum=100)
-        self.progress.pack(fill=tk.X, pady=(0, 5))
+        prog_row = tk.Frame(self.panel, bg="#FFFFFF")
+        prog_row.pack(fill=tk.X, pady=(0, 5))
+        self.progress = ttk.Progressbar(prog_row, variable=self.progress_var, maximum=100)
+        self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.prog_label = tk.Label(prog_row, text="0%", font=("Inter", 9, "bold"),
+                                   bg="#FFFFFF", fg="#64748B", width=6, anchor="e")
+        self.prog_label.pack(side=tk.RIGHT, padx=(10, 0))
+        self.branch_label = tk.Label(self.panel, text="", font=("Inter", 9, "italic"),
+                                     bg="#FFFFFF", fg="#64748B", anchor="w")
+        self.branch_label.pack(fill=tk.X, pady=(0, 5))
 
         self.render_console()
 
     def browse_in_equitas_s1(self):
         f = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
         if f:
+            _add_recent_file(f)
+            detected = _detect_bank_from_file(f)
+            if detected and detected != self.bank_var.get():
+                self.bank_var.set(detected)
+                self.on_bank_change(preserve_file=f)
+                return
             self.file_var.set(f)
             self.status_msg.set(f"Loaded: {os.path.basename(f)}")
+            valid, info = equitas_logic.validate_equitas_stage1_file(f)
+            if valid:
+                self.validate_label.config(text="Valid file — sheet pairs found", fg="#16A34A")
+            else:
+                self.validate_label.config(text=info, fg="#DC2626")
             self._preview_file_equitas_s1(f)
+            self._refresh_recent_files()
 
     def browse_in_equitas_s2(self):
         f = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
         if f:
+            _add_recent_file(f)
+            detected = _detect_bank_from_file(f)
+            if detected and detected != self.bank_var.get():
+                self.bank_var.set(detected)
+                self.on_bank_change(preserve_file=f)
+                return
             self.file_var.set(f)
             self.status_msg.set(f"Loaded: {os.path.basename(f)}")
+            valid, info = equitas_logic.validate_equitas_stage2_file(f)
+            if valid:
+                self.validate_label.config(text="Valid file — required columns found", fg="#16A34A")
+            else:
+                self.validate_label.config(text=info, fg="#DC2626")
             self._preview_file_equitas_s2(f)
+            self._refresh_recent_files()
 
     def _preview_file_equitas_s1(self, filepath):
         threading.Thread(target=self._do_preview_equitas_s1, args=(filepath,), daemon=True).start()
@@ -663,7 +919,7 @@ class App:
     def _do_preview_equitas_s1(self, filepath):
         valid, info_or_err = equitas_logic.validate_equitas_stage1_file(filepath)
         if not valid:
-            self.root.after(0, lambda: self.status_msg.set(f"⚠ {info_or_err}"))
+            self.root.after(0, lambda: self.status_msg.set(info_or_err))
             self.root.after(0, self._clear_preview)
         else:
             pairs = info_or_err["sheet_pairs"]
@@ -677,7 +933,7 @@ class App:
     def _do_preview_equitas_s2(self, filepath):
         valid, info_or_err = equitas_logic.validate_equitas_stage2_file(filepath)
         if not valid:
-            self.root.after(0, lambda: self.status_msg.set(f"⚠ {info_or_err}"))
+            self.root.after(0, lambda: self.status_msg.set(info_or_err))
             self.root.after(0, self._clear_preview)
         else:
             rows = info_or_err["row_count"]
@@ -692,8 +948,8 @@ class App:
         info = tk.Frame(self.preview_frame, bg="#F0FDF4", padx=15, pady=8,
                         highlightthickness=1, highlightbackground="#86EFAC")
         info.pack(fill=tk.X, pady=(5, 0))
-        tk.Label(info, text="✓", font=("Inter", 14, "bold"), bg="#F0FDF4", fg="#16A34A").pack(side=tk.LEFT)
-        tk.Label(info, text=f"  Info: {title_info}   |   Rows: {row_count:,}   |   {count_label.title()}: {count:,}",
+        tk.Label(info, text="File loaded:", font=("Inter", 10, "bold"), bg="#F0FDF4", fg="#16A34A").pack(side=tk.LEFT)
+        tk.Label(info, text=f" {title_info}   |   Rows: {row_count:,}   |   {count_label.title()}: {count:,}",
                  font=("Inter", 10), bg="#F0FDF4", fg="#15803D").pack(side=tk.LEFT, padx=(5, 0))
         self.status_msg.set(f"Ready — {row_count:,} rows, {count:,} {count_label}")
 
@@ -701,12 +957,57 @@ class App:
         if hasattr(self, 'preview_frame'):
             for w in self.preview_frame.winfo_children():
                 w.destroy()
+        if hasattr(self, 'validate_label'):
+            self.validate_label.config(text="")
+
+    def _refresh_recent_files(self):
+        if not hasattr(self, 'recent_frame'):
+            return
+        for w in self.recent_frame.winfo_children():
+            w.destroy()
+        files = _get_recent_files()
+        if files:
+            tk.Label(self.recent_frame, text="Recent:", font=("Inter", 8, "bold"),
+                     bg="#FFFFFF", fg="#94A3B8").pack(side=tk.LEFT, padx=(0, 8))
+            for f in files[:5]:
+                short = os.path.basename(f)
+                btn = tk.Button(self.recent_frame, text=short, font=("Inter", 8),
+                                bg="#F1F5F9", fg="#2563EB", relief="flat",
+                                padx=8, cursor="hand2",
+                                command=lambda path=f: self._load_recent_file(path))
+                btn.pack(side=tk.LEFT, padx=2)
+                ToolTip(btn, f"Load: {f}")
+
+    def _load_recent_file(self, f):
+        self.file_var.set(f)
+        self.status_msg.set(f"Loaded: {os.path.basename(f)}")
+        self._clear_preview()
+        bank = self.bank_var.get()
+        if bank == "IDFC First Bank":
+            valid, err = pdf_logic.validate_excel(f)
+            self.validate_label.config(text="Valid file — all required columns found" if valid else err,
+                                       fg="#16A34A" if valid else "#DC2626")
+            self._preview_file_idfc(f)
+        else:
+            stage = self.equitas_stage_var.get()
+            if stage == "STAGE 1":
+                valid, info = equitas_logic.validate_equitas_stage1_file(f)
+                self.validate_label.config(text="Valid file — sheet pairs found" if valid else info,
+                                           fg="#16A34A" if valid else "#DC2626")
+                self._preview_file_equitas_s1(f)
+            else:
+                valid, info = equitas_logic.validate_equitas_stage2_file(f)
+                self.validate_label.config(text="Valid file — required columns found" if valid else info,
+                                           fg="#16A34A" if valid else "#DC2626")
+                self._preview_file_equitas_s2(f)
 
     def render_console(self):
         con_hdr = tk.Frame(self.content, bg="#F8FAFC")
         con_hdr.pack(fill=tk.X, pady=(15, 5))
-        tk.Label(con_hdr, text="ENGINE CONSOLE LOGS", font=("Inter", 9, "bold"), bg="#F8FAFC", fg="#94A3B8").pack(side=tk.LEFT)
-        tk.Button(con_hdr, text="📋 Copy Logs", font=("Inter", 8, "bold"), bg="#F1F5F9", relief="flat", padx=10, command=self.copy_logs).pack(side=tk.RIGHT)
+        tk.Label(con_hdr, text="Console Logs", font=("Inter", 9, "bold"), bg="#F8FAFC", fg="#94A3B8").pack(side=tk.LEFT)
+        copy_btn = tk.Button(con_hdr, text="Copy", font=("Inter", 8, "bold"), bg="#F1F5F9", relief="flat", padx=10, command=self.copy_logs)
+        copy_btn.pack(side=tk.RIGHT)
+        ToolTip(copy_btn, "Copy all console logs to clipboard")
 
         self.log_area = scrolledtext.ScrolledText(self.content, height=8, bg="#1E293B", fg="#10B981",
                                                   borderwidth=0, font=("Menlo", 10), padx=20, pady=20)
@@ -725,7 +1026,9 @@ class App:
         header = tk.Frame(self.content, bg="#F8FAFC")
         header.pack(fill=tk.X, pady=(0, 40))
         tk.Label(header, text="Insight Analytics", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
-        tk.Button(header, text="↻ Refresh", font=("Inter", 10), bg="#F1F5F9", relief="flat", command=lambda: self.render_tab()).pack(side=tk.RIGHT)
+        refresh_btn = tk.Button(header, text="Refresh", font=("Inter", 10), bg="#F1F5F9", relief="flat", command=lambda: self.render_tab())
+        refresh_btn.pack(side=tk.RIGHT)
+        ToolTip(refresh_btn, "Refresh analytics data")
 
         types, trend = get_analytics()
         grid = tk.Frame(self.content, bg="#F8FAFC")
@@ -733,7 +1036,7 @@ class App:
 
         dist_card = tk.Frame(grid, bg="#FFFFFF", padx=40, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
         dist_card.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
-        tk.Label(dist_card, text="AUDIT TYPE DISTRIBUTION", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 30))
+        tk.Label(dist_card, text="Audit Type Distribution", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 30))
 
         total = sum(types.values()) if types else 0
         for t in ["POA", "TAF", "Equitas-S1", "Equitas-S2"]:
@@ -749,7 +1052,7 @@ class App:
 
         trend_card = tk.Frame(grid, bg="#FFFFFF", padx=40, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
         trend_card.grid(row=0, column=1, sticky="nsew")
-        tk.Label(trend_card, text="DAILY ACTIVITY (7 DAYS)", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 30))
+        tk.Label(trend_card, text="Daily Activity (7 Days)", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 30))
         if trend:
             for d, c in trend:
                 r = tk.Frame(trend_card, bg="#FFFFFF", pady=8)
@@ -765,7 +1068,7 @@ class App:
     def render_history(self):
         header = tk.Frame(self.content, bg="#F8FAFC")
         header.pack(fill=tk.X, pady=(0, 30))
-        tk.Label(header, text="Generation Logs", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
+        tk.Label(header, text="History", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(side=tk.LEFT)
 
         search_f = tk.Frame(self.content, bg="#F8FAFC")
         search_f.pack(fill=tk.X, pady=(0, 25))
@@ -797,21 +1100,76 @@ class App:
 
         btn_bar = tk.Frame(self.content, bg="#F8FAFC", pady=30)
         btn_bar.pack(fill=tk.X)
-        tk.Button(btn_bar, text="📂 Open Folder", bg=self.get_theme_color("primary"), fg="#FFFFFF", font=("Inter", 11, "bold"),
-                  relief="flat", padx=35, pady=15, command=self.open_sel).pack(side=tk.LEFT)
-        tk.Button(btn_bar, text="📑 Export Excel", bg="#059669", fg="#FFFFFF", font=("Inter", 11, "bold"),
-                  relief="flat", padx=35, pady=15, command=self.export_history).pack(side=tk.RIGHT)
+        open_btn = tk.Button(btn_bar, text="Open Folder", bg=self.get_theme_color("primary"), fg="#FFFFFF", font=("Inter", 11, "bold"),
+                  relief="flat", padx=30, pady=12, command=self.open_sel)
+        open_btn.pack(side=tk.LEFT)
+        ToolTip(open_btn, "Open output folder of selected entry")
+        export_btn = tk.Button(btn_bar, text="Export to Excel", bg="#059669", fg="#FFFFFF", font=("Inter", 11, "bold"),
+                  relief="flat", padx=30, pady=12, command=self.export_history)
+        export_btn.pack(side=tk.RIGHT)
+        ToolTip(export_btn, "Export history to Excel spreadsheet")
 
     def render_settings(self):
-        tk.Label(self.content, text="System Settings", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(anchor="w", pady=(0, 40))
+        tk.Label(self.content, text="Settings", font=("Inter", 28, "bold"), bg="#F8FAFC", fg="#0F172A").pack(anchor="w", pady=(0, 40))
 
-        card = tk.Frame(self.content, bg="#FFFFFF", padx=50, pady=50, highlightthickness=1, highlightbackground="#E2E8F0")
+        # --- Naming Configuration ---
+        naming_card = tk.Frame(self.content, bg="#FFFFFF", padx=50, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
+        naming_card.pack(fill=tk.X, pady=(0, 20))
+        tk.Label(naming_card, text="Output Naming", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 15))
+        tk.Label(naming_card, text="Pattern:  {branch} = branch name,  {type} = audit type", font=("Inter", 9), bg="#FFFFFF", fg="#94A3B8").pack(anchor="w")
+        naming_row = tk.Frame(naming_card, bg="#FFFFFF")
+        naming_row.pack(fill=tk.X, pady=(10, 5))
+        self.naming_var = tk.StringVar(value=get_config("naming_pattern", "{branch}_{type}"))
+        tk.Entry(naming_row, textvariable=self.naming_var, font=("Inter", 12), bg="#F8FAFC", relief="flat",
+                 highlightthickness=1, highlightbackground="#E2E8F0").pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, padx=(0, 15))
+        def save_naming():
+            set_config("naming_pattern", self.naming_var.get())
+            self.status_msg.set("Naming pattern saved!")
+            self.root.after(2000, lambda: self.status_msg.set("Ready"))
+        save_btn = tk.Button(naming_row, text="Save", font=("Inter", 10, "bold"), bg=self.get_theme_color("primary"),
+                             fg="#FFFFFF", relief="flat", padx=25, pady=8, command=save_naming)
+        save_btn.pack(side=tk.LEFT)
+        ToolTip(save_btn, "Save custom output file naming pattern")
+        preview_naming = f"e.g. {self.naming_var.get().replace('{branch}', 'BRANCH_A').replace('{type}', 'POA')}.pdf"
+        tk.Label(naming_card, text=preview_naming, font=("Inter", 9, "italic"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(5, 0))
+
+        # --- Default Preferences ---
+        prefs_card = tk.Frame(self.content, bg="#FFFFFF", padx=50, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
+        prefs_card.pack(fill=tk.X, pady=(0, 20))
+        tk.Label(prefs_card, text="Default Preferences", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 15))
+
+        # Auto-open default
+        auto_row = tk.Frame(prefs_card, bg="#FFFFFF")
+        auto_row.pack(fill=tk.X, pady=8)
+        self.auto_open_saved = tk.BooleanVar(value=get_config("auto_open", "True") == "True")
+        tk.Checkbutton(auto_row, text="Auto-open destination folder after generation", variable=self.auto_open_saved,
+                       bg="#FFFFFF", font=("Inter", 10), activebackground="#FFFFFF",
+                       command=lambda: set_config("auto_open", str(self.auto_open_saved.get()))).pack(side=tk.LEFT)
+        ToolTip(auto_row, "When checked, the output folder opens automatically after each generation")
+
+        # Recent files control
+        recent_row = tk.Frame(prefs_card, bg="#FFFFFF")
+        recent_row.pack(fill=tk.X, pady=8)
+        tk.Label(recent_row, text=f"Recent files: {len(_get_recent_files())} saved", font=("Inter", 10),
+                 bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT, padx=(0, 15))
+        def clear_recent():
+            for i in range(MAX_RECENT_FILES):
+                set_config(f"recent_file_{i}", "")
+            self.status_msg.set("Recent files cleared")
+            self.render_tab()
+        tk.Button(recent_row, text="Clear Recent Files", font=("Inter", 9, "bold"), bg="#F1F5F9", fg="#E11D48",
+                  relief="flat", padx=16, pady=6, command=clear_recent).pack(side=tk.LEFT)
+
+        # --- Database Management ---
+        card = tk.Frame(self.content, bg="#FFFFFF", padx=50, pady=40, highlightthickness=1, highlightbackground="#E2E8F0")
         card.pack(fill=tk.X)
-        tk.Label(card, text="DATABASE MANAGEMENT", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 20))
+        tk.Label(card, text="Database Management", font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#64748B").pack(anchor="w", pady=(0, 20))
         tk.Label(card, text=f"DB: {DB_PATH}", font=("Inter", 10), bg="#FFFFFF", fg="#94A3B8").pack(anchor="w", pady=(5, 5))
         tk.Label(card, text=f"Log: {LOG_FILE}", font=("Inter", 10), bg="#FFFFFF", fg="#94A3B8").pack(anchor="w", pady=(0, 30))
-        tk.Button(card, text="🗑 CLEAR HISTORY", font=("Inter", 10, "bold"), bg="#F1F5F9", fg="#E11D48",
-                  relief="flat", padx=30, pady=15, command=self.clear_history).pack(anchor="w")
+        clear_btn = tk.Button(card, text="Clear History", font=("Inter", 10, "bold"), bg="#F1F5F9", fg="#E11D48",
+                  relief="flat", padx=24, pady=10, command=self.clear_history)
+        clear_btn.pack(anchor="w")
+        ToolTip(clear_btn, "Delete all history records")
 
     # ---------------------------------------------------------
     # HELPERS
@@ -837,20 +1195,36 @@ class App:
             tk.Label(parent, text=label, font=("Inter", 11, "bold"), bg="#FFFFFF", fg="#1E293B").pack(anchor="w")
         row = tk.Frame(parent, bg="#FFFFFF")
         row.pack(fill=tk.X, pady=(8, 8))
-        tk.Entry(row, textvariable=var, font=("Inter", 12), bg="#F8FAFC", relief="flat",
-                 highlightthickness=1, highlightbackground="#E2E8F0").pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, padx=(0, 20))
-        tk.Button(row, text=btn_txt, font=("Inter", 10, "bold"), bg="#F1F5F9", relief="flat",
-                  padx=25, pady=8, command=cmd).pack(side=tk.LEFT)
+        entry = tk.Entry(row, textvariable=var, font=("Inter", 12), bg="#F8FAFC", relief="flat",
+                 highlightthickness=1, highlightbackground="#E2E8F0")
+        entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, padx=(0, 20))
+        btn = tk.Button(row, text=btn_txt, font=("Inter", 10, "bold"), bg="#F1F5F9", relief="flat",
+                  padx=20, pady=8, command=cmd)
+        btn.pack(side=tk.LEFT)
+        btn_tips = {
+            "SELECT FILE": "Open file browser",
+            "Browse...": "Open file browser",
+            "CHANGE LOCATION": "Choose output folder",
+        }
+        ToolTip(btn, btn_tips.get(btn_txt, ""))
+        return entry
 
-    def log(self, msg):
-        self.log_queue.put(msg)
-        file_logger.info(msg)
+    def log(self, msg, level="INFO"):
+        self.log_queue.put((msg, level))
+        log_map = {"INFO": file_logger.info, "OK": file_logger.info, "WARN": file_logger.warning, "ERROR": file_logger.error}
+        log_map.get(level, file_logger.info)(msg)
 
     def check_log_queue(self):
         while not self.log_queue.empty():
-            msg = self.log_queue.get()
+            item = self.log_queue.get()
+            msg, level = item if isinstance(item, tuple) else (item, "INFO")
             try:
-                self.log_area.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] » {msg}\n")
+                tag = f"log_{level}"
+                if tag not in self.log_area.tag_names():
+                    self.log_area.tag_configure(tag, foreground=LOG_COLORS.get(level, "#10B981"))
+                prefix = {"WARN": "[WARN] ", "ERROR": "[ERR] ", "OK": "", "INFO": ""}.get(level, "")
+                self.log_area.insert(tk.END,
+                    f"[{datetime.now().strftime('%H:%M:%S')}] {prefix}{msg}\n", tag)
                 self.log_area.see(tk.END)
             except (tk.TclError, AttributeError):
                 pass
@@ -862,7 +1236,7 @@ class App:
             self.root.clipboard_clear()
             self.root.clipboard_append(logs)
             self.status_msg.set("Logs copied to clipboard!")
-            self.root.after(2000, lambda: self.status_msg.set("System Ready"))
+            self.root.after(2000, lambda: self.status_msg.set("Ready"))
         except (tk.TclError, AttributeError):
             pass
 
@@ -899,13 +1273,23 @@ class App:
             except Exception as e:
                 messagebox.showerror("Export Error", str(e))
 
+    def _on_close(self):
+        if self.btn_run and self.btn_run.cget("state") == tk.DISABLED:
+            if not messagebox.askyesno("Exit?", "A generation is in progress. Exit anyway? Partial results may be lost."):
+                return
+            self.cancel_event.set()
+        self.root.destroy()
+
     def cancel_process(self):
+        if not messagebox.askyesno("Confirm Cancel", "Are you sure you want to stop the current generation?\nPartial results will be saved."):
+            return
         self.cancel_event.set()
-        self.btn_cancel.config(state=tk.DISABLED, text="CANCELLING...")
-        self.log("⚠ Cancel requested — stopping safely...")
+        self.btn_cancel.config(state=tk.DISABLED, text="Stop")
+        self.log("Cancel requested — stopping safely...", "WARN")
 
     def update_progress(self, val):
         self.root.after(0, lambda: self.progress_var.set(val))
+        self.root.after(0, lambda: self.prog_label.config(text=f"{int(val)}%"))
 
     # ---------------------------------------------------------
     # PROCESS ENGINE - IDFC
@@ -927,15 +1311,15 @@ class App:
             return messagebox.showerror("Output Error", err)
 
         self.cancel_event.clear()
-        self.btn_run.config(state=tk.DISABLED, text="ENGINE BUSY...")
-        self.btn_cancel.config(state=tk.NORMAL, text="⏹ CANCEL")
+        self.btn_run.config(state=tk.DISABLED, text="Processing...")
+        self.btn_cancel.config(state=tk.NORMAL, text="Stop")
         set_config("auto_open", str(self.auto_open.get()))
         try:
             self.log_area.delete(1.0, tk.END)
         except (tk.TclError, AttributeError):
             pass
         self.progress_var.set(0)
-        self.status_msg.set("Processing Batch...")
+        self.status_msg.set("Processing...")
 
         threading.Thread(target=self.worker_idfc, args=(inp, out, typ), daemon=True).start()
 
@@ -960,9 +1344,14 @@ class App:
             needs_zip = self.pkg_var.get() in ("ZIP ONLY", "BOTH")
             pdf_pct_max = 90.0 if needs_zip else 100.0
 
+            # ETA tracking
+            import time as _time
+            _start_time = _time.time()
+            _per_item_times = []
+
             for c, br in sorted(groups.items()):
                 if self.cancel_event.is_set():
-                    self.log(f"⚠ CANCELLED by user after {count}/{total} branches.")
+                    self.log(f"CANCELLED by user after {count}/{total} branches.", "WARN")
                     break
 
                 name = str(br[0].get("CurrentBranchName", "Branch")).strip()
@@ -970,9 +1359,17 @@ class App:
                 safe_name = "".join(x for x in name if x.isalnum() or x in " -_").strip()
                 if not safe_name:
                     safe_name = str(c)
-                path = os.path.join(out, f"{safe_name}_{typ}.pdf")
+                naming_pattern = get_config("naming_pattern", "{branch}_{type}")
+                branch_part = safe_name
+                type_part = typ
+                filename = naming_pattern.replace("{branch}", branch_part).replace("{type}", type_part)
+                filename = "".join(x for x in filename if x.isalnum() or x in " -_.").strip()
+                if not filename.endswith(".pdf"):
+                    filename += ".pdf"
+                path = os.path.join(out, filename)
                 path = os.path.abspath(os.path.normpath(path))
 
+                self.root.after(0, lambda n=safe_name: self.branch_label.config(text=f"▶ Building: {n}"))
                 self.log(f"Building: {safe_name}")
                 pdf_logic.generate_pdf(typ, c, name, st, br, path)
                 count += 1
@@ -980,11 +1377,22 @@ class App:
                 prog = (count / total) * pdf_pct_max
                 self.update_progress(prog)
 
+                # ETA calculation
+                elapsed = _time.time() - _start_time
+                _per_item_times.append(elapsed / count)
+                avg_time = sum(_per_item_times) / len(_per_item_times)
+                remaining = avg_time * (total - count)
+                if remaining > 60:
+                    self.status_msg.set(f"Processing {count}/{total} — ~{int(remaining//60)}m {int(remaining%60)}s remaining")
+                else:
+                    self.status_msg.set(f"Processing {count}/{total} — ~{int(remaining)}s remaining")
+
+            self.root.after(0, lambda: self.branch_label.config(text=""))
             was_cancelled = self.cancel_event.is_set()
 
             if not was_cancelled:
                 log_generation(excel_name, count, out, typ)
-                self.log(f"SUCCESS: {count} Reports Created.")
+                self.log(f"SUCCESS: {count} Reports Created.", "OK")
 
                 mode = self.pkg_var.get()
                 zip_path = f"{out}.zip"
@@ -998,9 +1406,9 @@ class App:
                                 for file in files:
                                     zipf.write(os.path.join(root_dir, file), file)
                         self.update_progress(97)
-                        self.log(f"ZIP READY: {os.path.basename(zip_path)}")
+                        self.log(f"ZIP READY: {os.path.basename(zip_path)}", "OK")
                     except OSError as ze:
-                        self.log(f"Zip Error: {ze}")
+                        self.log(f"Zip Error: {ze}", "ERROR")
 
                 if mode == "ZIP ONLY":
                     try:
@@ -1008,7 +1416,7 @@ class App:
                         import shutil
                         shutil.rmtree(out)
                     except OSError as re:
-                        self.log(f"Cleanup Error: {re}")
+                        self.log(f"Cleanup Error: {re}", "ERROR")
 
                 self.update_progress(100)
 
@@ -1023,13 +1431,13 @@ class App:
                 self.root.after(0, lambda: messagebox.showwarning("Cancelled", f"Stopped after {count}/{total} branches."))
 
         except Exception as e:
-            self.log(f"FAILURE: {e}")
-            file_logger.exception("Worker failed")
+            self.log(f"FAILURE: {e}", "ERROR")
             self.root.after(0, lambda: messagebox.showerror("Failure", str(e)))
         finally:
+            self.root.after(0, lambda: self.branch_label.config(text=""))
             self.root.after(0, lambda: self.btn_run.config(state=tk.NORMAL, text="START GENERATION ENGINE"))
-            self.root.after(0, lambda: self.btn_cancel.config(state=tk.DISABLED, text="⏹ CANCEL"))
-            self.root.after(0, lambda: self.status_msg.set("System Ready"))
+            self.root.after(0, lambda: self.btn_cancel.config(state=tk.DISABLED, text="Stop"))
+            self.root.after(0, lambda: self.status_msg.set("Ready"))
             self.root.after(0, self.refresh_history)
             self.cancel_event.clear()
 
@@ -1060,8 +1468,8 @@ class App:
             return messagebox.showerror("Output Error", err)
 
         self.cancel_event.clear()
-        self.btn_run.config(state=tk.DISABLED, text="ENGINE BUSY...")
-        self.btn_cancel.config(state=tk.NORMAL, text="⏹ CANCEL")
+        self.btn_run.config(state=tk.DISABLED, text="Processing...")
+        self.btn_cancel.config(state=tk.NORMAL, text="Stop")
         set_config("auto_open", str(self.auto_open.get()))
         try:
             self.log_area.delete(1.0, tk.END)
@@ -1089,15 +1497,18 @@ class App:
             if stage == "STAGE 1":
                 fmt = self.equitas_format_var.get()
                 pack = self.equitas_pack_var.get()
+                import time as _time
+                _eqs1_start = _time.time()
                 pdf_c, exc_c = equitas_logic.run_equitas_stage1(
                     inp, out, self.log, self.cancel_event, self.update_progress,
                     output_format=fmt, output_mode=pack
                 )
+                _eqs1_elapsed = _time.time() - _eqs1_start
                 was_cancelled = self.cancel_event.is_set()
 
                 if not was_cancelled:
                     log_generation(excel_name, pdf_c + exc_c, out, "Equitas-S1")
-                    self.log(f"SUCCESS: {pdf_c} PDFs, {exc_c} Excels created.")
+                    self.log(f"SUCCESS: {pdf_c} PDFs, {exc_c} Excels created. ({_eqs1_elapsed:.1f}s)", "OK")
                     self.update_progress(100)
 
                     if self.auto_open.get():
@@ -1116,7 +1527,7 @@ class App:
 
                 if not was_cancelled and out_path:
                     log_generation(excel_name, 1, out_path, "Equitas-S2")
-                    self.log(f"SUCCESS: Consolidated report created.")
+                    self.log("SUCCESS: Consolidated report created.", "OK")
                     self.update_progress(100)
 
                     if self.auto_open.get():
@@ -1128,14 +1539,13 @@ class App:
                     self.root.after(0, lambda: messagebox.showwarning("Cancelled", "Stage 2 Consolidation Cancelled."))
 
         except Exception as e:
-            self.log(f"FAILURE: {e}")
-            file_logger.exception("Equitas Worker failed")
+            self.log(f"FAILURE: {e}", "ERROR")
             self.root.after(0, lambda: messagebox.showerror("Failure", str(e)))
         finally:
             btn_text = "START GENERATION (STAGE 1)" if stage == "STAGE 1" else "START CONSOLIDATION (STAGE 2)"
             self.root.after(0, lambda: self.btn_run.config(state=tk.NORMAL, text=btn_text))
-            self.root.after(0, lambda: self.btn_cancel.config(state=tk.DISABLED, text="⏹ CANCEL"))
-            self.root.after(0, lambda: self.status_msg.set("System Ready"))
+            self.root.after(0, lambda: self.btn_cancel.config(state=tk.DISABLED, text="Stop"))
+            self.root.after(0, lambda: self.status_msg.set("Ready"))
             self.root.after(0, self.refresh_history)
             self.cancel_event.clear()
 

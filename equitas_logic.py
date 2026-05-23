@@ -312,7 +312,7 @@ def build_master_dataframe(file_path, log_callback=print):
             jsr_sheet = sheets["jsr"]
 
             if not normal_sheet or not jsr_sheet:
-                log_callback(f"⚠ Skipping incomplete pair: {base}")
+                log_callback(f"Skipping incomplete pair: {base}")
                 continue
 
             try:
@@ -356,7 +356,7 @@ def build_master_dataframe(file_path, log_callback=print):
                 final_frames.append(merged)
 
             except Exception as e:
-                log_callback(f"⚠ Error processing {base}: {e}")
+                log_callback(f" Error processing {base}: {e}")
 
         if not final_frames:
             raise ValueError("No valid data found in any sheet pair.")
@@ -778,7 +778,7 @@ def run_equitas_stage1(file_path, output_dir, log_callback=print, cancel_event=N
 
     for branch_name, branch_df in grouped:
         if cancel_event and cancel_event.is_set():
-            log_callback(f"⚠ CANCELLED after processing {pdf_count if output_format != 'EXCEL ONLY' else excel_count}/{total_branches} branches.")
+            log_callback(f" CANCELLED after processing {pdf_count if output_format != 'EXCEL ONLY' else excel_count}/{total_branches} branches.")
             break
 
         try:
@@ -786,12 +786,12 @@ def run_equitas_stage1(file_path, output_dir, log_callback=print, cancel_event=N
 
             if output_format in ("PDF ONLY", "BOTH"):
                 pdf_path = generate_branch_pdf(branch_name, branch_df, pdf_output_dir)
-                log_callback(f"  ✓ PDF: {os.path.basename(pdf_path)}")
+                log_callback(f"   PDF: {os.path.basename(pdf_path)}")
                 pdf_count += 1
 
             if output_format in ("EXCEL ONLY", "BOTH"):
                 excel_path = generate_branch_excel(branch_name, branch_df, excel_output_dir)
-                log_callback(f"  ✓ Excel: {os.path.basename(excel_path)}")
+                log_callback(f"   Excel: {os.path.basename(excel_path)}")
                 excel_count += 1
 
             if progress_callback:
@@ -803,7 +803,7 @@ def run_equitas_stage1(file_path, output_dir, log_callback=print, cancel_event=N
                 progress_callback((gen_count / expected_total) * pdf_pct_max)
 
         except Exception as e:
-            log_callback(f"  ✗ Error processing {branch_name}: {e}")
+            log_callback(f"   Error processing {branch_name}: {e}")
 
     was_cancelled = cancel_event and cancel_event.is_set()
 
@@ -831,13 +831,13 @@ def run_equitas_stage1(file_path, output_dir, log_callback=print, cancel_event=N
                 progress_callback(92)
             pdf_zip_path = f"{pdf_output_dir}.zip"
             zip_dir(pdf_output_dir, pdf_zip_path)
-            log_callback(f"✓ PDF ZIP created: {os.path.basename(pdf_zip_path)}")
+            log_callback(f" PDF ZIP created: {os.path.basename(pdf_zip_path)}")
             if delete_raw:
                 log_callback("Cleaning up raw PDFs...")
                 try:
                     shutil.rmtree(pdf_output_dir)
                 except OSError as re:
-                    log_callback(f"  ✗ Cleanup Error: {re}")
+                    log_callback(f"   Cleanup Error: {re}")
 
         if zip_excel and os.path.exists(excel_output_dir):
             log_callback("Compressing Excels...")
@@ -845,13 +845,13 @@ def run_equitas_stage1(file_path, output_dir, log_callback=print, cancel_event=N
                 progress_callback(96)
             excel_zip_path = f"{excel_output_dir}.zip"
             zip_dir(excel_output_dir, excel_zip_path)
-            log_callback(f"✓ Excel ZIP created: {os.path.basename(excel_zip_path)}")
+            log_callback(f" Excel ZIP created: {os.path.basename(excel_zip_path)}")
             if delete_raw:
                 log_callback("Cleaning up raw Excels...")
                 try:
                     shutil.rmtree(excel_output_dir)
                 except OSError as re:
-                    log_callback(f"  ✗ Cleanup Error: {re}")
+                    log_callback(f"   Cleanup Error: {re}")
 
     return pdf_count, excel_count
 
@@ -974,7 +974,7 @@ def consolidate_accounts(df, log_callback=print):
             sr_no += 1
 
         except Exception as e:
-            log_callback(f"⚠ Error processing account {acc_no}: {e}")
+            log_callback(f" Error processing account {acc_no}: {e}")
 
     return pd.DataFrame(rows)
 
@@ -1133,7 +1133,7 @@ def run_equitas_stage2(file_path, output_dir, log_callback=print, cancel_event=N
     log_callback(f"Loaded {len(df)} rows.")
 
     if cancel_event and cancel_event.is_set():
-        log_callback("⚠ CANCELLED before consolidation.")
+        log_callback(" CANCELLED before consolidation.")
         return None
 
     if progress_callback:
@@ -1147,12 +1147,12 @@ def run_equitas_stage2(file_path, output_dir, log_callback=print, cancel_event=N
         progress_callback(70)
 
     if cancel_event and cancel_event.is_set():
-        log_callback("⚠ CANCELLED before report generation.")
+        log_callback(" CANCELLED before report generation.")
         return None
 
     log_callback("Generating consolidated audit report...")
     output_path = generate_stage2_excel(file_path, consolidated_df, output_dir)
-    log_callback(f"✓ Report generated: {os.path.basename(output_path)}")
+    log_callback(f" Report generated: {os.path.basename(output_path)}")
 
     if progress_callback:
         progress_callback(100)
