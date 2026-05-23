@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Git pre-push hook — auto-bump version, build ZIP, create GitHub release
+# Git pre-push hook — auto-bump version, build source + binary ZIPs, create GitHub release
 set -euo pipefail
 
 REMOTE="$1"
@@ -46,35 +46,60 @@ with open('pdf_generator_ui.py') as f:
   echo "==> [pre-push] Committed v$NEW_VER"
 
   TAG="v${NEW_VER}"
-  ZIP="Audit_Engine_${TAG}.zip"
+  SRC_ZIP="Audit_Engine_${TAG}.zip"
+  BIN_ZIP="Audit_Engine_${TAG}_binary.zip"
 
+  # --- Build source distribution ---
   python3 create_distribution_zip.py
 
-  if [ ! -f "$ZIP" ]; then
-    echo "!!> [pre-push] Failed to create $ZIP"
+  if [ ! -f "$SRC_ZIP" ]; then
+    echo "!!> [pre-push] Failed to create $SRC_ZIP"
     exit 1
   fi
+  echo "==> [pre-push] Source ZIP built: $SRC_ZIP"
 
-  # Create tag locally
+  # --- Build compiled binary distribution ---
+  echo "==> [pre-push] Building compiled binary (PyInstaller)..."
+  rm -rf dist build
+  BUILD_VENV=$(mktemp -d)
+  python3 -m venv "$BUILD_VENV"
+  source "$BUILD_VENV/bin/activate"
+  pip install --quiet pyinstaller openpyxl pandas reportlab 2>/dev/null
+  if python -m PyInstaller --noconfirm --clean pdf_generator.spec 2>/dev/null; then
+    if [ -d "dist" ]; then
+      (cd dist && zip -r "../$BIN_ZIP" .)
+      echo "==> [pre-push] Binary ZIP built: $BIN_ZIP"
+    fi
+  else
+    echo "!!> [pre-push] PyInstaller build failed — continuing with source-only release"
+  fi
+  deactivate 2>/dev/null || true
+  rm -rf "$BUILD_VENV"
+
+  # --- Create tag and push it ---
   git tag "$TAG"
   echo "==> [pre-push] Created local tag $TAG"
-
-  # Push tag to remote so release can reference it
-  echo "==> [pre-push] Pushing tag ..."
   git push origin "$TAG"
 
+  # --- Create GitHub release with both assets ---
   echo "==> [pre-push] Creating GitHub release ..."
-  gh release create "$TAG" \
-    --title "$TAG" \
-    --notes "## Audit Engine ${NEW_VER}
+  RELEASE_NOTES="## Audit Engine ${NEW_VER}
 
 Auto-generated release.
 
 - Commit: $(git rev-parse --short HEAD)
-- ZIP: \`${ZIP}\`" \
-    "$ZIP"
+- \`${SRC_ZIP}\` — Source distribution (requires Python)
+- \`${BIN_ZIP}\` — Compiled binary (no Python needed)"
 
-  rm -f "$ZIP"
+  if [ -f "$BIN_ZIP" ]; then
+    gh release create "$TAG" --title "$TAG" --notes "$RELEASE_NOTES" "$SRC_ZIP" "$BIN_ZIP"
+  else
+    gh release create "$TAG" --title "$TAG" --notes "$RELEASE_NOTES" "$SRC_ZIP"
+  fi
+
+  # --- Clean up ---
+  rm -f "$SRC_ZIP" "$BIN_ZIP"
+  rm -rf dist build *.spec 2>/dev/null || true
 
   echo "==> [pre-push] Release $TAG published."
   echo "==> [pre-push] Push proceeding with version bump commit and tag."
