@@ -276,6 +276,8 @@ class App:
         self.auto_open = tk.BooleanVar(value=get_config("auto_open", "True") == "True")
         self.pkg_var = tk.StringVar(value=get_config("pkg_mode", "BOTH"))
         self.equitas_stage_var = tk.StringVar(value="STAGE 1")
+        self.equitas_format_var = tk.StringVar(value=get_config("equitas_format", "BOTH"))
+        self.equitas_pack_var = tk.StringVar(value=get_config("equitas_pack", "FOLDER"))
 
         self.progress_var = tk.DoubleVar(value=0)
         self.search_var = tk.StringVar()
@@ -565,6 +567,37 @@ class App:
         if stage == "STAGE 1":
             tk.Label(self.panel, text="Stage 1: Generate Branch Audits & Excels", font=("Inter", 12, "bold"), bg="#FFFFFF", fg="#0F172A").pack(anchor="w", pady=(0, 15))
             self.create_input(self.panel, "Master Source Excel (Normal + JSR sheets)", self.file_var, self.browse_in_equitas_s1, "SELECT FILE")
+
+            # --- Format & Packaging options ---
+            eq_cfg_frame = tk.Frame(self.panel, bg="#FFFFFF")
+            eq_cfg_frame.pack(fill=tk.X, pady=(0, 10))
+
+            format_frame = tk.Frame(eq_cfg_frame, bg="#FFFFFF")
+            format_frame.pack(side=tk.LEFT)
+            tk.Label(format_frame, text="Output Format:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT)
+            for m in ["PDF ONLY", "EXCEL ONLY", "BOTH"]:
+                tk.Radiobutton(format_frame, text=m, variable=self.equitas_format_var, value=m,
+                               bg="#FFFFFF", font=("Inter", 10), selectcolor="#FFFFFF",
+                               padx=10, command=lambda: set_config("equitas_format", self.equitas_format_var.get())).pack(side=tk.LEFT)
+
+            pack_frame = tk.Frame(eq_cfg_frame, bg="#FFFFFF")
+            pack_frame.pack(side=tk.RIGHT)
+            tk.Label(pack_frame, text="Packaging:", font=("Inter", 10, "bold"), bg="#FFFFFF", fg="#475569").pack(side=tk.LEFT, padx=(10, 5))
+            self.equitas_pack_combo = ttk.Combobox(
+                pack_frame, textvariable=self.equitas_pack_var,
+                values=[
+                    "FOLDER",
+                    "ZIP OF PDF",
+                    "ZIP OF EXCEL",
+                    "ZIP OF BOTH",
+                    "BOTH (FOLDER + ZIP OF PDF)",
+                    "BOTH (FOLDER + ZIP OF EXCEL)",
+                    "BOTH (FOLDER + ZIP OF BOTH)"
+                ],
+                state="readonly", font=("Inter", 10), width=28
+            )
+            self.equitas_pack_combo.pack(side=tk.LEFT)
+            self.equitas_pack_combo.bind("<<ComboboxSelected>>", lambda e: set_config("equitas_pack", self.equitas_pack_var.get()))
         else:
             tk.Label(self.panel, text="Stage 2: Consolidate Audited Excels", font=("Inter", 12, "bold"), bg="#FFFFFF", fg="#0F172A").pack(anchor="w", pady=(0, 15))
             self.create_input(self.panel, "Audited Stage 1 Excel", self.file_var, self.browse_in_equitas_s2, "SELECT FILE")
@@ -1054,8 +1087,11 @@ class App:
             self.log(f"Initializing Equitas {stage}: {excel_name}")
 
             if stage == "STAGE 1":
+                fmt = self.equitas_format_var.get()
+                pack = self.equitas_pack_var.get()
                 pdf_c, exc_c = equitas_logic.run_equitas_stage1(
-                    inp, out, self.log, self.cancel_event, self.update_progress
+                    inp, out, self.log, self.cancel_event, self.update_progress,
+                    output_format=fmt, output_mode=pack
                 )
                 was_cancelled = self.cancel_event.is_set()
 

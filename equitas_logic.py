@@ -746,7 +746,7 @@ def generate_branch_excel(branch_name, branch_df, output_dir):
 # STAGE 1 — MAIN ENTRY POINT
 # =========================================================
 
-def run_equitas_stage1(file_path, output_dir, log_callback=print, cancel_event=None, progress_callback=None):
+def run_equitas_stage1(file_path, output_dir, log_callback=print, cancel_event=None, progress_callback=None, output_format="BOTH", output_mode="FOLDER"):
     """Execute the full Stage 1 pipeline.
 
     Args:
@@ -755,6 +755,8 @@ def run_equitas_stage1(file_path, output_dir, log_callback=print, cancel_event=N
         log_callback: Function to receive log messages.
         cancel_event: threading.Event to check for cancellation.
         progress_callback: Function to receive progress updates (0 to 100).
+        output_format: "PDF ONLY", "EXCEL ONLY", or "BOTH"
+        output_mode: "FOLDER", "ZIP OF PDF", "ZIP OF EXCEL", "ZIP OF BOTH", or "BOTH (FOLDER + ZIP OF ...)"
 
     Returns:
         (pdf_count, excel_count) tuple.
@@ -776,27 +778,83 @@ def run_equitas_stage1(file_path, output_dir, log_callback=print, cancel_event=N
 
     for branch_name, branch_df in grouped:
         if cancel_event and cancel_event.is_set():
-            log_callback(f"⚠ CANCELLED after {pdf_count}/{total_branches} branches.")
+            log_callback(f"⚠ CANCELLED after processing {pdf_count if output_format != 'EXCEL ONLY' else excel_count}/{total_branches} branches.")
             break
 
         try:
             log_callback(f"Building: {branch_name}")
 
-            pdf_path = generate_branch_pdf(branch_name, branch_df, pdf_output_dir)
-            log_callback(f"  ✓ PDF: {os.path.basename(pdf_path)}")
-            pdf_count += 1
+            if output_format in ("PDF ONLY", "BOTH"):
+                pdf_path = generate_branch_pdf(branch_name, branch_df, pdf_output_dir)
+                log_callback(f"  ✓ PDF: {os.path.basename(pdf_path)}")
+                pdf_count += 1
 
-            excel_path = generate_branch_excel(branch_name, branch_df, excel_output_dir)
-            log_callback(f"  ✓ Excel: {os.path.basename(excel_path)}")
-            excel_count += 1
+            if output_format in ("EXCEL ONLY", "BOTH"):
+                excel_path = generate_branch_excel(branch_name, branch_df, excel_output_dir)
+                log_callback(f"  ✓ Excel: {os.path.basename(excel_path)}")
+                excel_count += 1
 
             if progress_callback:
-                progress_callback((pdf_count / total_branches) * 100)
+                # If needs_zip is True, let's keep progress below 100 (e.g. max 90) until compression is done.
+                needs_zip = output_mode != "FOLDER"
+                pdf_pct_max = 90.0 if needs_zip else 100.0
+                gen_count = pdf_count + excel_count
+                expected_total = total_branches * (2 if output_format == "BOTH" else 1)
+                progress_callback((gen_count / expected_total) * pdf_pct_max)
 
         except Exception as e:
             log_callback(f"  ✗ Error processing {branch_name}: {e}")
 
+    was_cancelled = cancel_event and cancel_event.is_set()
+
+    if not was_cancelled:
+        import zipfile
+        import shutil
+
+        def zip_dir(src_dir, zip_filepath):
+            if not os.path.exists(src_dir):
+                return
+            with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root_dir, _, files in os.walk(src_dir):
+                    for file in files:
+                        full_path = os.path.join(root_dir, file)
+                        rel_path = os.path.relpath(full_path, src_dir)
+                        zipf.write(full_path, rel_path)
+
+        zip_pdf = "ZIP OF PDF" in output_mode or "ZIP OF BOTH" in output_mode
+        zip_excel = "ZIP OF EXCEL" in output_mode or "ZIP OF BOTH" in output_mode
+        delete_raw = output_mode.startswith("ZIP OF")
+
+        if zip_pdf and os.path.exists(pdf_output_dir):
+            log_callback("Compressing PDFs...")
+            if progress_callback:
+                progress_callback(92)
+            pdf_zip_path = f"{pdf_output_dir}.zip"
+            zip_dir(pdf_output_dir, pdf_zip_path)
+            log_callback(f"✓ PDF ZIP created: {os.path.basename(pdf_zip_path)}")
+            if delete_raw:
+                log_callback("Cleaning up raw PDFs...")
+                try:
+                    shutil.rmtree(pdf_output_dir)
+                except OSError as re:
+                    log_callback(f"  ✗ Cleanup Error: {re}")
+
+        if zip_excel and os.path.exists(excel_output_dir):
+            log_callback("Compressing Excels...")
+            if progress_callback:
+                progress_callback(96)
+            excel_zip_path = f"{excel_output_dir}.zip"
+            zip_dir(excel_output_dir, excel_zip_path)
+            log_callback(f"✓ Excel ZIP created: {os.path.basename(excel_zip_path)}")
+            if delete_raw:
+                log_callback("Cleaning up raw Excels...")
+                try:
+                    shutil.rmtree(excel_output_dir)
+                except OSError as re:
+                    log_callback(f"  ✗ Cleanup Error: {re}")
+
     return pdf_count, excel_count
+
 
 
 # =========================================================
