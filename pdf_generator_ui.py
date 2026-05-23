@@ -330,8 +330,8 @@ class App:
         self.lbl_logo2.pack()
 
         # Bank Selector
-        bank_frame = tk.Frame(self.sidebar, bg="#0F172A", padx=20, pady=(10, 20))
-        bank_frame.pack(fill=tk.X)
+        bank_frame = tk.Frame(self.sidebar, bg="#0F172A", padx=20)
+        bank_frame.pack(fill=tk.X, pady=(10, 20))
         tk.Label(bank_frame, text="ACTIVE PROFILE", font=("Inter", 8, "bold"), bg="#0F172A", fg="#475569").pack(anchor="w", pady=(0, 5))
         self.bank_selector = ttk.Combobox(bank_frame, textvariable=self.bank_var, values=["IDFC First Bank", "Equitas Small Finance Bank"], state="readonly", font=("Inter", 10))
         self.bank_selector.pack(fill=tk.X)
