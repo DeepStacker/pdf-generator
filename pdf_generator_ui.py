@@ -304,10 +304,17 @@ def _install_update(zip_path, install_dir, log_callback=print):
 def _install_binary_update(zip_path, install_dir, log_callback=print):
     """Extract a platform-specific binary ZIP over the running executable."""
     import shutil
+    import stat
+    import subprocess
     extract_to = _tempfile.mkdtemp(prefix="audit_bin_")
     with zipfile.ZipFile(zip_path, "r") as zf:
         zf.extractall(extract_to)
-    # Find the binary — could be directly in extract_to or inside a wrapper dir
+    # Promote permissions so we can find and run the binary
+    for root, dirs, files in os.walk(extract_to):
+        for f in files:
+            fp = os.path.join(root, f)
+            st = os.stat(fp)
+            os.chmod(fp, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     src = None
     for root, dirs, files in os.walk(extract_to):
         for f in files:
@@ -320,6 +327,34 @@ def _install_binary_update(zip_path, install_dir, log_callback=print):
     if not src:
         raise RuntimeError("No executable found in update ZIP")
     old_exe = sys.executable
+    log_callback(f"Replacing {old_exe} with {src}")
+    if sys.platform == "win32":
+        # Windows: can't rename/overwrite a running exe. Defer via batch script.
+        new_exe = os.path.join(extract_to, os.path.basename(old_exe))
+        if src != new_exe:
+            shutil.copy2(src, new_exe)
+        bat_path = os.path.join(extract_to, "_update.bat")
+        bat_contents = (
+            "@echo off\r\n"
+            ":wait\r\n"
+            'tasklist /fi "PID eq %PARENT_PID%" 2>nul | find "%PARENT_PID%" >nul\r\n'
+            "if not errorlevel 1 (\r\n"
+            "  timeout /t 1 /nobreak >nul\r\n"
+            "  goto wait\r\n"
+            ")\r\n"
+            'copy /y "' + new_exe + '" "' + old_exe + '" >nul\r\n'
+            'del /f /q "' + new_exe + '" >nul 2>&1\r\n'
+            'del /f /q "%~f0" >nul 2>&1\r\n'
+        )
+        with open(bat_path, "w") as f:
+            f.write(bat_contents)
+        subprocess.Popen(
+            ["cmd.exe", "/c", bat_path],
+            env={**os.environ, "PARENT_PID": str(os.getpid())},
+            close_fds=True,
+        )
+        log_callback("Update deferred to batch script; exiting.")
+        return
     backup = old_exe + ".bak"
     if os.path.exists(old_exe):
         os.rename(old_exe, backup)
@@ -341,7 +376,10 @@ def _get_install_dir():
 
 def _restart_app():
     """Restart the application, replacing the current process."""
-    log_path = os.path.join(os.path.expanduser("~"), ".idfc_audit_engine.log")
+    import subprocess
+    if sys.platform == "win32":
+        subprocess.Popen([sys.executable] + (sys.argv if not getattr(sys, "frozen", False) else []))
+        os._exit(0)
     if getattr(sys, "frozen", False):
         os.execl(sys.executable, sys.executable)
     else:

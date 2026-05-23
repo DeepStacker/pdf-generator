@@ -30,7 +30,7 @@ jobs:
       - shell: pwsh
         env:
           TAG: ${{ github.ref_name }}
-        run: Compress-Archive -Path dist -DestinationPath "Audit_Engine_${env:TAG}_binary_windows.zip"
+        run: Compress-Archive -Path dist\* -DestinationPath "Audit_Engine_${env:TAG}_binary_windows.zip"
       - if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
@@ -58,7 +58,7 @@ jobs:
           restore-keys: pip-macos-
       - uses: actions/cache@v4
         with:
-          path: ~/.cache/pyinstaller
+          path: ~/Library/Caches/pyinstaller
           key: pyi-macos-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-macos-
       - run: pip install pyinstaller reportlab openpyxl pandas

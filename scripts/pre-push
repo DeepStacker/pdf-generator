@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Git pre-push hook — auto-bump version, build source + macOS binary, create GitHub release.
-# Windows & Linux binaries are built by GH Actions triggered by the tag push.
+# Git pre-push hook — auto-bump version, build source ZIP, create GitHub release.
+# Platform binaries are built by GH Actions triggered by the tag push.
 set -euo pipefail
 
 REMOTE="$1"
@@ -48,7 +48,6 @@ with open('pdf_generator_ui.py') as f:
 
   TAG="v${NEW_VER}"
   SRC_ZIP="Audit_Engine_${TAG}.zip"
-  BIN_ZIP="Audit_Engine_${TAG}_binary_macos.zip"
 
   # --- Build source distribution ---
   python3 create_distribution_zip.py
@@ -58,23 +57,12 @@ with open('pdf_generator_ui.py') as f:
   fi
   echo "==> [pre-push] Source ZIP built: $SRC_ZIP"
 
-  # --- Build macOS binary (fast: ~30s on dev machine) ---
-  if python3 -c "import tkinter" 2>/dev/null; then
-    echo "==> [pre-push] Building macOS binary..."
-    rm -rf dist build
-    pyinstaller --noconfirm pdf_generator.spec
-    (cd dist && zip -r "../$BIN_ZIP" .)
-    echo "==> [pre-push] Binary ZIP built: $BIN_ZIP"
-  else
-    echo "!!> [pre-push] tkinter not available — skipping macOS binary. GH Actions will build it."
-  fi
-
-  # --- Create tag and push it (triggers GH Actions for Windows + Linux) ---
+  # --- Create tag and push it (triggers GH Actions for all platform binaries) ---
   git tag "$TAG"
   git push origin "$TAG"
   echo "==> [pre-push] Pushed tag $TAG"
 
-  # --- Create GitHub release with source ZIP + macOS binary ---
+  # --- Create GitHub release with source ZIP ---
   echo "==> [pre-push] Creating GitHub release..."
   RELEASE_NOTES="## Audit Engine ${NEW_VER}
 
@@ -82,18 +70,17 @@ Auto-generated release.
 
 - Commit: $(git rev-parse --short HEAD)
 - \`${SRC_ZIP}\` — Source distribution (requires Python)
-- \`${BIN_ZIP}\` — Pre-compiled binary for **macOS**
+- \`*_binary_macos.zip\` — Pre-compiled binary for macOS (built by CI)
 - \`*_binary_windows.zip\` — Pre-compiled binary for Windows (built by CI)
 - \`*_binary_linux.zip\` — Pre-compiled binary for Linux (built by CI)"
 
-  gh release create "$TAG" --title "$TAG" --notes "$RELEASE_NOTES" "$SRC_ZIP" "$BIN_ZIP"
+  gh release create "$TAG" --title "$TAG" --notes "$RELEASE_NOTES" "$SRC_ZIP"
 
   # --- Clean up ---
-  rm -f "$SRC_ZIP" "$BIN_ZIP"
-  rm -rf dist build
+  rm -f "$SRC_ZIP"
 
-  echo "==> [pre-push] Release $TAG published (source + macOS binary)."
-  echo "     Windows & Linux binaries arriving via GH Actions."
+  echo "==> [pre-push] Release $TAG published (source ZIP)."
+  echo "     macOS, Windows & Linux binaries arriving via GH Actions."
   echo "==> [pre-push] Push proceeding with version bump commit."
 
   break
