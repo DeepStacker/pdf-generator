@@ -1,6 +1,8 @@
 name: Build Platform Binaries
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 permissions:
@@ -29,7 +31,8 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: Compress-Archive -Path dist -DestinationPath "Audit_Engine_${env:TAG}_binary_windows.zip"
-      - shell: pwsh
+      - if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
@@ -63,7 +66,8 @@ jobs:
       - env:
           TAG: ${{ github.ref_name }}
         run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_linux.zip" .
-      - env:
+      - if: startsWith(github.ref, 'refs/tags/')
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
