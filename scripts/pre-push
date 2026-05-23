@@ -65,14 +65,11 @@ with open('pdf_generator_ui.py') as f:
     exit 1
   fi
 
-  # --- Create and push tag ---
-  echo "==> [pre-push] Creating tag $TAG ..."
-  git tag "$TAG"
-
-  # --- Create GitHub release ---
+  # --- Create GitHub release (creates tag remotely, no local tag needed) ---
   echo "==> [pre-push] Creating GitHub release ..."
   gh release create "$TAG" \
     --title "$TAG" \
+    --target "$(git rev-parse HEAD)" \
     --notes "## Audit Engine ${NEW_VER}
 
 Auto-generated release.
