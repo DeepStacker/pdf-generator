@@ -2,10 +2,10 @@ altgraph==0.17.5
 charset-normalizer==3.4.7
 et_xmlfile==2.0.0
 macholib==1.16.4
-numpy==2.4.5
+numpy<2
 openpyxl==3.1.5
 packaging==26.2
-pandas==3.0.3
+pandas<2.2
 pillow==12.2.0
 pyinstaller==6.20.0
 pyinstaller-hooks-contrib==2026.5
