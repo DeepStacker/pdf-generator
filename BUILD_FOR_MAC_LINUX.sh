@@ -181,10 +181,10 @@ if python -m PyInstaller --noconfirm --clean pdf_generator.spec; then
     
     # Locate output
     OUT_FILE=""
-    if [ -f "dist/IDFC_Audit_Engine_Elite" ]; then
-        OUT_FILE="dist/IDFC_Audit_Engine_Elite"
-    elif [ -f "dist/IDFC_Audit_Engine_Elite.app" ]; then
-        OUT_FILE="dist/IDFC_Audit_Engine_Elite.app"
+    if [ -f "dist/Audit_Engine_Elite" ]; then
+        OUT_FILE="dist/Audit_Engine_Elite"
+    elif [ -f "dist/Audit_Engine_Elite.app" ]; then
+        OUT_FILE="dist/Audit_Engine_Elite.app"
     fi
     
     if [ -n "$OUT_FILE" ]; then

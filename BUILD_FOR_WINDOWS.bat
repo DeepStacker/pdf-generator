@@ -166,15 +166,15 @@ if %errorlevel% equ 0 (
         echo [*] Transferring standalone EXE back to network path...
         if exist "%ORIGINAL_DIR%dist" rd /s /q "%ORIGINAL_DIR%dist"
         mkdir "%ORIGINAL_DIR%dist"
-        copy /Y "dist\IDFC_Audit_Engine_Elite.exe" "%ORIGINAL_DIR%dist\" >nul
+        copy /Y "dist\Audit_Engine_Elite.exe" "%ORIGINAL_DIR%dist\" >nul
         
-        echo [+] Single EXE ready at: %ORIGINAL_DIR%dist\IDFC_Audit_Engine_Elite.exe
+        echo [+] Single EXE ready at: %ORIGINAL_DIR%dist\Audit_Engine_Elite.exe
         
         echo [*] Cleaning up local sandbox...
         cd /d "%TEMP%"
         rd /s /q "!TEMP_BUILD_DIR!"
     ) else (
-        echo [+] Single EXE ready at: %CD%\dist\IDFC_Audit_Engine_Elite.exe
+        echo [+] Single EXE ready at: %CD%\dist\Audit_Engine_Elite.exe
     )
 ) else (
     echo.

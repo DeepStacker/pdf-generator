@@ -11,7 +11,7 @@ import zipfile
 import sys
 
 # Target zip file name
-ZIP_NAME = "IDFC_Audit_Engine_Elite_v5.0.0.zip"
+ZIP_NAME = "Audit_Engine_Elite_v5.0.0.zip"
 
 # Excluded directory names (exact match or prefix match)
 EXCLUDE_DIRS = {
