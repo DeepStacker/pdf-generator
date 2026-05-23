@@ -1,71 +1,47 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
-import glob
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_dynamic_libs
 
 block_cipher = None
 
-# Collect dynamic libs (.pyd/.so) from numpy only (others are auto-detected)
-dlls = collect_dynamic_libs('numpy')
-
-# On Windows, explicitly bundle Tcl/Tk DLLs so _tkinter.pyd can load them
+# Try to find TCL/TK DLLs on Windows and bundle them as binaries so _tkinter loads
 tk_dlls = []
 if sys.platform == "win32":
-    py_root = os.path.dirname(sys.executable)
-    # Look in DLLs folder (official Python) and bin folder (some distributions)
-    for search_dir in [os.path.join(py_root, 'DLLs'), os.path.join(py_root, 'bin')]:
-        if os.path.isdir(search_dir):
-            for dll_pattern in ['tcl*.dll', 'tk*.dll']:
-                tk_dlls.extend(glob.glob(os.path.join(search_dir, dll_pattern)))
-    # Also try the tcl/tk library directories
-    tcl_dir = os.path.join(py_root, 'tcl')
-    if os.path.isdir(tcl_dir):
-        for entry in os.listdir(tcl_dir):
-            lib_dir = os.path.join(tcl_dir, entry)
-            if os.path.isdir(lib_dir):
-                for dll_pattern in ['*.dll', '*.so']:
-                    tk_dlls.extend(glob.glob(os.path.join(lib_dir, dll_pattern)))
-    dlls.extend((dll, '.') for dll in tk_dlls if os.path.isfile(dll))
+    import glob
+    search_dirs = [
+        os.path.join(os.path.dirname(sys.executable), 'DLLs'),
+        os.path.join(os.path.dirname(sys.executable), 'bin'),
+        os.path.join(os.path.dirname(sys.executable), '..', 'DLLs'),
+        os.path.join(os.path.dirname(sys.executable), '..', 'bin'),
+    ]
+    for sd in search_dirs:
+        sd = os.path.normpath(sd)
+        if os.path.isdir(sd):
+            for pat in ['tcl*.dll', 'tk*.dll']:
+                tk_dlls.extend(glob.glob(os.path.join(sd, pat)))
+    # Fallback: search the entire Python tree
+    if not tk_dlls:
+        py_root = os.path.dirname(sys.executable)
+        for root, dirs, files in os.walk(py_root):
+            for f in files:
+                if f.lower().startswith(('tcl', 'tk')) and f.lower().endswith('.dll'):
+                    tk_dlls.append(os.path.join(root, f))
+
+numpy_dlls = collect_dynamic_libs('numpy')
+# Use proper 3-element TOC tuples matching collect_dynamic_libs format
+tk_dll_entries = [(os.path.basename(d), d, 'BINARY') for d in tk_dlls]
+all_dlls = numpy_dlls + tk_dll_entries
 
 datas = [('fonts', 'fonts')] + collect_data_files('certifi')
 
-
-def safe_submodules(pkg):
-    """Collect submodules, filtering out any non-string entries."""
-    try:
-        return [m for m in collect_submodules(pkg) if isinstance(m, str)]
-    except Exception:
-        return []
-
-
-# Collect ALL submodules from our major dependencies
-pkg_imports = []
-for pkg in ['numpy', 'pandas', 'openpyxl', 'reportlab', 'PIL']:
-    pkg_imports.extend(safe_submodules(pkg))
-
-# Standard library C extensions that PyInstaller frequently misses on Windows
-stdlib_extensions = [
-    'pyexpat',
-    '_elementtree',
-    '_socket',
-    '_ssl',
-    '_hashlib',
-    '_multiprocessing',
-    '_csv',
-    '_json',
-    '_datetime',
-    '_decimal',
-    '_ctypes',
-    '_zlib',
-    '_bz2',
-    '_lzma',
-]
+# Only collect numpy.random submodules (proven safe)
+np_extra = [m for m in collect_submodules('numpy.random') if isinstance(m, str)]
 
 a = Analysis(
     ['pdf_generator_ui.py'],
     pathex=[],
-    binaries=dlls,
+    binaries=all_dlls,
     datas=datas,
     hiddenimports=[
         'tkinter',
@@ -74,12 +50,24 @@ a = Analysis(
         'tkinter.scrolledtext',
         'tkinter.ttk',
         'openpyxl',
+        'openpyxl.styles',
         'pandas',
         'certifi',
+        'pyexpat',
+        '_elementtree',
         'reportlab',
+        'reportlab.lib',
+        'reportlab.lib.pagesizes',
+        'reportlab.platypus',
+        'reportlab.lib.styles',
+        'reportlab.lib.enums',
+        'reportlab.pdfbase',
+        'reportlab.pdfbase.pdfmetrics',
+        'reportlab.pdfbase.ttfonts',
+        'reportlab.lib.colors',
         'pdf_logic',
         'equitas_logic',
-    ] + pkg_imports + stdlib_extensions,
+    ] + np_extra,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

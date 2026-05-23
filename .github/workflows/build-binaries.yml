@@ -26,6 +26,20 @@ jobs:
           key: pyi-win-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-win-
       - run: pip install pyinstaller reportlab openpyxl pandas
+      - name: Check Tcl/Tk DLLs
+        shell: pwsh
+        run: |
+          python -c "import os,glob; d=os.path.dirname(__import__('sys').executable); [print(f) for f in glob.glob(os.path.join(d, '**', '*.dll'), recursive=True) if 'tcl' in f.lower() or 'tk' in f.lower()]"
+          python -c "try:
+            import _tkinter
+            print(f'_tkinter.__file__: {_tkinter.__file__}')
+            import tkinter
+            tcl = tkinter.Tcl()
+            print(f'Tcl library dir: {tcl.eval(\"info library\")}')
+            print(f'Tcl version: {_tkinter.TCL_VERSION}')
+          except Exception as e:
+            print(f'tkinter import error: {e}')
+          import sys; print(f'sys.prefix: {sys.prefix}')"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - shell: pwsh
         env:
