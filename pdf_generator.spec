@@ -29,8 +29,8 @@ if sys.platform == "win32":
                     tk_dlls.append(os.path.join(root, f))
 
 numpy_dlls = collect_dynamic_libs('numpy')
-# Use proper 3-element TOC tuples matching collect_dynamic_libs format
-tk_dll_entries = [(os.path.basename(d), d, 'BINARY') for d in tk_dlls]
+# format_binaries_and_datas expects 2-element (src, dest_dir) tuples
+tk_dll_entries = [(d, '.') for d in tk_dlls]
 all_dlls = numpy_dlls + tk_dll_entries
 
 datas = [('fonts', 'fonts')] + collect_data_files('certifi')
