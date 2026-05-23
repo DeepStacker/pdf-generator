@@ -301,6 +301,37 @@ def _install_update(zip_path, install_dir, log_callback=print):
     log_callback(f"Update extracted to {install_dir}")
 
 
+def _install_binary_update(zip_path, install_dir, log_callback=print):
+    """Extract a platform-specific binary ZIP over the running executable."""
+    import shutil
+    extract_to = _tempfile.mkdtemp(prefix="audit_bin_")
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(extract_to)
+    # Find the binary — could be directly in extract_to or inside a wrapper dir
+    src = None
+    for root, dirs, files in os.walk(extract_to):
+        for f in files:
+            fp = os.path.join(root, f)
+            if os.access(fp, os.X_OK):
+                src = fp
+                break
+        if src:
+            break
+    if not src:
+        raise RuntimeError("No executable found in update ZIP")
+    old_exe = sys.executable
+    backup = old_exe + ".bak"
+    if os.path.exists(old_exe):
+        os.rename(old_exe, backup)
+    os.makedirs(os.path.dirname(old_exe), exist_ok=True)
+    shutil.copy2(src, old_exe)
+    os.chmod(old_exe, 0o755)
+    if os.path.exists(backup):
+        os.remove(backup)
+    shutil.rmtree(extract_to, ignore_errors=True)
+    log_callback(f"Binary updated at {old_exe}")
+
+
 def _get_install_dir():
     """Return the directory where the application is installed."""
     if getattr(sys, "frozen", False):
@@ -1346,8 +1377,29 @@ class App:
     # AUTO-UPDATER
     # ---------------------------------------------------------
     def _check_updates_background(self):
-        """Silent background check on startup — only notifies if update found."""
-        threading.Thread(target=self._do_check_updates, args=(True,), daemon=True).start()
+        """Silent background check on startup — downloads and applies without any UI changes."""
+        threading.Thread(target=self._do_background_update, daemon=True).start()
+
+    def _do_background_update(self):
+        try:
+            latest_tag, download_url, notes, binary_url = _check_latest_release()
+            latest_ver = _parse_version(latest_tag)
+            current_ver = _parse_version(VERSION)
+            if latest_ver <= current_ver:
+                return
+            url = binary_url if (getattr(sys, "frozen", False) and binary_url) else download_url
+            tmp = _tempfile.mkdtemp(prefix="audit_update_")
+            zip_path = os.path.join(tmp, f"update_{latest_tag}.zip")
+            _download_update(url, zip_path)
+            install_dir = _get_install_dir()
+            if getattr(sys, "frozen", False):
+                _install_binary_update(zip_path, install_dir, print)
+            else:
+                _install_update(zip_path, install_dir, print)
+            _shutil.rmtree(tmp, ignore_errors=True)
+            self.root.after(1500, _restart_app)
+        except Exception:
+            pass
 
     def _check_updates_manual(self):
         """Manual check triggered by user clicking the button."""
@@ -1357,9 +1409,11 @@ class App:
 
     def _do_check_updates(self, background=False):
         try:
-            latest_tag, download_url, notes = _check_latest_release()
+            latest_tag, download_url, notes, binary_url = _check_latest_release()
             latest_ver = _parse_version(latest_tag)
             current_ver = _parse_version(VERSION)
+
+            url = binary_url if (getattr(sys, "frozen", False) and binary_url) else download_url
 
             if latest_ver <= current_ver:
                 if not background:
@@ -1368,10 +1422,9 @@ class App:
                 return
 
             if background:
-                # Silent auto-update — no dialog, just go
-                self.root.after(0, lambda: self._start_update(latest_tag, download_url))
+                self.root.after(0, lambda: self._start_update(latest_tag, url))
             else:
-                self.root.after(0, lambda: self._show_update_dialog(latest_tag, download_url, notes))
+                self.root.after(0, lambda: self._show_update_dialog(latest_tag, url, notes))
 
         except Exception as e:
             if not background:
@@ -1407,19 +1460,13 @@ class App:
             _download_update(url, zip_path, prog)
 
             install_dir = _get_install_dir()
-            _install_update(zip_path, install_dir, self.log)
-
-            _shutil.rmtree(tmp, ignore_errors=True)
 
             if getattr(sys, "frozen", False):
-                self.root.after(0, lambda: self.update_status.config(text="Rebuilding executable...", fg="#D97706"))
-                self.root.after(0, lambda: self.update_progress.configure(value=0, mode="indeterminate"))
-                self.root.after(0, lambda: self.update_progress.start())
-                try:
-                    self._rebuild_exe(install_dir)
-                finally:
-                    self.root.after(0, lambda: self.update_progress.stop())
-                    self.root.after(0, lambda: self.update_progress.configure(mode="determinate", value=100))
+                _install_binary_update(zip_path, install_dir, self.log)
+            else:
+                _install_update(zip_path, install_dir, self.log)
+
+            _shutil.rmtree(tmp, ignore_errors=True)
 
             self.root.after(0, lambda: self.update_status.config(text="Update installed! Restarting...", fg="#10B981"))
             self.root.after(0, lambda: self.update_progress.configure(value=0))
@@ -1429,88 +1476,6 @@ class App:
             self.root.after(0, lambda: self.update_status.config(text=f"Update failed: {e}", fg="#EF4444"))
             self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text="Check for Updates"))
             self.log(f"Update failed: {e}", "ERROR")
-
-    def _rebuild_exe(self, install_dir):
-        """Rebuild executable via PyInstaller after source update."""
-        import subprocess, shutil
-
-        def find_python():
-            candidates = ["python3", "python"]
-            if sys.platform == "darwin":
-                candidates = ["python3", "/opt/homebrew/bin/python3",
-                              "/usr/local/bin/python3", "python3.11", "python3.12"]
-            elif sys.platform == "win32":
-                candidates = ["python", "py", "python3"]
-            for cmd in candidates:
-                try:
-                    r = subprocess.run([cmd, "-c", "import tkinter"], capture_output=True,
-                                       cwd=install_dir, timeout=5)
-                    if r.returncode == 0:
-                        return cmd
-                except (FileNotFoundError, subprocess.TimeoutExpired):
-                    continue
-            return None
-
-        py = find_python()
-        if not py:
-            raise RuntimeError("No Python 3 with tkinter found for rebuild")
-
-        self.log(f"Rebuilding with: {py}", "INFO")
-        subprocess.run([py, "-m", "pip", "install", "--quiet",
-                        "pyinstaller", "openpyxl", "pandas", "reportlab"],
-                       cwd=install_dir, capture_output=True, timeout=120)
-        self.log("Running PyInstaller... (may take a few minutes)", "INFO")
-        result = subprocess.run(
-            [py, "-m", "PyInstaller", "--noconfirm", "--clean", "pdf_generator.spec"],
-            cwd=install_dir, capture_output=True, text=True, timeout=600
-        )
-        if result.returncode != 0:
-            self.log(f"PyInstaller: {result.stderr[:1000]}", "ERROR")
-            raise RuntimeError(f"PyInstaller build failed (exit {result.returncode})")
-
-        # Locate new binary
-        output_dir = os.path.join(install_dir, "dist")
-        new_exe = None
-        for entry in os.listdir(output_dir):
-            full = os.path.join(output_dir, entry)
-            if os.path.isfile(full) and "Audit_Engine" in entry:
-                new_exe = full
-                break
-            if os.path.isdir(full) and entry.endswith(".app"):
-                new_exe = full
-                break
-        if not new_exe:
-            # Try inside .app bundle
-            for root, _, files in os.walk(output_dir):
-                for f in files:
-                    if "Audit_Engine" in f and os.access(os.path.join(root, f), os.X_OK):
-                        new_exe = os.path.join(root, f)
-                        break
-                if new_exe:
-                    break
-        if not new_exe:
-            raise RuntimeError("PyInstaller completed but binary not found")
-
-        # Replace old binary with new one
-        old_exe = sys.executable
-        if os.path.isdir(new_exe) and new_exe.endswith(".app"):
-            # macOS .app bundle — replace whole bundle
-            old_bundle = os.path.join(install_dir, os.path.basename(new_exe))
-            backup = old_bundle + ".bak"
-            if os.path.exists(old_bundle):
-                os.rename(old_bundle, backup)
-            shutil.copytree(new_exe, old_bundle)
-            shutil.rmtree(backup, ignore_errors=True)
-            shutil.rmtree(output_dir, ignore_errors=True)
-        else:
-            # Single executable
-            backup = old_exe + ".bak"
-            os.rename(old_exe, backup)
-            shutil.copy2(new_exe, old_exe)
-            os.remove(backup)
-            shutil.rmtree(output_dir, ignore_errors=True)
-
-        self.log("Executable updated successfully", "OK")
 
     # ---------------------------------------------------------
     # HELPERS
