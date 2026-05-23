@@ -232,13 +232,31 @@ import shutil as _shutil
 import ssl as _ssl
 
 
+def _get_platform_suffix():
+    """Return the platform string used in binary ZIP filenames."""
+    if sys.platform == "darwin":
+        return "macos"
+    elif sys.platform == "win32":
+        return "windows"
+    return "linux"
+
+
 def _check_latest_release():
-    """Check GitHub for the latest release. Returns (tag, download_url, body)."""
+    """Check GitHub for the latest release. Returns (tag, source_url, body, binary_url)."""
     ctx = _ssl.create_default_context()
     req = _urllib.Request(GITHUB_API, headers={"User-Agent": f"AuditEngine/{VERSION}"})
     with _urllib.urlopen(req, context=ctx, timeout=10) as resp:
         data = _json.loads(resp.read().decode())
-    return data["tag_name"], data["zipball_url"], data.get("body", "")
+    tag = data["tag_name"]
+    source_url = data["zipball_url"]
+    body = data.get("body", "")
+    suffix = f"binary_{_get_platform_suffix()}.zip"
+    binary_url = ""
+    for asset in data.get("assets", []):
+        if suffix in asset["name"] and asset["name"].endswith(".zip"):
+            binary_url = asset["browser_download_url"]
+            break
+    return tag, source_url, body, binary_url
 
 
 def _parse_version(tag):
