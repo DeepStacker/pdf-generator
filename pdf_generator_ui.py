@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit Engine Elite v5.0 — GUI Application
+"""Audit Engine Elite v5 — GUI Application
 
 Professional-grade PDF report generator for IDFC FIRST Bank & Equitas Small Finance Bank gold-loan audits.
 Reads Excel master files, groups records by branch, and produces audit worksheets.
