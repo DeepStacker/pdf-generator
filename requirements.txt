@@ -13,4 +13,3 @@ python-dateutil==2.9.0.post0
 reportlab==4.5.1
 setuptools==82.0.1
 six==1.17.0
-sv-ttk==2.6.1
