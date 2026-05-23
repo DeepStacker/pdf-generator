@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 # Git pre-push hook — auto-bump version, build ZIP, create GitHub release
-# Installed by: scripts/install-hooks.sh
 set -euo pipefail
 
 REMOTE="$1"
 URL="$2"
 
-# Read refs from stdin (one line per pushed ref)
 while read local_ref local_sha remote_ref remote_sha; do
-  # Only act on pushes to main
   if [[ "$remote_ref" != "refs/heads/main" ]]; then
     continue
   fi
@@ -18,7 +15,6 @@ while read local_ref local_sha remote_ref remote_sha; do
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   cd "$SCRIPT_DIR"
 
-  # --- Read current version ---
   OLD_VER=$(python3 -c "
 import re
 with open('pdf_generator_ui.py') as f:
@@ -37,19 +33,14 @@ with open('pdf_generator_ui.py') as f:
 
   echo "==> [pre-push] Current version: $OLD_VER"
 
-  # --- Compute next version ---
-  # Count total commits to use as build number
   BUILD=$(git rev-list --count HEAD 2>/dev/null || echo "0")
-  # Parse major.minor from current version, append build
   BASE=$(echo "$OLD_VER" | sed 's/\.[0-9]*$//')
   NEW_VER="${BASE}.${BUILD}"
 
   echo "==> [pre-push] Bumping to: $NEW_VER"
 
-  # --- Update VERSION in file ---
   sed -i '' "s/VERSION = \"$OLD_VER\"/VERSION = \"$NEW_VER\"/" pdf_generator_ui.py
 
-  # --- Commit version bump ---
   git add pdf_generator_ui.py
   git commit -m "chore: auto-bump to v$NEW_VER"
   echo "==> [pre-push] Committed v$NEW_VER"
@@ -57,7 +48,6 @@ with open('pdf_generator_ui.py') as f:
   TAG="v${NEW_VER}"
   ZIP="Audit_Engine_${TAG}.zip"
 
-  # --- Build distribution ZIP ---
   python3 create_distribution_zip.py
 
   if [ ! -f "$ZIP" ]; then
@@ -65,11 +55,13 @@ with open('pdf_generator_ui.py') as f:
     exit 1
   fi
 
-  # --- Create GitHub release (creates tag remotely, no local tag needed) ---
+  # Push tag to remote first, then create release
+  echo "==> [pre-push] Pushing tag ..."
+  git push origin "$TAG"
+
   echo "==> [pre-push] Creating GitHub release ..."
   gh release create "$TAG" \
     --title "$TAG" \
-    --target "$(git rev-parse HEAD)" \
     --notes "## Audit Engine ${NEW_VER}
 
 Auto-generated release.
@@ -78,13 +70,12 @@ Auto-generated release.
 - ZIP: \`${ZIP}\`" \
     "$ZIP"
 
-  # --- Clean up local ZIP ---
   rm -f "$ZIP"
 
   echo "==> [pre-push] Release $TAG published."
   echo "==> [pre-push] Push proceeding with version bump commit and tag."
 
-  break  # Only process the first matching ref
+  break
 done
 
 exit 0
