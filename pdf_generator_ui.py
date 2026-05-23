@@ -96,6 +96,10 @@ def init_db():
                       audit_type TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS config
                      (key TEXT PRIMARY KEY, value TEXT)''')
+    try:
+        cursor.execute("ALTER TABLE history ADD COLUMN full_path TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -114,12 +118,12 @@ def get_config(key, default=None):
     conn.close()
     return res[0] if res else default
 
-def log_generation(excel_name, pdf_count, output_path, audit_type):
+def log_generation(excel_name, pdf_count, output_path, audit_type, full_path=None):
     conn = _connect_db()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO history (timestamp, excel_name, pdf_count, output_path, audit_type) VALUES (?, ?, ?, ?, ?)",
-        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), excel_name, pdf_count, output_path, audit_type)
+        "INSERT INTO history (timestamp, excel_name, pdf_count, output_path, audit_type, full_path) VALUES (?, ?, ?, ?, ?, ?)",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), excel_name, pdf_count, output_path, audit_type, full_path)
     )
     conn.commit()
     conn.close()
@@ -147,12 +151,12 @@ def get_recent_history(search="", limit=100):
     cursor = conn.cursor()
     if search:
         cursor.execute(
-            "SELECT id, timestamp, excel_name, pdf_count, output_path, audit_type FROM history WHERE excel_name LIKE ? ORDER BY id DESC LIMIT ?",
+            "SELECT id, timestamp, excel_name, pdf_count, output_path, audit_type, full_path FROM history WHERE excel_name LIKE ? ORDER BY id DESC LIMIT ?",
             (f"%{search}%", limit)
         )
     else:
         cursor.execute(
-            "SELECT id, timestamp, excel_name, pdf_count, output_path, audit_type FROM history ORDER BY id DESC LIMIT ?",
+            "SELECT id, timestamp, excel_name, pdf_count, output_path, audit_type, full_path FROM history ORDER BY id DESC LIMIT ?",
             (limit,)
         )
     res = cursor.fetchall()
@@ -836,8 +840,28 @@ class App:
         stage_box.pack(side=tk.LEFT)
 
         def switch_stage():
-            self.file_var.set("")
+            current_path = self.file_var.get().strip()
             self.render_tab()
+            if current_path and os.path.exists(current_path):
+                self.file_var.set(current_path)
+                self.status_msg.set(f"Loaded: {os.path.basename(current_path)}")
+                stage = self.equitas_stage_var.get()
+                if stage == "STAGE 1":
+                    valid, info = equitas_logic.validate_equitas_stage1_file(current_path)
+                    if valid:
+                        self.validate_label.config(text="Valid file — sheet pairs found", fg="#16A34A")
+                        self._preview_file_equitas_s1(current_path)
+                    else:
+                        self.validate_label.config(text=info, fg="#DC2626")
+                        self._clear_preview()
+                else:
+                    valid, info = equitas_logic.validate_equitas_stage2_file(current_path)
+                    if valid:
+                        self.validate_label.config(text="Valid file — required columns found", fg="#16A34A")
+                        self._preview_file_equitas_s2(current_path)
+                    else:
+                        self.validate_label.config(text=info, fg="#DC2626")
+                        self._clear_preview()
 
         for s in ["STAGE 1", "STAGE 2"]:
             rb = tk.Radiobutton(stage_box, text=s, variable=self.equitas_stage_var, value=s,
@@ -858,7 +882,7 @@ class App:
 
         if stage == "STAGE 1":
             tk.Label(self.panel, text="Stage 1: Generate Branch Audits & Excels", font=("Inter", 12, "bold"), bg="#FFFFFF", fg="#0F172A").pack(anchor="w", pady=(0, 15))
-            self.create_input(self.panel, "Source Excel (Normal + JSR sheets)", self.file_var, self.browse_in_equitas_s1, "Browse...")
+            self.create_input(self.panel, "Source Excel (Normal + JSR sheets)", self.file_var, self.browse_in_equitas, "Browse...")
 
             # --- Format & Packaging options ---
             eq_cfg_frame = tk.Frame(self.panel, bg="#FFFFFF")
@@ -896,7 +920,7 @@ class App:
             ToolTip(self.equitas_pack_combo, "Choose how to package the generated output files")
         else:
             tk.Label(self.panel, text="Stage 2: Consolidate Audited Excels", font=("Inter", 12, "bold"), bg="#FFFFFF", fg="#0F172A").pack(anchor="w", pady=(0, 15))
-            self.create_input(self.panel, "Audited Stage 1 Excel", self.file_var, self.browse_in_equitas_s2, "Browse...")
+            self.create_input(self.panel, "Audited Stage 1 Excel", self.file_var, self.browse_in_equitas, "Browse...")
 
         self.validate_label = tk.Label(self.panel, text="", font=("Inter", 10), bg="#FFFFFF")
         self.validate_label.pack(anchor="w", pady=(0, 5))
@@ -955,6 +979,31 @@ class App:
         self.branch_label.pack(fill=tk.X, pady=(0, 5))
 
         self.render_console()
+
+    def browse_in_equitas(self):
+        f = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
+        if not f:
+            return
+        _add_recent_file(f)
+        detected = _detect_bank_from_file(f)
+        if detected and detected != self.bank_var.get():
+            self.bank_var.set(detected)
+            self.on_bank_change(preserve_file=f)
+            return
+
+        # Auto-detect stage
+        s1_valid, s1_info = equitas_logic.validate_equitas_stage1_file(f)
+        if s1_valid:
+            new_stage = "STAGE 1"
+        else:
+            s2_valid, s2_info = equitas_logic.validate_equitas_stage2_file(f)
+            new_stage = "STAGE 2" if s2_valid else self.equitas_stage_var.get()
+
+        self.equitas_stage_var.set(new_stage)
+        self.file_var.set(f)
+        self.status_msg.set(f"Loaded: {os.path.basename(f)} (detected {new_stage})")
+        self.render_tab()
+        # render_tab triggers preview automatically for the loaded file
 
     def browse_in_equitas_s1(self):
         f = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
@@ -1183,8 +1232,12 @@ class App:
         btn_bar.pack(fill=tk.X)
         open_btn = tk.Button(btn_bar, text="Open Folder", bg=self.get_theme_color("primary"), fg="#FFFFFF", font=("Inter", 11, "bold"),
                   relief="flat", padx=30, pady=12, command=self.open_sel)
-        open_btn.pack(side=tk.LEFT)
+        open_btn.pack(side=tk.LEFT, padx=(0, 10))
         ToolTip(open_btn, "Open output folder of selected entry")
+        re_run_btn = tk.Button(btn_bar, text="Re-run", bg="#2563EB", fg="#FFFFFF", font=("Inter", 11, "bold"),
+                  relief="flat", padx=30, pady=12, command=self.re_run_history)
+        re_run_btn.pack(side=tk.LEFT)
+        ToolTip(re_run_btn, "Re-run generation with the same file and settings")
         export_btn = tk.Button(btn_bar, text="Export to Excel", bg="#059669", fg="#FFFFFF", font=("Inter", 11, "bold"),
                   relief="flat", padx=30, pady=12, command=self.export_history)
         export_btn.pack(side=tk.RIGHT)
@@ -1424,16 +1477,51 @@ class App:
             for i in self.tree.get_children():
                 self.tree.delete(i)
             for h in get_recent_history(self.search_var.get()):
-                self.tree.insert("", tk.END, values=(h[1], h[2], h[3], h[5]), tags=(h[4],))
+                full_path = h[6] if h[6] else h[4]
+                self.tree.insert("", tk.END, values=(h[1], h[2], h[3], h[5]),
+                                 tags=(h[4], full_path))
 
     def open_sel(self):
         sel = self.tree.selection()
         if sel:
-            path = self.tree.item(sel[0], "tags")[0]
+            tags = self.tree.item(sel[0], "tags")
+            path = tags[0] if tags else ""
             if os.path.exists(path):
                 open_path(path)
             else:
                 messagebox.showwarning("Not Found", f"Path no longer exists:\n{path}")
+
+    def re_run_history(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        tags = self.tree.item(sel[0], "tags")
+        full_path = tags[1] if len(tags) > 1 and tags[1] else ""
+        item_vals = self.tree.item(sel[0], "values")
+        if not item_vals:
+            return
+        audit_type = item_vals[3]  # "Type" column
+
+        if not full_path or not os.path.exists(full_path):
+            messagebox.showwarning("File Not Found",
+                                   f"The original Excel file is no longer available:\n{full_path}")
+            return
+
+        is_equitas = audit_type and "EQUITAS" in audit_type.upper()
+        target_bank = "Equitas Small Finance Bank" if is_equitas else "IDFC First Bank"
+
+        if is_equitas:
+            clean_type = audit_type.replace(" (CANCELLED)", "")
+            self.equitas_stage_var.set("STAGE 1" if clean_type == "Equitas-S1" else "STAGE 2")
+
+        if self.bank_var.get() != target_bank:
+            self.bank_var.set(target_bank)
+            self.on_bank_change(preserve_file=full_path)
+        else:
+            self.file_var.set(full_path)
+
+        self.switch_tab("PROCESS")
+        self.root.after(100, lambda: self.status_msg.set("Loaded from history — ready to run"))
 
     def export_history(self):
         import pandas as pd
@@ -1441,11 +1529,44 @@ class App:
         if f:
             try:
                 data = get_recent_history(limit=1000)
-                df = pd.DataFrame(data, columns=["ID", "Timestamp", "Filename", "Items", "Path", "Type"])
+                df = pd.DataFrame(data, columns=["ID", "Timestamp", "Filename", "Items", "Path", "Type", "SourceFile"])
                 df.to_excel(f, index=False)
                 messagebox.showinfo("Success", "History exported!")
             except Exception as e:
                 messagebox.showerror("Export Error", str(e))
+
+    def _show_summary(self, title, lines):
+        """Show a generation summary in a custom dialog."""
+        win = tk.Toplevel(self.root)
+        win.title(title)
+        win.configure(bg="#FFFFFF")
+        win.geometry("520x400")
+        win.resizable(False, False)
+        win.transient(self.root)
+        win.grab_set()
+
+        container = tk.Frame(win, bg="#FFFFFF", padx=30, pady=25)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        tk.Label(container, text=title, font=("Inter", 16, "bold"),
+                 bg="#FFFFFF", fg="#0F172A").pack(anchor="w", pady=(0, 15))
+
+        text = tk.Text(container, font=("Menlo", 10), bg="#F8FAFC", fg="#1E293B",
+                       relief="flat", highlightthickness=1, highlightbackground="#E2E8F0",
+                       padx=15, pady=15, height=10, wrap=tk.WORD)
+        text.pack(fill=tk.BOTH, expand=True)
+        for level, msg in lines:
+            tag = f"sum_{level}"
+            color = {"info": "#475569", "ok": "#16A34A", "warn": "#D97706", "err": "#DC2626"}.get(level, "#475569")
+            text.tag_configure(tag, foreground=color)
+            text.insert(tk.END, msg + "\n", tag)
+        text.configure(state=tk.DISABLED)
+
+        btn_frame = tk.Frame(container, bg="#FFFFFF", pady=(15, 0))
+        btn_frame.pack(fill=tk.X)
+        tk.Button(btn_frame, text="Close", font=("Inter", 10, "bold"),
+                  bg="#F1F5F9", relief="flat", padx=30, pady=8,
+                  command=win.destroy).pack(side=tk.RIGHT)
 
     def _on_close(self):
         if self.btn_run and self.btn_run.cget("state") == tk.DISABLED:
@@ -1565,8 +1686,9 @@ class App:
             was_cancelled = self.cancel_event.is_set()
 
             if not was_cancelled:
-                log_generation(excel_name, count, out, typ)
-                self.log(f"SUCCESS: {count} Reports Created.", "OK")
+                log_generation(excel_name, count, out, typ, full_path=inp)
+                _elapsed = _time.time() - _start_time
+                self.log(f"SUCCESS: {count} Reports Created in {_elapsed:.1f}s.", "OK")
 
                 mode = self.pkg_var.get()
                 zip_path = f"{out}.zip"
@@ -1594,14 +1716,34 @@ class App:
 
                 self.update_progress(100)
 
-                if self.auto_open.get():
-                    target = zip_path if (mode == "ZIP ONLY" and os.path.exists(zip_path)) else out
-                    if os.path.exists(target):
-                        open_path(target)
+                # Calculate total output size
+                final_target = zip_path if (mode == "ZIP ONLY" and os.path.exists(zip_path)) else out
+                total_size = 0
+                if os.path.isfile(final_target):
+                    total_size = os.path.getsize(final_target)
+                elif os.path.isdir(final_target):
+                    for root_dir, _, files in os.walk(final_target):
+                        for f in files:
+                            total_size += os.path.getsize(os.path.join(root_dir, f))
 
-                self.root.after(0, lambda: messagebox.showinfo("Complete", f"{count} PDFs built."))
+                size_str = f"{total_size / 1024:.1f} KB" if total_size < 1024*1024 else f"{total_size / 1024 / 1024:.1f} MB"
+                self.log(f"Total output size: {size_str}", "INFO")
+
+                if self.auto_open.get():
+                    if os.path.exists(final_target):
+                        open_path(final_target)
+
+                summary_lines = [
+                    ("ok", f"✓ {count} PDFs generated successfully"),
+                    ("info", f"  Audit type: {typ}"),
+                    ("info", f"  Branches:   {count}"),
+                    ("info", f"  Time:       {_elapsed:.1f}s"),
+                    ("info", f"  Size:       {size_str}"),
+                    ("info", f"  Output:     {final_target}"),
+                ]
+                self.root.after(0, lambda: self._show_summary("Generation Complete", summary_lines))
             else:
-                log_generation(excel_name, count, out, f"{typ} (CANCELLED)")
+                log_generation(excel_name, count, out, f"{typ} (CANCELLED)", full_path=inp)
                 self.root.after(0, lambda: messagebox.showwarning("Cancelled", f"Stopped after {count}/{total} branches."))
 
         except Exception as e:
@@ -1609,7 +1751,7 @@ class App:
             self.root.after(0, lambda: messagebox.showerror("Failure", str(e)))
         finally:
             self.root.after(0, lambda: self.branch_label.config(text=""))
-            self.root.after(0, lambda: self.btn_run.config(state=tk.NORMAL, text="START GENERATION ENGINE"))
+            self.root.after(0, lambda: self.btn_run.config(state=tk.NORMAL, text="Generate Reports"))
             self.root.after(0, lambda: self.btn_cancel.config(state=tk.DISABLED, text="Stop"))
             self.root.after(0, lambda: self.status_msg.set("Ready"))
             self.root.after(0, self.refresh_history)
@@ -1681,16 +1823,29 @@ class App:
                 was_cancelled = self.cancel_event.is_set()
 
                 if not was_cancelled:
-                    log_generation(excel_name, pdf_c + exc_c, out, "Equitas-S1")
+                    log_generation(excel_name, pdf_c + exc_c, out, "Equitas-S1", full_path=inp)
                     self.log(f"SUCCESS: {pdf_c} PDFs, {exc_c} Excels created. ({_eqs1_elapsed:.1f}s)", "OK")
                     self.update_progress(100)
+
+                    # Calculate output size
+                    total_size = 0
+                    for root_dir, _, files in os.walk(out):
+                        for f in files:
+                            total_size += os.path.getsize(os.path.join(root_dir, f))
+                    size_str = f"{total_size / 1024:.1f} KB" if total_size < 1024*1024 else f"{total_size / 1024 / 1024:.1f} MB"
 
                     if self.auto_open.get():
                         open_path(out)
 
-                    self.root.after(0, lambda: messagebox.showinfo("Complete", f"Stage 1 Complete.\nGenerated {pdf_c} PDFs and {exc_c} Excel templates."))
+                    summary = [
+                        ("ok", f"✓ Stage 1 Complete — {pdf_c} PDFs, {exc_c} Excels"),
+                        ("info", f"  Time:  {_eqs1_elapsed:.1f}s"),
+                        ("info", f"  Size:  {size_str}"),
+                        ("info", f"  Path:  {out}"),
+                    ]
+                    self.root.after(0, lambda: self._show_summary("Stage 1 Complete", summary))
                 else:
-                    log_generation(excel_name, pdf_c + exc_c, out, "Equitas-S1 (CANCELLED)")
+                    log_generation(excel_name, pdf_c + exc_c, out, "Equitas-S1 (CANCELLED)", full_path=inp)
                     self.root.after(0, lambda: messagebox.showwarning("Cancelled", "Stage 1 Generation Cancelled."))
 
             else:
@@ -1700,23 +1855,30 @@ class App:
                 was_cancelled = self.cancel_event.is_set()
 
                 if not was_cancelled and out_path:
-                    log_generation(excel_name, 1, out_path, "Equitas-S2")
-                    self.log("SUCCESS: Consolidated report created.", "OK")
+                    log_generation(excel_name, 1, out_path, "Equitas-S2", full_path=inp)
+                    total_size = os.path.getsize(out_path) if os.path.isfile(out_path) else 0
+                    size_str = f"{total_size / 1024:.1f} KB" if total_size < 1024*1024 else f"{total_size / 1024 / 1024:.1f} MB"
+                    self.log(f"SUCCESS: Consolidated report created. ({size_str})", "OK")
                     self.update_progress(100)
 
                     if self.auto_open.get():
                         open_path(out)
 
-                    self.root.after(0, lambda: messagebox.showinfo("Complete", "Stage 2 Consolidation Complete."))
+                    summary = [
+                        ("ok", "✓ Stage 2 Consolidation Complete"),
+                        ("info", f"  Size:  {size_str}"),
+                        ("info", f"  Path:  {out_path}"),
+                    ]
+                    self.root.after(0, lambda: self._show_summary("Stage 2 Complete", summary))
                 else:
-                    log_generation(excel_name, 0, out, "Equitas-S2 (CANCELLED)")
+                    log_generation(excel_name, 0, out, "Equitas-S2 (CANCELLED)", full_path=inp)
                     self.root.after(0, lambda: messagebox.showwarning("Cancelled", "Stage 2 Consolidation Cancelled."))
 
         except Exception as e:
             self.log(f"FAILURE: {e}", "ERROR")
             self.root.after(0, lambda: messagebox.showerror("Failure", str(e)))
         finally:
-            btn_text = "START GENERATION (STAGE 1)" if stage == "STAGE 1" else "START CONSOLIDATION (STAGE 2)"
+            btn_text = "Generate (Stage 1)" if stage == "STAGE 1" else "Consolidate (Stage 2)"
             self.root.after(0, lambda: self.btn_run.config(state=tk.NORMAL, text=btn_text))
             self.root.after(0, lambda: self.btn_cancel.config(state=tk.DISABLED, text="Stop"))
             self.root.after(0, lambda: self.status_msg.set("Ready"))
