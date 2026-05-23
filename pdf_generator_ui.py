@@ -26,7 +26,7 @@ import equitas_logic
 # =========================================================
 # VERSION & APP CONSTANTS
 # =========================================================
-VERSION = "5.1.79"
+VERSION = "5.1.81"
 APP_TITLE = "Audit Engine v5.0"
 
 # Colors for theming
