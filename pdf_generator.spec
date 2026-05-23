@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_dynamic_libs, collect_all
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_dynamic_libs
 
 block_cipher = None
 
@@ -24,14 +24,16 @@ if tcl_lib_path and tk_lib_path:
     datas.append((tcl_lib_path, os.path.join('tcl', os.path.basename(tcl_lib_path))))
     datas.append((tk_lib_path, os.path.join('tk', os.path.basename(tk_lib_path))))
 
-# numpy C extensions are often missed by static analysis
-np_imports, np_binaries, np_datas = collect_all('numpy')
+# Collect all numpy dynamic libs (.pyd files) and their submodules
+numpy_dlls = collect_dynamic_libs('numpy')
+# Also collect numpy.random submodules that are commonly missed
+np_extra = [m for m in collect_submodules('numpy.random') if isinstance(m, str)]
 
 a = Analysis(
     ['pdf_generator_ui.py'],
     pathex=[],
-    binaries=np_binaries + collect_dynamic_libs('pandas'),
-    datas=datas + np_datas,
+    binaries=numpy_dlls,
+    datas=datas,
     hiddenimports=[
         'tkinter',
         'tkinter.filedialog',
@@ -54,7 +56,7 @@ a = Analysis(
         'reportlab.lib.colors',
         'pdf_logic',
         'equitas_logic',
-    ] + np_imports,
+    ] + np_extra,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
