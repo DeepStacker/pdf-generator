@@ -253,8 +253,17 @@ def validate_equitas_stage2_file(file_path):
         return False, f"Invalid file type '{ext}'. Expected .xlsx or .xls"
 
     try:
-        df = pd.read_excel(file_path, header=3)
-        df.columns = [str(c).strip() for c in df.columns]
+        # Dynamically find the header row
+        df_top = pd.read_excel(file_path, header=None, nrows=20)
+        header_idx = 3
+        for idx, row in df_top.iterrows():
+            row_str = [str(x).strip().upper() for x in row.values if pd.notna(x)]
+            if "ACCOUNT NO" in row_str and "APPLICANT NAME" in row_str:
+                header_idx = idx
+                break
+
+        df = pd.read_excel(file_path, header=header_idx)
+        df.columns = [str(c).strip().upper() for c in df.columns]
 
         required = ["ACCOUNT NO", "APPLICANT NAME", "SANCTION AMT",
                      "BANK QTY", "ACTUAL QTY", "BANK GROSS", "ACTUAL GROSS",
@@ -920,9 +929,17 @@ def _first_non_empty(series):
 # =========================================================
 
 def load_stage1_excel(file_path):
-    """Load Stage 1 audited Excel (header on row 4, i.e. header=3)."""
-    df = pd.read_excel(file_path, header=3)
-    df.columns = [str(c).strip() for c in df.columns]
+    """Load Stage 1 audited Excel (dynamically find header row)."""
+    df_top = pd.read_excel(file_path, header=None, nrows=20)
+    header_idx = 3
+    for idx, row in df_top.iterrows():
+        row_str = [str(x).strip().upper() for x in row.values if pd.notna(x)]
+        if "ACCOUNT NO" in row_str and "APPLICANT NAME" in row_str:
+            header_idx = idx
+            break
+
+    df = pd.read_excel(file_path, header=header_idx)
+    df.columns = [str(c).strip().upper() for c in df.columns]
     df = df.dropna(how="all")
     df = df[df["ACCOUNT NO"].notna()]
     return df
