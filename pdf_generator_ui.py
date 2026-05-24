@@ -32,7 +32,7 @@ import web_assets
 # =========================================================
 # VERSION & CONSTANTS
 # =========================================================
-VERSION = "5.2.167"
+VERSION = "5.2.168"
 APP_TITLE = "Audit Engine v5.0"
 
 # File logging setup
@@ -587,6 +587,8 @@ def ask_file_dialog():
     root = tk.Tk()
     root.withdraw()
     root.attributes('-topmost', True)
+    root.update()
+    root.attributes('-topmost', False)
     file_path = filedialog.askopenfilename(
         parent=root,
         title="Select Master Excel File",
@@ -601,6 +603,8 @@ def ask_directory_dialog():
     root = tk.Tk()
     root.withdraw()
     root.attributes('-topmost', True)
+    root.update()
+    root.attributes('-topmost', False)
     dir_path = filedialog.askdirectory(
         parent=root,
         title="Select Output Directory"
