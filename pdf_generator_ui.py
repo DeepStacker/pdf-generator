@@ -1009,24 +1009,44 @@ def api_validate():
             wb = openpyxl.load_workbook(filepath, read_only=True)
             sheets = wb.sheetnames
             wb.close()
-            if any("JSR" in s.upper() or "NORMAL" in s.upper() for s in sheets) or len(sheets) > 1:
-                valid, err = equitas_logic.validate_equitas_stage1_file(filepath)
-                return {
-                    "success": valid, 
-                    "error": err, 
-                    "detected_bank": detected_bank, 
-                    "rows": "stage 1 peek", 
-                    "branches": "N/A",
-                    "headers": headers,
-                    "preview": preview_rows
-                }
-            else:
+            
+            expected_stage = data.get('expected_stage')
+            is_stage1_structure = any("JSR" in s.upper() or "NORMAL" in s.upper() for s in sheets) or len(sheets) > 1
+            
+            if expected_stage == "STAGE 2":
+                if is_stage1_structure:
+                    return {
+                        "success": False, 
+                        "error": "This file appears to be a Stage 1 input file (multiple sheets or JSR). Please select a valid Stage 2 consolidated report file.", 
+                        "detected_bank": detected_bank, 
+                        "headers": headers,
+                        "preview": preview_rows
+                    }
                 valid, err = equitas_logic.validate_equitas_stage2_file(filepath)
                 return {
                     "success": valid, 
                     "error": err, 
                     "detected_bank": detected_bank, 
                     "rows": "stage 2 peek", 
+                    "branches": "N/A",
+                    "headers": headers,
+                    "preview": preview_rows
+                }
+            else:
+                if not is_stage1_structure:
+                    return {
+                        "success": False, 
+                        "error": "This file appears to be a Stage 2 report file (single sheet). Please select a valid Stage 1 raw dump file.", 
+                        "detected_bank": detected_bank, 
+                        "headers": headers,
+                        "preview": preview_rows
+                    }
+                valid, err = equitas_logic.validate_equitas_stage1_file(filepath)
+                return {
+                    "success": valid, 
+                    "error": err, 
+                    "detected_bank": detected_bank, 
+                    "rows": "stage 1 peek", 
                     "branches": "N/A",
                     "headers": headers,
                     "preview": preview_rows

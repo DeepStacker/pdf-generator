@@ -1466,7 +1466,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const resp = await fetch('/api/validate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filepath })
+                    body: JSON.stringify({ 
+                        filepath,
+                        expected_stage: isIDFC ? null : state.equitas.stage
+                    })
                 });
                 const data = await resp.json();
                 
