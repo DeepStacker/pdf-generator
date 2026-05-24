@@ -611,6 +611,18 @@ cancel_event = threading.Event()
 # HEADLESS DIALOG POPUPS
 # =========================================================
 def ask_file_dialog():
+    import sys
+    if sys.platform == "darwin":
+        import subprocess
+        try:
+            script = 'tell application "System Events" to activate\ntell application "System Events" to return POSIX path of (choose file with prompt "Select Master Excel File" of type {"org.openxmlformats.spreadsheetml.sheet", "com.microsoft.excel.xls"})'
+            res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip()
+            return ""
+        except Exception:
+            pass
+
     import tkinter as tk
     from tkinter import filedialog
     root = tk.Tk()
@@ -627,6 +639,18 @@ def ask_file_dialog():
     return file_path
 
 def ask_directory_dialog():
+    import sys
+    if sys.platform == "darwin":
+        import subprocess
+        try:
+            script = 'tell application "System Events" to activate\ntell application "System Events" to return POSIX path of (choose folder with prompt "Select Output Directory")'
+            res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip()
+            return ""
+        except Exception:
+            pass
+
     import tkinter as tk
     from tkinter import filedialog
     root = tk.Tk()
