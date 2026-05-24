@@ -29,7 +29,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         /* ===== LAYOUT ===== */
         .block { display: block; }
-        .hidden { display: none; }
+        .hidden { display: none !important; }
         .flex { display: flex; }
         .grid { display: grid; }
         .fixed { position: fixed; }
