@@ -61,6 +61,128 @@ def open_path(path):
     except OSError as e:
         file_logger.warning(f"Failed to open path: {path} — {e}")
 
+def trigger_desktop_notification(title, message):
+    """Trigger a native desktop notification balloon or bubble."""
+    try:
+        if sys.platform == "darwin":
+            safe_msg = message.replace('"', '\\"').replace("'", "\\'")
+            safe_title = title.replace('"', '\\"').replace("'", "\\'")
+            cmd = ["osascript", "-e", f'display notification "{safe_msg}" with title "{safe_title}"']
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif sys.platform == "win32":
+            ps_script = f"""
+            [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms");
+            $notification = New-Object System.Windows.Forms.NotifyIcon;
+            $notification.Icon = [System.Drawing.SystemIcons]::Information;
+            $notification.BalloonTipIcon = "Info";
+            $notification.BalloonTipTitle = "{title}";
+            $notification.BalloonTipText = "{message}";
+            $notification.Visible = $True;
+            $notification.ShowBalloonTip(5000);
+            """
+            kwargs = {}
+            kwargs["creationflags"] = 0x08000000
+            subprocess.run(
+                ["powershell", "-Command", ps_script],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                **kwargs
+            )
+    except Exception as ne:
+        file_logger.warning(f"Failed to trigger desktop notification: {ne}")
+
+def preprocess_mapped_excel(filepath, column_mappings, bank):
+    """Creates a copy of the Excel file with columns renamed according to user mappings."""
+    try:
+        wb = openpyxl.load_workbook(filepath, data_only=True)
+        
+        target_sheet = None
+        max_matches = -1
+        
+        mapped_headers_set = set(column_mappings.values())
+        
+        for sname in wb.sheetnames:
+            ws = wb[sname]
+            try:
+                first_row = next(ws.iter_rows(min_row=1, max_row=1))
+                headers = [str(cell.value).strip() if cell.value is not None else "" for cell in first_row]
+                matches = sum(1 for h in headers if h in mapped_headers_set)
+                if matches > max_matches:
+                    max_matches = matches
+                    target_sheet = sname
+            except StopIteration:
+                continue
+                
+        if not target_sheet:
+            target_sheet = wb.sheetnames[0]
+            
+        ws = wb[target_sheet]
+        
+        first_row = next(ws.iter_rows(min_row=1, max_row=1))
+        headers = [str(cell.value).strip() if cell.value is not None else "" for cell in first_row]
+        
+        header_indices = {h: idx for idx, h in enumerate(headers, 1)}
+        
+        if bank == "IDFC First Bank":
+            prospect_col = column_mappings.get('prospect')
+            cuid_col = column_mappings.get('cuid')
+            tare_col = column_mappings.get('tare')
+            branch_col = column_mappings.get('branch')
+            
+            rename_map = {}
+            if prospect_col: rename_map["Prospectno"] = prospect_col
+            if cuid_col: rename_map["CUID"] = cuid_col
+            if tare_col: rename_map["Tare Weight"] = tare_col
+            if branch_col: rename_map["CurrentBranchName"] = branch_col
+            
+            for target_name, orig_name in rename_map.items():
+                if orig_name in header_indices:
+                    col_idx = header_indices[orig_name]
+                    ws.cell(row=1, column=col_idx).value = target_name
+            
+            updated_headers = [str(cell.value).strip() if cell.value is not None else "" for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+            
+            if "CurrentBranch" not in updated_headers:
+                branch_name_idx = updated_headers.index("CurrentBranchName") + 1 if "CurrentBranchName" in updated_headers else None
+                if branch_name_idx:
+                    new_col_idx = len(updated_headers) + 1
+                    ws.cell(row=1, column=new_col_idx).value = "CurrentBranch"
+                    for r in range(2, ws.max_row + 1):
+                        ws.cell(row=r, column=new_col_idx).value = ws.cell(row=r, column=branch_name_idx).value
+            
+            updated_headers = [str(cell.value).strip() if cell.value is not None else "" for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+            if "State" not in updated_headers:
+                new_col_idx = len(updated_headers) + 1
+                ws.cell(row=1, column=new_col_idx).value = "State"
+                for r in range(2, ws.max_row + 1):
+                    ws.cell(row=r, column=new_col_idx).value = "UNKNOWN"
+        else:
+            svs_col = column_mappings.get('svs')
+            sole_col = column_mappings.get('sole')
+            branch_col = column_mappings.get('branch')
+            loan_col = column_mappings.get('loan')
+            
+            rename_map = {}
+            if svs_col: rename_map["SVS_LOAN_NO"] = svs_col
+            if sole_col: rename_map["SOLE_ID"] = sole_col
+            if branch_col: rename_map["BRANCH_NAME"] = branch_col
+            if loan_col: rename_map["LOAN_NO"] = loan_col
+            
+            for target_name, orig_name in rename_map.items():
+                if orig_name in header_indices:
+                    col_idx = header_indices[orig_name]
+                    ws.cell(row=1, column=col_idx).value = target_name
+                    
+        temp_dir = os.path.join(os.path.expanduser("~"), ".temp_audit_engine")
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_path = os.path.join(temp_dir, f"mapped_{os.path.basename(filepath)}")
+        wb.save(temp_path)
+        wb.close()
+        return temp_path
+    except Exception as e:
+        file_logger.warning(f"Column mapping preprocessing failed: {e}")
+        return filepath
+
 # =========================================================
 # DATABASE HANDLING
 # =========================================================
@@ -606,6 +728,7 @@ def worker_idfc_thread(inp, out_base, typ, output_mode, auto_open, naming_patter
                     {"label": "Output Staged At", "value": final_target}
                 ]
             }
+            trigger_desktop_notification("Audit Engine Elite", f"✓ Generation complete! Created {count} branch reports.")
         else:
             log_generation(excel_name, count, out, f"{typ} (CANCELLED)", full_path=inp)
             global_tracker.log("WARN", f"Wound down gracefully after {count}/{total} branches.")
@@ -620,8 +743,15 @@ def worker_idfc_thread(inp, out_base, typ, output_mode, auto_open, naming_patter
             "title": "Generation Failed",
             "message": str(e)
         }
+        trigger_desktop_notification("Generation Failed", f"✗ Batch compilation failed: {e}")
     finally:
         global_tracker.is_running = False
+        if "mapped_" in os.path.basename(inp) and ".temp_audit_engine" in inp:
+            try:
+                if os.path.exists(inp):
+                    os.remove(inp)
+            except OSError:
+                pass
 
 def worker_equitas_thread(inp, out_base, stage, equitas_format, equitas_pack):
     try:
@@ -676,6 +806,7 @@ def worker_equitas_thread(inp, out_base, stage, equitas_format, equitas_pack):
                         {"label": "Output Directory", "value": out}
                     ]
                 }
+                trigger_desktop_notification("Audit Engine Elite", f"✓ Stage 1 Complete! {pdf_c} PDFs and {exc_c} Excels built.")
             else:
                 log_generation(excel_name, pdf_c + exc_c, out, "Equitas-S1 (CANCELLED)", full_path=inp)
                 global_tracker.log("WARN", "Stage 1 Generation Cancelled.")
@@ -713,6 +844,7 @@ def worker_equitas_thread(inp, out_base, stage, equitas_format, equitas_pack):
                         {"label": "Output Excel File", "value": out_path}
                     ]
                 }
+                trigger_desktop_notification("Audit Engine Elite", "✓ Stage 2 Complete! Consolidated worksheet created.")
             else:
                 log_generation(excel_name, 0, out, "Equitas-S2 (CANCELLED)", full_path=inp)
                 global_tracker.log("WARN", "Stage 2 Consolidation Cancelled.")
@@ -727,8 +859,15 @@ def worker_equitas_thread(inp, out_base, stage, equitas_format, equitas_pack):
             "title": "Equitas Generation Failed",
             "message": str(e)
         }
+        trigger_desktop_notification("Equitas Generation Failed", f"✗ Batch compilation failed: {e}")
     finally:
         global_tracker.is_running = False
+        if "mapped_" in os.path.basename(inp) and ".temp_audit_engine" in inp:
+            try:
+                if os.path.exists(inp):
+                    os.remove(inp)
+            except OSError:
+                pass
 
 # =========================================================
 # WSGI BOTTLE WEB SERVICE ROUTING
@@ -775,6 +914,30 @@ def api_config_save():
     set_config(data['key'], data['value'])
     return {"success": True}
 
+def peek_excel_data(filepath):
+    """Peek at the first sheet, returning headers and first 5 rows of raw data."""
+    try:
+        wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
+        sheet = wb.active
+        headers = []
+        rows = []
+        for i, row_cells in enumerate(sheet.iter_rows(values_only=True)):
+            if i == 0:
+                headers = [str(c).strip() if c is not None else f"Column {idx}" for idx, c in enumerate(row_cells)]
+            elif i <= 5:
+                row_data = [str(c) if c is not None else "" for c in row_cells]
+                # Pad row_data to match headers length just in case
+                if len(row_data) < len(headers):
+                    row_data.extend([""] * (len(headers) - len(row_data)))
+                rows.append(row_data[:len(headers)])
+            else:
+                break
+        wb.close()
+        return headers, rows
+    except Exception as e:
+        file_logger.warning(f"Failed to peek Excel data: {e}")
+        return [], []
+
 @route('/api/validate', method='POST')
 def api_validate():
     data = request.json
@@ -784,6 +947,8 @@ def api_validate():
     
     detected_bank = _detect_bank_from_file(filepath)
     try:
+        headers, preview_rows = peek_excel_data(filepath)
+        
         if detected_bank == "IDFC First Bank":
             valid, err = pdf_logic.validate_excel(filepath)
             if valid:
@@ -793,23 +958,46 @@ def api_validate():
                     "success": True, 
                     "detected_bank": detected_bank, 
                     "rows": len(rows), 
-                    "branches": len(groups)
+                    "branches": len(groups),
+                    "headers": headers,
+                    "preview": preview_rows
                 }
-            return {"success": False, "error": err, "detected_bank": detected_bank}
+            return {"success": False, "error": err, "detected_bank": detected_bank, "headers": headers, "preview": preview_rows}
         
         elif detected_bank == "Equitas Small Finance Bank":
-            # Peek sheets to see which stage validation fits
             wb = openpyxl.load_workbook(filepath, read_only=True)
             sheets = wb.sheetnames
             wb.close()
             if "JSR" in sheets or "Normal" in sheets:
                 valid, err = equitas_logic.validate_equitas_stage1_file(filepath)
-                return {"success": valid, "error": err, "detected_bank": detected_bank, "rows": "peek complete", "branches": "N/A"}
+                return {
+                    "success": valid, 
+                    "error": err, 
+                    "detected_bank": detected_bank, 
+                    "rows": "stage 1 peek", 
+                    "branches": "N/A",
+                    "headers": headers,
+                    "preview": preview_rows
+                }
             else:
                 valid, err = equitas_logic.validate_equitas_stage2_file(filepath)
-                return {"success": valid, "error": err, "detected_bank": detected_bank, "rows": "consolidation peek", "branches": "N/A"}
+                return {
+                    "success": valid, 
+                    "error": err, 
+                    "detected_bank": detected_bank, 
+                    "rows": "stage 2 peek", 
+                    "branches": "N/A",
+                    "headers": headers,
+                    "preview": preview_rows
+                }
         
-        return {"success": False, "error": "Invalid Gold Loan Audit Excel format structure.", "detected_bank": None}
+        return {
+            "success": False, 
+            "error": "Invalid Gold Loan Audit Excel format structure.", 
+            "detected_bank": None,
+            "headers": headers,
+            "preview": preview_rows
+        }
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -850,6 +1038,11 @@ def api_run():
 
     cancel_event.clear()
     global_tracker.reset()
+
+    # Column mappings preprocessing
+    column_mappings = data.get('column_mappings')
+    if column_mappings:
+        filepath = preprocess_mapped_excel(filepath, column_mappings, bank)
 
     if bank == "IDFC First Bank":
         audit_type = data.get('audit_type', 'POA')
@@ -936,9 +1129,20 @@ def api_recent_clear():
 @route('/api/stats')
 def api_stats():
     types, trend = get_analytics()
+    total_sessions, total_pdfs = get_stats()
+    
+    conn = _connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(DISTINCT excel_name) FROM history")
+    total_excels = cursor.fetchone()[0] or 0
+    conn.close()
+    
     return {
         "distribution": types,
-        "trend": trend
+        "trend": trend,
+        "total_sessions": total_sessions,
+        "total_pdfs": total_pdfs,
+        "total_excels": total_excels
     }
 
 @route('/api/open', method='POST')

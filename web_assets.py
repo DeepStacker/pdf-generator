@@ -188,6 +188,54 @@ HTML_CONTENT = """<!DOCTYPE html>
                             <span id="idfcPreviewText">File loaded successfully</span>
                         </div>
 
+                        <!-- Excel Preview Grid (Collapsible) -->
+                        <div id="idfcGridContainer" class="hidden space-y-3">
+                            <button onclick="togglePreviewGrid('idfc')" class="flex items-center space-x-2 text-xs font-bold text-slate-400 hover:text-white transition">
+                                <i id="idfcGridIcon" data-lucide="chevron-right" class="w-4 h-4 transition-transform duration-200"></i>
+                                <span>Preview Gold Loan Spreadsheet Records (First 5 Rows)</span>
+                            </button>
+                            <div id="idfcGridWrapper" class="hidden overflow-x-auto rounded-xl border border-brand-borderLine bg-slate-950/40 shadow-inner">
+                                <table class="w-full text-left border-collapse text-[10px] font-mono whitespace-nowrap">
+                                    <thead>
+                                        <tr id="idfcGridHeader" class="bg-slate-900 border-b border-brand-borderLine text-slate-500 uppercase tracking-wider font-sans font-bold">
+                                            <!-- Dynamic headers -->
+                                        </tr>
+                                    </thead>
+                                    <tbody id="idfcGridBody" class="divide-y divide-brand-borderLine text-slate-300">
+                                        <!-- Dynamic rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Column Mapper Assistant (Collapsible) -->
+                        <div id="idfcMapperContainer" class="hidden space-y-3 p-4 bg-slate-900/30 border border-brand-borderLine rounded-xl">
+                            <span class="block text-xs font-bold text-slate-400 uppercase tracking-wider">Column Mapping Assistant</span>
+                            <p class="text-[10px] text-slate-500">Gold loan audit engine columns mapped automatically. Adjust below if necessary:</p>
+                            <div class="grid grid-cols-2 gap-4 text-xs">
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-400 mb-1">Prospect Number Key</label>
+                                    <select id="idfcMap-prospect" class="w-full bg-slate-950 border border-brand-borderLine rounded px-2 py-1.5 focus:outline-none text-slate-200">
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-400 mb-1">CUID (Customer ID) Key</label>
+                                    <select id="idfcMap-cuid" class="w-full bg-slate-950 border border-brand-borderLine rounded px-2 py-1.5 focus:outline-none text-slate-200">
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-400 mb-1">Tare Weight Key</label>
+                                    <select id="idfcMap-tare" class="w-full bg-slate-950 border border-brand-borderLine rounded px-2 py-1.5 focus:outline-none text-slate-200">
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-400 mb-1">Branch Name Key</label>
+                                    <select id="idfcMap-branch" class="w-full bg-slate-950 border border-brand-borderLine rounded px-2 py-1.5 focus:outline-none text-slate-200">
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Options config -->
                         <div class="grid grid-cols-2 gap-6 pt-2">
                             <!-- Left: Audit Type Segment -->
@@ -235,14 +283,40 @@ HTML_CONTENT = """<!DOCTYPE html>
                             <button id="idfcBtnCancel" onclick="cancelGeneration()" disabled class="bg-rose-600 text-white text-sm font-bold py-3.5 px-6 rounded-lg hover:bg-rose-500 transition disabled:opacity-40 disabled:pointer-events-none">Stop</button>
                         </div>
 
-                        <!-- Progress indicator -->
-                        <div id="idfcProgressContainer" class="space-y-2 pt-2 hidden">
-                            <div class="flex justify-between text-xs text-slate-400">
-                                <span id="idfcProgressBranch" class="italic">Initializing build...</span>
-                                <span id="idfcProgressPct" class="font-bold text-white">0%</span>
+                        <!-- Progress indicator (Circular Gauge) -->
+                        <div id="idfcProgressContainer" class="hidden bg-slate-950/30 border border-brand-borderLine rounded-xl p-5 flex items-center justify-between shadow-inner">
+                            <div class="flex items-center space-x-6">
+                                <!-- Circular Gauge Ring -->
+                                <div class="relative w-20 h-20 flex-shrink-0">
+                                    <svg class="w-full h-full transform -rotate-90">
+                                        <!-- Track Ring -->
+                                        <circle cx="40" cy="40" r="34" stroke-width="6" stroke="#1E293B" fill="transparent"/>
+                                        <!-- Active Progress Ring -->
+                                        <circle id="idfcProgressRing" cx="40" cy="40" r="34" stroke-width="6" stroke="#2563EB" fill="transparent"
+                                                stroke-dasharray="213.6" stroke-dashoffset="213.6" stroke-linecap="round" class="transition-all duration-300 dynamic-accent-stroke"/>
+                                    </svg>
+                                    <span id="idfcProgressPct" class="absolute inset-0 flex items-center justify-center text-sm font-extrabold text-white font-mono">0%</span>
+                                </div>
+                                <div class="space-y-1">
+                                    <span id="idfcProgressBranch" class="block text-xs font-bold text-slate-200">Initializing thread...</span>
+                                    <span id="idfcProgressSpeed" class="block text-[10px] text-slate-500 font-mono">Speed: Calculating...</span>
+                                    <span id="idfcProgressEta" class="block text-[10px] text-emerald-400 font-semibold">ETA: Calculating...</span>
+                                </div>
                             </div>
-                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-brand-borderLine">
-                                <div id="idfcProgressBar" class="bg-blue-500 h-full rounded-full transition-all duration-300 dynamic-accent-bg" style="width: 0%"></div>
+                            <!-- Fluent checklisted status badges -->
+                            <div class="flex flex-col space-y-1.5 text-right font-mono text-[9px] text-slate-500">
+                                <div class="flex items-center justify-end space-x-1.5" id="idfcStatusBadge-read">
+                                    <span>READ spreadsheet</span>
+                                    <i data-lucide="circle" class="w-3 h-3 text-slate-600" id="idfcStatusIcon-read"></i>
+                                </div>
+                                <div class="flex items-center justify-end space-x-1.5" id="idfcStatusBadge-pdf">
+                                    <span>GENERATE gold audits</span>
+                                    <i data-lucide="circle" class="w-3 h-3 text-slate-600" id="idfcStatusIcon-pdf"></i>
+                                </div>
+                                <div class="flex items-center justify-end space-x-1.5" id="idfcStatusBadge-zip">
+                                    <span>COMPRESS packaging</span>
+                                    <i data-lucide="circle" class="w-3 h-3 text-slate-600" id="idfcStatusIcon-zip"></i>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -301,6 +375,54 @@ HTML_CONTENT = """<!DOCTYPE html>
                             <span id="eqPreviewText">File loaded successfully</span>
                         </div>
 
+                        <!-- Excel Preview Grid (Collapsible) -->
+                        <div id="eqGridContainer" class="hidden space-y-3">
+                            <button onclick="togglePreviewGrid('eq')" class="flex items-center space-x-2 text-xs font-bold text-slate-400 hover:text-white transition">
+                                <i id="eqGridIcon" data-lucide="chevron-right" class="w-4 h-4 transition-transform duration-200"></i>
+                                <span>Preview Gold Loan Spreadsheet Records (First 5 Rows)</span>
+                            </button>
+                            <div id="eqGridWrapper" class="hidden overflow-x-auto rounded-xl border border-brand-borderLine bg-slate-950/40 shadow-inner">
+                                <table class="w-full text-left border-collapse text-[10px] font-mono whitespace-nowrap">
+                                    <thead>
+                                        <tr id="eqGridHeader" class="bg-slate-900 border-b border-brand-borderLine text-slate-500 uppercase tracking-wider font-sans font-bold">
+                                            <!-- Dynamic headers -->
+                                        </tr>
+                                    </thead>
+                                    <tbody id="eqGridBody" class="divide-y divide-brand-borderLine text-slate-300">
+                                        <!-- Dynamic rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Column Mapper Assistant (Collapsible) -->
+                        <div id="eqMapperContainer" class="hidden space-y-3 p-4 bg-slate-900/30 border border-brand-borderLine rounded-xl">
+                            <span class="block text-xs font-bold text-slate-400 uppercase tracking-wider">Column Mapping Assistant</span>
+                            <p class="text-[10px] text-slate-500">Gold loan audit engine columns mapped automatically. Adjust below if necessary:</p>
+                            <div class="grid grid-cols-2 gap-4 text-xs">
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-400 mb-1">SVS Loan Number Key</label>
+                                    <select id="eqMap-svs" class="w-full bg-slate-950 border border-brand-borderLine rounded px-2 py-1.5 focus:outline-none text-slate-200">
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-400 mb-1">Branch Code (Sole ID) Key</label>
+                                    <select id="eqMap-sole" class="w-full bg-slate-950 border border-brand-borderLine rounded px-2 py-1.5 focus:outline-none text-slate-200">
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-400 mb-1">Branch Name Key</label>
+                                    <select id="eqMap-branch" class="w-full bg-slate-950 border border-brand-borderLine rounded px-2 py-1.5 focus:outline-none text-slate-200">
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-400 mb-1">Loan Number Key</label>
+                                    <select id="eqMap-loan" class="w-full bg-slate-950 border border-brand-borderLine rounded px-2 py-1.5 focus:outline-none text-slate-200">
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Format & Packaging row (Stage 1 Only) -->
                         <div id="eqStage1Config" class="grid grid-cols-2 gap-6 pt-2">
                             <!-- Left: Output Format pills -->
@@ -356,14 +478,40 @@ HTML_CONTENT = """<!DOCTYPE html>
                             <button id="eqBtnCancel" onclick="cancelGeneration()" disabled class="bg-rose-600 text-white text-sm font-bold py-3.5 px-6 rounded-lg hover:bg-rose-500 transition disabled:opacity-40 disabled:pointer-events-none">Stop</button>
                         </div>
 
-                        <!-- Progress indicator -->
-                        <div id="eqProgressContainer" class="space-y-2 pt-2 hidden">
-                            <div class="flex justify-between text-xs text-slate-400">
-                                <span id="eqProgressBranch" class="italic">Initializing build...</span>
-                                <span id="eqProgressPct" class="font-bold text-white">0%</span>
+                        <!-- Progress indicator (Circular Gauge) -->
+                        <div id="eqProgressContainer" class="hidden bg-slate-950/30 border border-brand-borderLine rounded-xl p-5 flex items-center justify-between shadow-inner">
+                            <div class="flex items-center space-x-6">
+                                <!-- Circular Gauge Ring -->
+                                <div class="relative w-20 h-20 flex-shrink-0">
+                                    <svg class="w-full h-full transform -rotate-90">
+                                        <!-- Track Ring -->
+                                        <circle cx="40" cy="40" r="34" stroke-width="6" stroke="#1E293B" fill="transparent"/>
+                                        <!-- Active Progress Ring -->
+                                        <circle id="eqProgressRing" cx="40" cy="40" r="34" stroke-width="6" stroke="#F59E0B" fill="transparent"
+                                                stroke-dasharray="213.6" stroke-dashoffset="213.6" stroke-linecap="round" class="transition-all duration-300 dynamic-accent-stroke"/>
+                                    </svg>
+                                    <span id="eqProgressPct" class="absolute inset-0 flex items-center justify-center text-sm font-extrabold text-white font-mono">0%</span>
+                                </div>
+                                <div class="space-y-1">
+                                    <span id="eqProgressBranch" class="block text-xs font-bold text-slate-200">Initializing thread...</span>
+                                    <span id="eqProgressSpeed" class="block text-[10px] text-slate-500 font-mono">Speed: Calculating...</span>
+                                    <span id="eqProgressEta" class="block text-[10px] text-amber-400 font-semibold">ETA: Calculating...</span>
+                                </div>
                             </div>
-                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-brand-borderLine">
-                                <div id="eqProgressBar" class="bg-amber-500 h-full rounded-full transition-all duration-300 dynamic-accent-bg" style="width: 0%"></div>
+                            <!-- Fluent checklisted status badges -->
+                            <div class="flex flex-col space-y-1.5 text-right font-mono text-[9px] text-slate-500">
+                                <div class="flex items-center justify-end space-x-1.5" id="eqStatusBadge-read">
+                                    <span>READ spreadsheet</span>
+                                    <i data-lucide="circle" class="w-3 h-3 text-slate-600" id="eqStatusIcon-read"></i>
+                                </div>
+                                <div class="flex items-center justify-end space-x-1.5" id="eqStatusBadge-pdf">
+                                    <span>GENERATE gold audits</span>
+                                    <i data-lucide="circle" class="w-3 h-3 text-slate-600" id="eqStatusIcon-pdf"></i>
+                                </div>
+                                <div class="flex items-center justify-end space-x-1.5" id="eqStatusBadge-zip">
+                                    <span>COMPRESS packaging</span>
+                                    <i data-lucide="circle" class="w-3 h-3 text-slate-600" id="eqStatusIcon-zip"></i>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -384,22 +532,71 @@ HTML_CONTENT = """<!DOCTYPE html>
                         <button onclick="refreshStats()" class="bg-slate-800 text-slate-300 text-xs font-semibold px-4 py-2 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Refresh</button>
                     </div>
 
+                    <!-- Summary Stats Badges row -->
+                    <div class="grid grid-cols-3 gap-6">
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-5 flex items-center justify-between shadow-sm">
+                            <div>
+                                <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Batches Run</span>
+                                <strong id="statBadge-totalBatches" class="block text-2xl font-extrabold text-white font-sans mt-1">0</strong>
+                            </div>
+                            <div class="bg-blue-500/10 text-blue-400 p-3 rounded-lg border border-blue-500/20">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2" /></svg>
+                            </div>
+                        </div>
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-5 flex items-center justify-between shadow-sm">
+                            <div>
+                                <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Reports Created</span>
+                                <strong id="statBadge-totalPDFs" class="block text-2xl font-extrabold text-white font-sans mt-1">0</strong>
+                            </div>
+                            <div class="bg-emerald-500/10 text-emerald-400 p-3 rounded-lg border border-emerald-500/20">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            </div>
+                        </div>
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-5 flex items-center justify-between shadow-sm">
+                            <div>
+                                <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Unique Excel Files</span>
+                                <strong id="statBadge-totalExcels" class="block text-2xl font-extrabold text-white font-sans mt-1">0</strong>
+                            </div>
+                            <div class="bg-indigo-500/10 text-indigo-400 p-3 rounded-lg border border-indigo-500/20">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="grid grid-cols-2 gap-8">
-                        <!-- Left card: Audit Type Distribution -->
+                        <!-- Left card: Donut Share Distribution -->
                         <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-6">
-                            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Audit Type Distribution</h3>
-                            <div id="statsDistribution" class="space-y-4">
-                                <!-- Dynamic progress rows -->
-                                <div class="text-sm text-slate-400 italic">No activity logs recorded yet.</div>
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Audit Type Share Distribution</h3>
+                                <p class="text-[10px] text-slate-500 mt-1">Relative proportion of audit runs grouped by Bank product type</p>
+                            </div>
+                            <div class="flex items-center justify-center space-x-8 py-4">
+                                <div class="relative w-44 h-44 flex-shrink-0">
+                                    <svg viewBox="0 0 100 100" class="w-full h-full transform -rotate-90" id="statsDonutSvg">
+                                    </svg>
+                                    <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                        <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider leading-none">Share</span>
+                                        <span id="statsDonutCenterPct" class="text-lg font-extrabold text-white font-mono mt-1">-</span>
+                                    </div>
+                                </div>
+                                <div id="statsDistribution" class="flex-1 space-y-3">
+                                    <div class="text-sm text-slate-500 italic">No activity logs recorded yet.</div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Right card: Daily activity logs -->
-                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-6">
-                            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Daily Activity (Last 7 Days)</h3>
-                            <div id="statsActivity" class="space-y-3">
-                                <!-- Dynamic daily list -->
-                                <div class="text-sm text-slate-400 italic">No activity logs recorded yet.</div>
+                        <!-- Right card: Weekly Neon Volume Line Chart -->
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-6 flex flex-col justify-between">
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Weekly Batch Volume Trend</h3>
+                                <p class="text-[10px] text-slate-500 mt-1">Number of generated worksheet runs over the last 7 active days</p>
+                            </div>
+                            <div class="w-full h-44 py-2">
+                                <svg viewBox="0 0 300 120" class="w-full h-full overflow-visible" id="statsLineSvg">
+                                </svg>
+                            </div>
+                            <div id="statsActivity" class="border-t border-brand-borderLine pt-4 grid grid-cols-7 gap-2 text-center text-[9px] font-semibold text-slate-400 font-mono">
+                                <div class="col-span-7 italic text-slate-500 text-center py-4">No recent history</div>
                             </div>
                         </div>
                     </div>
@@ -542,7 +739,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                 outputFormat: 'BOTH'
             },
             isGenerating: false,
-            logsCount: 0
+            logsCount: 0,
+            genStartTime: null,
+            totalBranches: 0,
+            totalRows: 0
         };
 
         // DOM REFERENCES
@@ -891,6 +1091,102 @@ HTML_CONTENT = """<!DOCTYPE html>
             validateFile(path);
         }
 
+        // SPREADSHEET PREVIEW GRID & DYNAMIC COLUMN MAPPER
+        function renderPreviewGrid(prefix, headers, preview) {
+            const container = document.getElementById(`${prefix}GridContainer`);
+            const headerRow = document.getElementById(`${prefix}GridHeader`);
+            const body = document.getElementById(`${prefix}GridBody`);
+            
+            if (!headers || headers.length === 0 || !preview || preview.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            
+            // Build headers
+            let hHtml = '';
+            headers.forEach(h => {
+                hHtml += `<th class="py-2.5 px-4 border-b border-brand-borderLine">${h}</th>`;
+            });
+            headerRow.innerHTML = hHtml;
+            
+            // Build preview rows
+            let rHtml = '';
+            preview.forEach(row => {
+                rHtml += `<tr class="hover:bg-slate-900/30 transition border-b border-brand-borderLine">`;
+                row.forEach(val => {
+                    rHtml += `<td class="py-2.5 px-4 font-mono">${val}</td>`;
+                });
+                rHtml += `</tr>`;
+            });
+            body.innerHTML = rHtml;
+            
+            container.classList.remove('hidden');
+        }
+        
+        function togglePreviewGrid(prefix) {
+            const wrapper = document.getElementById(`${prefix}GridWrapper`);
+            const icon = document.getElementById(`${prefix}GridIcon`);
+            
+            if (wrapper.classList.contains('hidden')) {
+                wrapper.classList.remove('hidden');
+                icon.style.transform = 'rotate(90deg)';
+            } else {
+                wrapper.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        function populateMapperDropdowns(prefix, headers) {
+            const container = document.getElementById(`${prefix}MapperContainer`);
+            if (!headers || headers.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            
+            let fields = [];
+            if (prefix === 'idfc') {
+                fields = [
+                    { id: 'idfcMap-prospect', defaultFingerprints: ['prospectno', 'prospect_no', 'prospect number', 'prospect_number'] },
+                    { id: 'idfcMap-cuid', defaultFingerprints: ['cuid', 'customerid', 'customer_id', 'customer id'] },
+                    { id: 'idfcMap-tare', defaultFingerprints: ['tare weight', 'tareweight', 'tare_weight', 'tare_wt'] },
+                    { id: 'idfcMap-branch', defaultFingerprints: ['currentbranch', 'current_branch', 'branchname', 'branch_name', 'branch name'] }
+                ];
+            } else {
+                fields = [
+                    { id: 'eqMap-svs', defaultFingerprints: ['svs_loan_no', 'svs loanno', 'svs_loan', 'svs loan'] },
+                    { id: 'eqMap-sole', defaultFingerprints: ['sole_id', 'soleid', 'branch_code', 'branch code', 'sole id'] },
+                    { id: 'eqMap-branch', defaultFingerprints: ['branch_name', 'branchname', 'branch name', 'branch'] },
+                    { id: 'eqMap-loan', defaultFingerprints: ['loan no', 'loanno', 'loan_no', 'loan number'] }
+                ];
+            }
+            
+            fields.forEach(field => {
+                const select = document.getElementById(field.id);
+                if (!select) return;
+                
+                select.innerHTML = '';
+                
+                let selectedIdx = 0;
+                headers.forEach((h, idx) => {
+                    const option = document.createElement('option');
+                    option.value = h;
+                    option.textContent = h;
+                    select.appendChild(option);
+                    
+                    const lowerH = h.toLowerCase().trim();
+                    field.defaultFingerprints.forEach(fingerprint => {
+                        if (lowerH.includes(fingerprint) || fingerprint.includes(lowerH)) {
+                            selectedIdx = idx;
+                        }
+                    });
+                });
+                
+                select.selectedIndex = selectedIdx;
+            });
+            
+            container.classList.remove('hidden');
+        }
+
         // PREVIEW & VALIDATION OF EXCEL PEAK
         async function validateFile(filepath) {
             const isIDFC = (state.activeBank === 'IDFC First Bank');
@@ -922,11 +1218,27 @@ HTML_CONTENT = """<!DOCTYPE html>
                     previewBox.classList.remove('hidden');
                     previewBox.className = "bg-emerald-950/20 border border-emerald-900/30 rounded-lg px-4 py-3 flex items-center space-x-2 text-emerald-400 text-xs";
                     previewText.innerHTML = `<strong>✓ Excel Loaded:</strong> Found ${data.rows || 0} rows, representing ${data.branches || 0} branches to audit.`;
+                    
+                    state.totalBranches = parseInt(data.branches) || 0;
+                    state.totalRows = parseInt(data.rows) || 0;
+                    
+                    const prefix = isIDFC ? 'idfc' : 'eq';
+                    renderPreviewGrid(prefix, data.headers, data.preview);
+                    populateMapperDropdowns(prefix, data.headers);
                 } else {
                     previewBox.classList.add('hidden');
                     validationBox.classList.remove('hidden');
                     validationBox.className = "bg-rose-950/20 border border-rose-900/30 rounded-lg px-4 py-3 text-rose-400 text-xs";
                     validationBox.innerHTML = `<strong>✗ Load Error:</strong> ${data.error || 'Invalid spreadsheet file format.'}`;
+                    
+                    const prefix = isIDFC ? 'idfc' : 'eq';
+                    if (data.headers && data.headers.length > 0 && data.preview && data.preview.length > 0) {
+                        renderPreviewGrid(prefix, data.headers, data.preview);
+                        populateMapperDropdowns(prefix, data.headers);
+                    } else {
+                        document.getElementById(`${prefix}GridContainer`).classList.add('hidden');
+                        document.getElementById(`${prefix}MapperContainer`).classList.add('hidden');
+                    }
                 }
             } catch (err) {
                 console.error('File validation request failed:', err);
@@ -989,6 +1301,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
             
             state.isGenerating = true;
+            state.genStartTime = Date.now();
             
             // UI Toggle to busy
             setUiGeneratingState(true);
@@ -998,6 +1311,19 @@ HTML_CONTENT = """<!DOCTYPE html>
             consoleBox.innerHTML = '<div class="text-slate-500">[00:00:00] Initializing generation background worker thread...</div>';
             state.logsCount = 0;
             
+            // Gather custom column mappings
+            const columnMappings = isIDFC ? {
+                prospect: document.getElementById('idfcMap-prospect').value,
+                cuid: document.getElementById('idfcMap-cuid').value,
+                tare: document.getElementById('idfcMap-tare').value,
+                branch: document.getElementById('idfcMap-branch').value
+            } : {
+                svs: document.getElementById('eqMap-svs').value,
+                sole: document.getElementById('eqMap-sole').value,
+                branch: document.getElementById('eqMap-branch').value,
+                loan: document.getElementById('eqMap-loan').value
+            };
+            
             // Gather run parameters
             const payload = {
                 bank: state.activeBank,
@@ -1005,6 +1331,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 out_path: output,
                 auto_open: isIDFC ? document.getElementById('idfcAutoOpen').checked : document.getElementById('eqAutoOpen').checked,
                 naming_pattern: document.getElementById('settingsNamingPattern').value || '{branch}_{type}',
+                column_mappings: columnMappings,
                 
                 // IDFC specific
                 audit_type: state.idfc.auditType,
@@ -1059,19 +1386,91 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const data = await resp.json();
                 
                 const isIDFC = (state.activeBank === 'IDFC First Bank');
+                const prefix = isIDFC ? 'idfc' : 'eq';
                 
-                // Render progress bars
                 const pct = Math.round(data.pct || 0);
                 const branchText = data.active_branch || 'Processing spreadsheet records...';
                 
-                if (isIDFC) {
-                    document.getElementById('idfcProgressPct').textContent = `${pct}%`;
-                    document.getElementById('idfcProgressBranch').textContent = branchText;
-                    document.getElementById('idfcProgressBar').style.width = `${pct}%`;
-                } else {
-                    document.getElementById('eqProgressPct').textContent = `${pct}%`;
-                    document.getElementById('eqProgressBranch').textContent = branchText;
-                    document.getElementById('eqProgressBar').style.width = `${pct}%`;
+                // Animate circular SVG progress rings
+                const circ = 2 * Math.PI * 34; // ~213.6
+                const offset = circ - (circ * pct / 100);
+                
+                document.getElementById(`${prefix}ProgressPct`).textContent = `${pct}%`;
+                document.getElementById(`${prefix}ProgressBranch`).textContent = branchText;
+                
+                const ring = document.getElementById(`${prefix}ProgressRing`);
+                if (ring) {
+                    ring.style.strokeDashoffset = offset;
+                }
+                
+                // Scan logs for speed/ETA calculation
+                let total = state.totalBranches || 0;
+                let completed = 0;
+                
+                if (data.logs) {
+                    data.logs.forEach(log => {
+                        const msg = log.message;
+                        if (msg.includes('branches. Starting generation')) {
+                            const match = msg.match(/Found (\\d+) branches/);
+                            if (match) {
+                                total = parseInt(match[1]);
+                            }
+                        }
+                        if (msg.includes('Building:')) {
+                            completed++;
+                        }
+                    });
+                }
+                
+                if (total === 0 && isIDFC) {
+                    total = state.totalBranches || 1;
+                }
+                
+                const elapsedSeconds = (Date.now() - state.genStartTime) / 1000;
+                let speedText = 'Speed: Calculating...';
+                let etaText = 'ETA: Calculating...';
+                
+                if (completed > 0 && elapsedSeconds > 0) {
+                    const speedVal = completed / elapsedSeconds;
+                    speedText = `Speed: ${speedVal.toFixed(1)} PDFs/sec`;
+                    
+                    if (total > completed) {
+                        const remaining = total - completed;
+                        const etaSeconds = remaining / speedVal;
+                        const m = Math.floor(etaSeconds / 60);
+                        const s = Math.floor(etaSeconds % 60);
+                        etaText = m > 0 ? `ETA: ${m}m ${s}s` : `ETA: ${s}s`;
+                    } else {
+                        etaText = 'ETA: Done';
+                    }
+                }
+                
+                const speedElem = document.getElementById(`${prefix}ProgressSpeed`);
+                const etaElem = document.getElementById(`${prefix}ProgressEta`);
+                if (speedElem) speedElem.textContent = speedText;
+                if (etaElem) etaElem.textContent = etaText;
+                
+                // Swap checklist badge icons dynamically
+                const iconRead = document.getElementById(`${prefix}StatusIcon-read`);
+                const iconPdf = document.getElementById(`${prefix}StatusIcon-pdf`);
+                const iconZip = document.getElementById(`${prefix}StatusIcon-zip`);
+                
+                if (pct === 0) {
+                    if (iconRead) iconRead.innerHTML = ICON_SPIN;
+                    if (iconPdf) iconPdf.innerHTML = ICON_CIRCLE;
+                    if (iconZip) iconZip.innerHTML = ICON_CIRCLE;
+                } else if (pct > 0 && pct < 90) {
+                    if (iconRead) iconRead.innerHTML = ICON_CHECK;
+                    if (iconPdf) iconPdf.innerHTML = ICON_SPIN;
+                    if (iconZip) iconZip.innerHTML = ICON_CIRCLE;
+                } else if (pct >= 90 && pct < 100) {
+                    if (iconRead) iconRead.innerHTML = ICON_CHECK;
+                    if (iconPdf) iconPdf.innerHTML = ICON_CHECK;
+                    if (iconZip) iconZip.innerHTML = ICON_SPIN;
+                } else if (pct === 100) {
+                    if (iconRead) iconRead.innerHTML = ICON_CHECK;
+                    if (iconPdf) iconPdf.innerHTML = ICON_CHECK;
+                    if (iconZip) iconZip.innerHTML = ICON_CHECK;
                 }
                 
                 // Render console logs
@@ -1090,12 +1489,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                     state.isGenerating = false;
                     setUiGeneratingState(false);
                     
-                    // Show final report popup modal summary
                     if (data.summary) {
                         openSummaryModal(data.summary);
                     }
                     
-                    // Reload Stats and dashboard history numbers
                     loadDashboardData();
                 }
             } catch (err) {
@@ -1186,50 +1583,153 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('summaryModal').classList.add('hidden');
         }
 
+        // DYNAMIC SVG ANCHORS AND CHARTS RENDERING ENGINES
+        const ICON_CIRCLE = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-slate-600"><circle cx="12" cy="12" r="10"></circle></svg>`;
+        const ICON_CHECK = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-emerald-400"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
+        const ICON_SPIN = `<svg class="animate-spin w-3 h-3 text-sky-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+
+        function drawDonutChart(dataDict) {
+            const svg = document.getElementById('statsDonutSvg');
+            const list = document.getElementById('statsDistribution');
+            const centerPct = document.getElementById('statsDonutCenterPct');
+            
+            if (!svg || !list || !centerPct) return;
+            
+            if (!dataDict || Object.keys(dataDict).length === 0) {
+                svg.innerHTML = `<circle cx="50" cy="50" r="30" fill="none" stroke="#1E293B" stroke-width="12" />`;
+                list.innerHTML = `<div class="text-xs text-slate-500 italic">No runs recorded yet.</div>`;
+                centerPct.textContent = '0%';
+                return;
+            }
+            
+            const colors = ['#3B82F6', '#F59E0B', '#10B981', '#6366F1', '#EC4899', '#8B5CF6'];
+            const total = Object.values(dataDict).reduce((a, b) => a + b, 0);
+            
+            let htmlSvg = '';
+            let htmlList = '';
+            let accumPercent = 0;
+            const circ = 2 * Math.PI * 30; // ~188.495
+            
+            let idx = 0;
+            Object.entries(dataDict).forEach(([name, val]) => {
+                const pct = (val / total) * 100;
+                const strokeOffset = circ - (circ * pct / 100);
+                const rotationOffset = (accumPercent / 100) * 360 - 90; // Start at top
+                const color = colors[idx % colors.length];
+                
+                htmlSvg += `
+                    <circle cx="50" cy="50" r="30" fill="none" stroke="${color}" stroke-width="12" 
+                            stroke-dasharray="${circ}" stroke-dashoffset="${strokeOffset}" 
+                            transform="rotate(${rotationOffset} 50 50)" class="transition-all duration-500" />`;
+                
+                htmlList += `
+                    <div class="flex justify-between items-center text-xs font-semibold text-slate-300">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></span>
+                            <span>${name}</span>
+                        </div>
+                        <span>${val} (${pct.toFixed(0)}%)</span>
+                    </div>`;
+                
+                accumPercent += pct;
+                idx++;
+            });
+            
+            svg.innerHTML = htmlSvg;
+            list.innerHTML = htmlList;
+            centerPct.textContent = `100%`;
+        }
+
+        function drawLineChart(trendData) {
+            const svg = document.getElementById('statsLineSvg');
+            const labelRow = document.getElementById('statsActivity');
+            
+            if (!svg || !labelRow) return;
+            
+            if (!trendData || trendData.length === 0) {
+                svg.innerHTML = `
+                    <line x1="30" y1="100" x2="270" y2="100" stroke="#1E293B" stroke-width="1" />
+                    <text x="150" y="60" fill="#64748B" font-size="10" text-anchor="middle" font-family="sans-serif">No activity recorded</text>`;
+                labelRow.innerHTML = '<div class="col-span-7 italic text-slate-500 text-center py-4">No recent history</div>';
+                return;
+            }
+            
+            const reversed = [...trendData].reverse();
+            const maxVal = Math.max(...reversed.map(r => r[1]), 1);
+            
+            const width = 300;
+            const height = 120;
+            const paddingX = 35;
+            const paddingY = 20;
+            const chartWidth = width - 2 * paddingX;
+            const chartHeight = height - 2 * paddingY;
+            
+            const points = [];
+            const stepX = chartWidth / Math.max(reversed.length - 1, 1);
+            
+            reversed.forEach((row, i) => {
+                const x = paddingX + i * stepX;
+                const val = row[1];
+                const y = paddingY + chartHeight - (val / maxVal) * chartHeight;
+                points.push({ x, y, date: row[0], val });
+            });
+            
+            let htmlGrid = `
+                <line x1="${paddingX}" y1="${paddingY}" x2="${width - paddingX}" y2="${paddingY}" stroke="#1E293B" stroke-width="0.5" stroke-dasharray="2,2" />
+                <line x1="${paddingX}" y1="${paddingY + chartHeight/2}" x2="${width - paddingX}" y2="${paddingY + chartHeight/2}" stroke="#1E293B" stroke-width="0.5" stroke-dasharray="2,2" />
+                <line x1="${paddingX}" y1="${paddingY + chartHeight}" x2="${width - paddingX}" y2="${paddingY + chartHeight}" stroke="#1E293B" stroke-dasharray="2,2" />
+            `;
+            
+            let pathD = '';
+            points.forEach((pt, idx) => {
+                if (idx === 0) {
+                    pathD += `M ${pt.x} ${pt.y}`;
+                } else {
+                    pathD += ` L ${pt.x} ${pt.y}`;
+                }
+            });
+            
+            let htmlChart = htmlGrid;
+            if (points.length > 1) {
+                htmlChart += `<path d="${pathD}" fill="none" stroke="#3B82F6" stroke-width="4" opacity="0.15" stroke-linecap="round" stroke-linejoin="round" />`;
+                htmlChart += `<path d="${pathD}" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="dynamic-accent-stroke" />`;
+            }
+            
+            points.forEach(pt => {
+                htmlChart += `
+                    <g>
+                        <circle cx="${pt.x}" cy="${pt.y}" r="6" fill="#3B82F6" opacity="0.1" />
+                        <circle cx="${pt.x}" cy="${pt.y}" r="3" fill="#ffffff" stroke="#3B82F6" stroke-width="1.5" class="dynamic-accent-stroke" />
+                        <text x="${pt.x}" y="${pt.y - 8}" fill="#3B82F6" font-size="8" font-weight="extrabold" text-anchor="middle" font-family="sans-serif" class="dynamic-accent-fg">${pt.val}</text>
+                    </g>`;
+            });
+            
+            svg.innerHTML = htmlChart;
+            
+            let htmlLabels = '';
+            reversed.forEach(pt => {
+                const displayDate = pt.date.substring(5); // MM-DD
+                htmlLabels += `<div>${displayDate}</div>`;
+            });
+            labelRow.innerHTML = htmlLabels;
+        }
+
         // STATS AND INSIGHT ANALYTICS
         async function refreshStats() {
             try {
                 const resp = await fetch('/api/stats');
                 const data = await resp.json();
                 
-                // Build distribution lists
-                const distBox = document.getElementById('statsDistribution');
-                const actBox = document.getElementById('statsActivity');
+                // Update summary statistics badges
+                document.getElementById('statBadge-totalBatches').textContent = data.total_sessions || 0;
+                document.getElementById('statBadge-totalPDFs').textContent = data.total_pdfs || 0;
+                document.getElementById('statBadge-totalExcels').textContent = data.total_excels || 0;
                 
-                if (data.distribution && Object.keys(data.distribution).length > 0) {
-                    let html = '';
-                    const total = Object.values(data.distribution).reduce((a, b) => a + b, 0);
-                    Object.entries(data.distribution).forEach(([type, count]) => {
-                        const pct = Math.round((count / total) * 100);
-                        html += `
-                            <div class="space-y-1">
-                                <div class="flex justify-between text-xs font-semibold text-slate-300">
-                                    <span>${type} Audit Batches</span>
-                                    <span>${count} (${pct}%)</span>
-                                </div>
-                                <div class="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-brand-borderLine">
-                                    <div class="bg-blue-500 h-full rounded-full dynamic-accent-bg" style="width: ${pct}%"></div>
-                                </div>
-                            </div>`;
-                    });
-                    distBox.innerHTML = html;
-                } else {
-                    distBox.innerHTML = '<div class="text-sm text-slate-500 italic">No activity recorded yet. Run a report batch to build analytics.</div>';
-                }
+                // Draw Donut chart and legend list
+                drawDonutChart(data.distribution);
                 
-                if (data.trend && data.trend.length > 0) {
-                    let html = '';
-                    data.trend.forEach(([date, count]) => {
-                        html += `
-                            <div class="flex justify-between items-center py-2 border-b border-brand-borderLine text-xs">
-                                <span class="text-slate-400 font-mono">${date}</span>
-                                <span class="bg-blue-500/10 text-blue-400 font-bold px-2.5 py-1 rounded border border-blue-500/20 dynamic-accent-fg">${count} runs</span>
-                            </div>`;
-                    });
-                    actBox.innerHTML = html;
-                } else {
-                    actBox.innerHTML = '<div class="text-sm text-slate-500 italic">No activity logs recorded.</div>';
-                }
+                // Draw weekly line trend chart
+                drawLineChart(data.trend);
                 
                 updateThemeBranding();
             } catch (err) {
