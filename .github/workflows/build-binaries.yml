@@ -83,7 +83,7 @@ jobs:
           restore-keys: pyi-macos-
       - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
-      - run: codesign --force --sign - dist/Audit_Engine_Elite
+      - run: codesign --force --options runtime --entitlements entitlements.plist --sign - dist/Audit_Engine_Elite
       - name: Extract Version
         shell: bash
         run: |
