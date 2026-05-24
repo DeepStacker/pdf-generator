@@ -2200,8 +2200,22 @@ HTML_CONTENT = """<!DOCTYPE html>
                 await fetch('/api/update/apply', { method: 'POST' });
                 openSummaryModal({
                     title: 'Restarting Audit Engine...',
-                    message: 'The backend server is applying the update and restarting. The new version will be active momentarily! You may close this tab.'
+                    message: 'The backend server is applying the update and restarting. This page will automatically refresh when the new version is ready. Please wait...'
                 });
+                
+                setTimeout(() => {
+                    const pollInterval = setInterval(async () => {
+                        try {
+                            const res = await fetch('/api/config', { cache: 'no-store' });
+                            if (res.ok) {
+                                clearInterval(pollInterval);
+                                window.location.reload(true);
+                            }
+                        } catch (e) {
+                            // Still waiting for server
+                        }
+                    }, 1000);
+                }, 2000);
             } catch (err) {
                 console.error(err);
             }
