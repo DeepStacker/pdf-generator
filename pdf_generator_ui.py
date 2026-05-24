@@ -1185,15 +1185,18 @@ def update_check():
         current_v = _parse_version(VERSION)
         latest_v = _parse_version(tag)
         if latest_v > current_v:
-            update_state.update_ready = True
-            update_state.latest_version = tag
-            update_state.binary_url = binary_url
-            return {
-                "update_ready": True,
-                "current": VERSION,
-                "latest": tag,
-                "body": body
-            }
+            if binary_url:
+                update_state.update_ready = True
+                update_state.latest_version = tag
+                update_state.binary_url = binary_url
+                return {
+                    "update_ready": True,
+                    "current": VERSION,
+                    "latest": tag,
+                    "body": body
+                }
+            else:
+                file_logger.info(f"Update tag {tag} exists, but binary for OS is missing/building. Deferring.")
     except Exception as e:
         file_logger.warning(f"Background updates repo search query failed: {e}")
     return {"update_ready": False, "current": VERSION}
@@ -1245,13 +1248,18 @@ def update_progress():
         "error": update_state.error
     }
 
-@route('/api/update/apply', method='POST')
-def update_apply():
+def _delayed_apply():
+    import time
+    time.sleep(1)
     if update_state.staged_bat:
-        # Exit cleanly on Windows: background staged updates batch handles restart
-        sys.exit(0)
+        # Exit forcefully so Windows batch script can overwrite the binary
+        os._exit(0)
     else:
         _restart_app()
+
+@route('/api/update/apply', method='POST')
+def update_apply():
+    threading.Thread(target=_delayed_apply, daemon=True).start()
     return {"success": True}
 
 # =========================================================

@@ -1006,11 +1006,26 @@ HTML_CONTENT = """<!DOCTYPE html>
         }, 3000);
 
         // INITIALIZATION
+        function handleHashRouting() {
+            let hash = window.location.hash.replace('#', '').toUpperCase();
+            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS'];
+            if (!validTabs.includes(hash)) hash = 'PROCESS';
+            
+            if (state.activeTab !== hash) {
+                switchTab(hash);
+            }
+        }
+
+        window.addEventListener('hashchange', handleHashRouting);
+
         window.addEventListener('DOMContentLoaded', () => {
             // Load configs and history list
             loadDashboardData();
             // Start silent updater background check after 2 seconds
             setTimeout(checkUpdatesBackground, 2000);
+            
+            // Sync initial tab from URL hash
+            handleHashRouting();
         });
 
         // BANK SELECTION CHANGE EVENT
@@ -1089,6 +1104,12 @@ HTML_CONTENT = """<!DOCTYPE html>
         // TAB SWITCHER STATE
         function switchTab(tabId) {
             state.activeTab = tabId;
+            
+            // Sync URL hash without triggering hashchange event loop
+            const expectedHash = '#' + tabId.toLowerCase();
+            if (window.location.hash !== expectedHash) {
+                window.history.pushState(null, null, expectedHash);
+            }
             
             // Update navigation button active styles
             document.querySelectorAll('.nav-btn').forEach(btn => {
