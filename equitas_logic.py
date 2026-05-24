@@ -86,6 +86,27 @@ def normalize_columns(df):
     df.columns = [str(col).strip().upper() for col in df.columns]
     return df
 
+def _read_equitas_sheet_dynamic(file_path, sheet_name, required_columns):
+    """Dynamically find the header row by checking for required columns."""
+    import pandas as pd
+    df_top = pd.read_excel(file_path, sheet_name=sheet_name, header=None, nrows=20)
+    
+    header_idx = 0
+    max_matches = 0
+    req_upper = [c.upper() for c in required_columns]
+    
+    for idx, row in df_top.iterrows():
+        row_str = [str(x).strip().upper() for x in row.values if pd.notna(x)]
+        matches = sum(1 for req in req_upper if req in row_str)
+        if matches > max_matches:
+            max_matches = matches
+            header_idx = idx
+            if matches == len(req_upper):
+                break
+                
+    df = pd.read_excel(file_path, sheet_name=sheet_name, header=header_idx)
+    return normalize_columns(df)
+
 
 def clean_text(value):
     """Clean text by inserting spaces between camelCase and collapsing whitespace."""
@@ -108,6 +129,10 @@ def safe_float(value):
     """Convert to float string with 3 decimals, strip '.0' from integers."""
     if pd.isna(value):
         return ""
+    if isinstance(value, str):
+        val_str = value.strip().lower()
+        if val_str in ("", "-", "na", "n/a", "nan"):
+            return ""
     try:
         fval = float(value)
         if fval.is_integer():
@@ -124,7 +149,7 @@ def safe_float_numeric(value):
     try:
         if isinstance(value, str):
             value = value.strip()
-            if not value:
+            if value.lower() in ("", "-", "na", "n/a", "nan"):
                 return 0.0
             if "DIFF:" in value.upper():
                 value = value.upper().replace("DIFF:", "").strip()
@@ -150,10 +175,14 @@ def format_date(value):
 
 
 def base_sheet_name(sheet_name):
-    """Strip trailing _JSR suffix to get the base sheet name."""
-    name = sheet_name.strip()
-    if name.upper().endswith("_JSR"):
-        return name[:-4].strip().lower()
+    """Strip trailing _JSR suffix (and variations) to get the base sheet name."""
+    name = str(sheet_name).strip()
+    upper_name = name.upper()
+    if upper_name.endswith("JSR"):
+        base = name[:-3].strip()
+        while base and base[-1] in ('_', '-', ' '):
+            base = base[:-1]
+        return base.lower()
     return name.lower()
 
 
@@ -206,7 +235,7 @@ def validate_equitas_stage1_file(file_path):
             base = base_sheet_name(sheet)
             if base not in sheet_map:
                 sheet_map[base] = {"normal": None, "jsr": None}
-            if sheet.upper().endswith("_JSR"):
+            if str(sheet).strip().upper().endswith("JSR"):
                 sheet_map[base]["jsr"] = sheet
             else:
                 sheet_map[base]["normal"] = sheet
@@ -309,7 +338,7 @@ def build_master_dataframe(file_path, log_callback=print):
             base = base_sheet_name(sheet)
             if base not in sheet_map:
                 sheet_map[base] = {"normal": None, "jsr": None}
-            if sheet.upper().endswith("_JSR"):
+            if str(sheet).strip().upper().endswith("JSR"):
                 sheet_map[base]["jsr"] = sheet
             else:
                 sheet_map[base]["normal"] = sheet
@@ -327,19 +356,19 @@ def build_master_dataframe(file_path, log_callback=print):
             try:
                 log_callback(f"Processing: {normal_sheet} ↔ {jsr_sheet}")
 
-                normal_df = normalize_columns(
-                    pd.read_excel(file_path, sheet_name=normal_sheet)
-                )
-                jsr_df = normalize_columns(
-                    pd.read_excel(file_path, sheet_name=jsr_sheet)
-                )
-
                 required_normal = [
                     NORMAL_COLUMNS["loan_no"],
                     NORMAL_COLUMNS["sole_id"],
                     NORMAL_COLUMNS["branch"],
                 ]
                 required_jsr = [v for v in JSR_COLUMNS.values()]
+
+                normal_df = _read_equitas_sheet_dynamic(
+                    file_path, normal_sheet, required_normal
+                )
+                jsr_df = _read_equitas_sheet_dynamic(
+                    file_path, jsr_sheet, required_jsr
+                )
 
                 _validate_required_columns(normal_df, required_normal, normal_sheet)
                 _validate_required_columns(jsr_df, required_jsr, jsr_sheet)

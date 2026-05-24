@@ -45,15 +45,17 @@ jobs:
             Write-Error "Build failed: exe not found!"
             exit 1
           }
+      - name: Extract Version
+        shell: bash
+        run: |
+          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' pdf_generator_ui.py | cut -d '"' -f 2)
+          echo "TAG=v$VERSION" >> $GITHUB_ENV
       - shell: pwsh
-        env:
-          TAG: ${{ github.ref_name }}
         run: Compress-Archive -Path dist\* -DestinationPath "Audit_Engine_${env:TAG}_binary_windows.zip"
-      - if: startsWith(github.ref, 'refs/tags/')
+      - if: github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
         run: |
           $zip = "Audit_Engine_${env:TAG}_binary_windows.zip"
           gh release upload $env:TAG $zip --clobber 2>$null
@@ -82,14 +84,17 @@ jobs:
       - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - run: codesign --force --sign - dist/Audit_Engine_Elite
-      - env:
-          TAG: ${{ github.ref_name }}
-        run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_macos.zip" .
-      - if: startsWith(github.ref, 'refs/tags/')
+      - name: Extract Version
+        shell: bash
+        run: |
+          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' pdf_generator_ui.py | cut -d '"' -f 2)
+          echo "TAG=v$VERSION" >> $GITHUB_ENV
+      - run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_macos.zip" .
+      - if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${TAG}"
           ZIP="Audit_Engine_${TAG}_binary_macos.zip"
           gh release upload "$TAG" "$ZIP" --clobber 2>/dev/null || {
             gh release create "$TAG" --title "$TAG" --notes "macOS binary" 2>/dev/null || true
@@ -115,14 +120,17 @@ jobs:
           restore-keys: pyi-linux-
       - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
-      - env:
-          TAG: ${{ github.ref_name }}
-        run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_linux.zip" .
-      - if: startsWith(github.ref, 'refs/tags/')
+      - name: Extract Version
+        shell: bash
+        run: |
+          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' pdf_generator_ui.py | cut -d '"' -f 2)
+          echo "TAG=v$VERSION" >> $GITHUB_ENV
+      - run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_linux.zip" .
+      - if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${TAG}"
           ZIP="Audit_Engine_${TAG}_binary_linux.zip"
           gh release upload "$TAG" "$ZIP" --clobber 2>/dev/null || {
             gh release create "$TAG" --title "$TAG" --notes "Linux binary" 2>/dev/null || true
