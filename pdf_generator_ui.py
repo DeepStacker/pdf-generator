@@ -32,7 +32,7 @@ import web_assets
 # =========================================================
 # VERSION & CONSTANTS
 # =========================================================
-VERSION = "5.2.151"
+VERSION = "5.2.153"
 APP_TITLE = "Audit Engine v5.0"
 
 # File logging setup
