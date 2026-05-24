@@ -1165,13 +1165,15 @@ def api_heartbeat():
 def heartbeat_monitor():
     global last_heartbeat
     # Generous initial launch wait buffer time for tab opening
-    time.sleep(20)
+    time.sleep(30)
     while True:
-        if time.time() - last_heartbeat > 10:
-            print("No heartbeat received for 10 seconds. Terminating WSGI background portal cleanly.")
+        # Browsers throttle background tab timers to 1 minute max.
+        # Use a 120 second timeout to avoid killing the server while the tab is inactive.
+        if time.time() - last_heartbeat > 120:
+            print("No heartbeat received for 120 seconds. Terminating WSGI background portal cleanly.")
             file_logger.info("Heartbeat lost. Cleaner self-terminating backend process now.")
             os._exit(0)
-        time.sleep(1)
+        time.sleep(5)
 
 # =========================================================
 # AUTO-UPDATER WSGI BRIDGES
