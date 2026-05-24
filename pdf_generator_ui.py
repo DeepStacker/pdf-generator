@@ -328,18 +328,20 @@ def _detect_bank_from_file(filepath):
             for sname in wb.sheetnames:
                 ws = wb[sname]
                 try:
-                    header_row = [
-                        str(cell.value).strip().lower().replace("\n", "") if cell.value else ""
-                        for cell in next(ws.iter_rows(min_row=1, max_row=1))
-                    ]
-                    headers_set = set(header_row)
-                    idfc_score = len(IDFC_FINGERPRINT_COLS & headers_set)
-                    equitas_score = len(EQUITAS_FINGERPRINT_COLS & headers_set)
-                    if idfc_score >= 3:
-                        return "IDFC First Bank"
-                    if equitas_score >= 3:
-                        return "Equitas Small Finance Bank"
-                except StopIteration:
+                    for r_idx in range(1, min(ws.max_row + 1, 31)):
+                        row_cells = list(ws.iter_rows(min_row=r_idx, max_row=r_idx))[0]
+                        header_row = [
+                            str(cell.value).strip().lower().replace("\n", "") if cell.value else ""
+                            for cell in row_cells
+                        ]
+                        headers_set = set(header_row)
+                        idfc_score = len(IDFC_FINGERPRINT_COLS & headers_set)
+                        equitas_score = len(EQUITAS_FINGERPRINT_COLS & headers_set)
+                        if idfc_score >= 3:
+                            return "IDFC First Bank"
+                        if equitas_score >= 3:
+                            return "Equitas Small Finance Bank"
+                except Exception:
                     continue
         finally:
             wb.close()
@@ -952,17 +954,25 @@ def peek_excel_data(filepath):
         sheet = wb.active
         headers = []
         rows = []
-        for i, row_cells in enumerate(sheet.iter_rows(values_only=True)):
-            if i == 0:
+        header_row_idx = 0
+        
+        all_rows = list(sheet.iter_rows(values_only=True, max_row=30))
+        for i, row_cells in enumerate(all_rows):
+            non_empty = sum(1 for c in row_cells if c is not None and str(c).strip())
+            if non_empty >= 3:
+                header_row_idx = i
                 headers = [str(c).strip() if c is not None else f"Column {idx}" for idx, c in enumerate(row_cells)]
-            elif i <= 5:
-                row_data = [str(c) if c is not None else "" for c in row_cells]
-                # Pad row_data to match headers length just in case
-                if len(row_data) < len(headers):
-                    row_data.extend([""] * (len(headers) - len(row_data)))
-                rows.append(row_data[:len(headers)])
-            else:
                 break
+                
+        if not headers and all_rows:
+            headers = [str(c).strip() if c is not None else f"Column {idx}" for idx, c in enumerate(all_rows[0])]
+            
+        for i, row_cells in enumerate(sheet.iter_rows(values_only=True, min_row=header_row_idx + 2, max_row=header_row_idx + 6)):
+            row_data = [str(c) if c is not None else "" for c in row_cells]
+            if len(row_data) < len(headers):
+                row_data.extend([""] * (len(headers) - len(row_data)))
+            rows.append(row_data[:len(headers)])
+            
         wb.close()
         return headers, rows
     except Exception as e:
