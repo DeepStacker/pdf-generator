@@ -2198,7 +2198,10 @@ HTML_CONTENT = """<!DOCTYPE html>
         async function applyUpdate() {
             try {
                 await fetch('/api/update/apply', { method: 'POST' });
-                alert('Applying update... The application will restart automatically.');
+                openSummaryModal({
+                    title: 'Restarting Audit Engine...',
+                    message: 'The backend server is applying the update and restarting. The new version will be active momentarily! You may close this tab.'
+                });
             } catch (err) {
                 console.error(err);
             }
