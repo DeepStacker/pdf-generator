@@ -162,16 +162,43 @@ def preprocess_mapped_excel(filepath, column_mappings, bank):
             branch_col = column_mappings.get('branch')
             loan_col = column_mappings.get('loan')
             
-            rename_map = {}
-            if svs_col: rename_map["SVS_LOAN_NO"] = svs_col
-            if sole_col: rename_map["SOLE_ID"] = sole_col
-            if branch_col: rename_map["BRANCH_NAME"] = branch_col
-            if loan_col: rename_map["LOAN_NO"] = loan_col
+            rename_map_normal = {}
+            if svs_col: rename_map_normal["SVS_LOAN_NO"] = svs_col
+            if sole_col: rename_map_normal["SOLE_ID"] = sole_col
+            if branch_col: rename_map_normal["BRANCH_NAME"] = branch_col
+            if loan_col: rename_map_normal["SVS_LOAN_NO"] = loan_col
             
-            for target_name, orig_name in rename_map.items():
-                if orig_name in header_indices:
-                    col_idx = header_indices[orig_name]
-                    ws.cell(row=1, column=col_idx).value = target_name
+            rename_map_jsr = {}
+            if loan_col: rename_map_jsr["LOAN NO"] = loan_col
+            if branch_col: rename_map_jsr["BRANCHNAME"] = branch_col
+            
+            for sname in wb.sheetnames:
+                ws = wb[sname]
+                header_row_idx = 1
+                max_matches = -1
+                
+                # Determine correct rename map
+                is_jsr = str(sname).strip().upper().endswith("JSR")
+                rename_map = rename_map_jsr if is_jsr else rename_map_normal
+                
+                # Find header row dynamically up to row 30
+                for r_idx in range(1, min(ws.max_row + 1, 31)):
+                    row_cells = list(ws.iter_rows(min_row=r_idx, max_row=r_idx))[0]
+                    headers = [str(cell.value).strip() if cell.value is not None else "" for cell in row_cells]
+                    matches = sum(1 for h in headers if h in mapped_headers_set)
+                    if matches > max_matches:
+                        max_matches = matches
+                        header_row_idx = r_idx
+                        
+                if max_matches >= 1:
+                    row_cells = list(ws.iter_rows(min_row=header_row_idx, max_row=header_row_idx))[0]
+                    headers = [str(cell.value).strip() if cell.value is not None else "" for cell in row_cells]
+                    header_indices = {h: idx for idx, h in enumerate(headers, 1)}
+                    
+                    for target_name, orig_name in rename_map.items():
+                        if orig_name in header_indices:
+                            col_idx = header_indices[orig_name]
+                            ws.cell(row=header_row_idx, column=col_idx).value = target_name
                     
         temp_dir = os.path.join(os.path.expanduser("~"), ".temp_audit_engine")
         os.makedirs(temp_dir, exist_ok=True)
