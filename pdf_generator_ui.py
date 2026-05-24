@@ -1009,7 +1009,7 @@ def api_validate():
             wb = openpyxl.load_workbook(filepath, read_only=True)
             sheets = wb.sheetnames
             wb.close()
-            if "JSR" in sheets or "Normal" in sheets:
+            if any("JSR" in s.upper() or "NORMAL" in s.upper() for s in sheets) or len(sheets) > 1:
                 valid, err = equitas_logic.validate_equitas_stage1_file(filepath)
                 return {
                     "success": valid, 
