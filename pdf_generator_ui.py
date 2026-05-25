@@ -1380,7 +1380,8 @@ if __name__ == "__main__":
         print("Launching native desktop window using pywebview...")
         window = webview.create_window('Audit Engine', app, width=1200, height=800)
         webview.start()
-    except ImportError:
+    except Exception as e:
+        print(f"[!] PyWebView native engine failed to start: {e}. Falling back to standard browser UI.")
         # Spawn auto-browser launch thread
         threading.Thread(target=open_browser, args=(port,), daemon=True).start()
 
