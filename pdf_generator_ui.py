@@ -1386,6 +1386,46 @@ def open_browser(port):
             return
             
     webbrowser.open(url)
+class WebViewAPI:
+    def __init__(self, app):
+        self.app = app
+
+    def fetch_proxy(self, method, url, body):
+        import io
+        import json
+        
+        path_info = url
+        query_string = ""
+        if "?" in url:
+            path_info, query_string = url.split("?", 1)
+
+        environ = {
+            'REQUEST_METHOD': method,
+            'PATH_INFO': path_info,
+            'QUERY_STRING': query_string,
+            'SERVER_PROTOCOL': 'HTTP/1.1',
+            'wsgi.input': io.BytesIO(body.encode('utf-8')),
+            'CONTENT_LENGTH': str(len(body)),
+            'CONTENT_TYPE': 'application/json' if body != "{}" else "",
+            'SERVER_NAME': 'localhost',
+            'SERVER_PORT': '80',
+        }
+        
+        response_body = []
+        status_headers = {}
+        
+        def start_response(status, headers, exc_info=None):
+            status_headers['status'] = status
+            status_headers['headers'] = headers
+            
+        try:
+            result = self.app(environ, start_response)
+            for data in result:
+                response_body.append(data.decode('utf-8') if isinstance(data, bytes) else data)
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+            
+        return "".join(response_body)
 
 if __name__ == "__main__":
     # Required for PyInstaller frozen executables on Windows
@@ -1401,9 +1441,14 @@ if __name__ == "__main__":
     try:
         import webview
         import bottle
-        print("Launching native desktop window using pywebview...")
+        import web_assets
+        print("Launching native desktop window using pywebview (Zero-Socket IPC Mode)...")
         app_instance = bottle.default_app()
-        window = webview.create_window('Audit Engine', app_instance, width=1200, height=800)
+        api_bridge = WebViewAPI(app_instance)
+        
+        # Load the UI purely from memory and bridge API calls through IPC to defeat Sophos loopback blocking
+        html_content = web_assets.get_html()
+        window = webview.create_window('Audit Engine', html=html_content, js_api=api_bridge, width=1200, height=800)
         webview.start()
     except Exception as e:
         import traceback

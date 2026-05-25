@@ -971,6 +971,29 @@ HTML_CONTENT = """<!DOCTYPE html>
 
     <!-- Javascript Core App State Management -->
     <script>
+        // --- PYWEBVIEW MOCK WSGI FETCH INTERCEPTOR ---
+        const originalFetch = window.fetch;
+        window.fetch = async function(url, options) {
+            if (window.pywebview && window.pywebview.api) {
+                try {
+                    let body = options?.body || "{}";
+                    let method = options?.method || "GET";
+                    const result = await window.pywebview.api.fetch_proxy(method, url, body);
+                    return {
+                        json: async () => JSON.parse(result),
+                        text: async () => result,
+                        ok: true,
+                        status: 200
+                    };
+                } catch (e) {
+                    console.error("PyWebView IPC fetch error:", e);
+                    throw e;
+                }
+            }
+            return originalFetch(url, options);
+        };
+        // ---------------------------------------------
+        
         // Icons are inline SVGs — no external library needed
 
         // APP STATE
@@ -2231,3 +2254,8 @@ HTML_CONTENT = """<!DOCTYPE html>
 </body>
 </html>
 """
+
+
+def get_html():
+    """Return the full HTML content for the Audit Engine UI."""
+    return HTML_CONTENT
