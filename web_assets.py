@@ -971,28 +971,41 @@ HTML_CONTENT = """<!DOCTYPE html>
 
     <!-- Javascript Core App State Management -->
     <script>
-        // --- PYWEBVIEW MOCK WSGI FETCH INTERCEPTOR ---
+        // --- PYWEBVIEW ZERO-SOCKET IPC FETCH INTERCEPTOR ---
+        // Transparently routes all fetch('/api/...') calls through pywebview's
+        // in-memory IPC bridge when available. Falls back to normal HTTP fetch
+        // when running in browser mode. Works on Windows, macOS, Linux, Ubuntu.
         const originalFetch = window.fetch;
+        let _pywebviewReady = false;
+
+        // pywebview fires this event when the JS API bridge is fully initialized
+        if (window.pywebview) {
+            _pywebviewReady = true;
+        }
+        window.addEventListener('pywebviewready', () => { _pywebviewReady = true; });
+
         window.fetch = async function(url, options) {
-            if (window.pywebview && window.pywebview.api) {
+            // Only intercept our own API calls, not external URLs
+            if (_pywebviewReady && window.pywebview && window.pywebview.api && typeof url === 'string' && url.startsWith('/api/')) {
                 try {
-                    let body = options?.body || "{}";
-                    let method = options?.method || "GET";
+                    let body = (options && options.body) ? options.body : "{}";
+                    let method = (options && options.method) ? options.method : "GET";
                     const result = await window.pywebview.api.fetch_proxy(method, url, body);
+                    const parsed = result;
                     return {
-                        json: async () => JSON.parse(result),
-                        text: async () => result,
+                        json: async () => JSON.parse(parsed),
+                        text: async () => parsed,
                         ok: true,
                         status: 200
                     };
                 } catch (e) {
                     console.error("PyWebView IPC fetch error:", e);
-                    throw e;
+                    return { json: async () => ({success: false, error: String(e)}), text: async () => "", ok: false, status: 500 };
                 }
             }
-            return originalFetch(url, options);
+            return originalFetch.call(window, url, options);
         };
-        // ---------------------------------------------
+        // -------------------------------------------------
         
         // Icons are inline SVGs — no external library needed
 

@@ -1247,11 +1247,18 @@ def api_heartbeat():
     last_heartbeat = time.time()
     return {"status": "ok"}
 
+# When True, heartbeat monitor won't kill the process (set by IPC / pywebview mode)
+_ipc_mode = False
+
 def heartbeat_monitor():
     global last_heartbeat
     # Generous initial launch wait buffer time for tab opening
     time.sleep(30)
     while True:
+        # In IPC mode, pywebview manages the lifecycle — don't self-terminate
+        if _ipc_mode:
+            time.sleep(10)
+            continue
         # Browsers throttle background tab timers to 1 minute max.
         # Use a 120 second timeout to avoid killing the server while the tab is inactive.
         if time.time() - last_heartbeat > 120:
@@ -1367,64 +1374,90 @@ def open_browser(port):
     time.sleep(0.6)
     url = f"http://localhost:{port}"
     
+    system = platform.system()
+    
     # Try to launch Chrome/Edge with explicit proxy bypass flags for corporate zero-admin environments
-    if platform.system() == "Windows":
-        chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-        chrome_x86 = r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
-        edge_path = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-        
-        flags = ["--proxy-bypass-list=localhost,127.0.0.1", "--app=" + url]
-        
-        if os.path.exists(chrome_path):
-            subprocess.Popen([chrome_path] + flags)
+    if system == "Windows":
+        for browser_path in [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        ]:
+            if os.path.exists(browser_path):
+                subprocess.Popen([browser_path, "--proxy-bypass-list=localhost,127.0.0.1", "--app=" + url])
+                return
+    elif system == "Darwin":
+        # macOS: try Chrome with proxy bypass
+        mac_chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        if os.path.exists(mac_chrome):
+            subprocess.Popen([mac_chrome, "--proxy-bypass-list=localhost,127.0.0.1", "--app=" + url])
             return
-        elif os.path.exists(chrome_x86):
-            subprocess.Popen([chrome_x86] + flags)
-            return
-        elif os.path.exists(edge_path):
-            subprocess.Popen([edge_path] + flags)
-            return
-            
+    elif system == "Linux":
+        # Linux: try google-chrome or chromium with proxy bypass
+        for cmd in ["google-chrome", "google-chrome-stable", "chromium-browser", "chromium"]:
+            import shutil
+            if shutil.which(cmd):
+                subprocess.Popen([cmd, "--proxy-bypass-list=localhost,127.0.0.1", "--app=" + url])
+                return
+
     webbrowser.open(url)
+
+
 class WebViewAPI:
+    """In-memory WSGI bridge that routes pywebview JS fetch() calls directly
+    into the Bottle application without any TCP socket."""
+
     def __init__(self, app):
         self.app = app
 
     def fetch_proxy(self, method, url, body):
         import io
         import json
-        
+        import sys
+
         path_info = url
         query_string = ""
         if "?" in url:
             path_info, query_string = url.split("?", 1)
 
+        body_bytes = body.encode('utf-8') if body else b''
+        content_type = 'application/json' if method == 'POST' else ''
+
+        # Full WSGI PEP-3333 compliant environ
         environ = {
             'REQUEST_METHOD': method,
+            'SCRIPT_NAME': '',
             'PATH_INFO': path_info,
             'QUERY_STRING': query_string,
-            'SERVER_PROTOCOL': 'HTTP/1.1',
-            'wsgi.input': io.BytesIO(body.encode('utf-8')),
-            'CONTENT_LENGTH': str(len(body)),
-            'CONTENT_TYPE': 'application/json' if body != "{}" else "",
             'SERVER_NAME': 'localhost',
             'SERVER_PORT': '80',
+            'SERVER_PROTOCOL': 'HTTP/1.1',
+            'HTTP_HOST': 'localhost',
+            'CONTENT_TYPE': content_type,
+            'CONTENT_LENGTH': str(len(body_bytes)),
+            'wsgi.version': (1, 0),
+            'wsgi.url_scheme': 'http',
+            'wsgi.input': io.BytesIO(body_bytes),
+            'wsgi.errors': sys.stderr,
+            'wsgi.multithread': True,
+            'wsgi.multiprocess': False,
+            'wsgi.run_once': False,
         }
-        
+
         response_body = []
-        status_headers = {}
-        
+
         def start_response(status, headers, exc_info=None):
-            status_headers['status'] = status
-            status_headers['headers'] = headers
-            
+            pass  # We don't need HTTP status/headers for in-memory IPC
+
         try:
             result = self.app(environ, start_response)
             for data in result:
                 response_body.append(data.decode('utf-8') if isinstance(data, bytes) else data)
+            if hasattr(result, 'close'):
+                result.close()
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
-            
+
         return "".join(response_body)
 
 if __name__ == "__main__":
@@ -1443,6 +1476,7 @@ if __name__ == "__main__":
         import bottle
         import web_assets
         print("Launching native desktop window using pywebview (Zero-Socket IPC Mode)...")
+        _ipc_mode = True  # Disable heartbeat self-kill in IPC mode
         app_instance = bottle.default_app()
         api_bridge = WebViewAPI(app_instance)
         
