@@ -362,7 +362,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
             <!-- Footer area -->
             <div class="px-6 py-6 border-t border-brand-borderLine flex flex-col items-center">
-                <span class="text-xs text-slate-600 font-mono version-label">v5.2.145</span>
+                <span class="text-xs text-slate-600 font-mono version-label">{{VERSION}}</span>
                 <span class="text-[9px] text-slate-700 mt-1 copyright-label">© 2026 IDFC FIRST Bank</span>
             </div>
         </aside>
@@ -908,7 +908,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
                         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Auto-Updates</h3>
                         <div class="flex justify-between items-center text-sm text-slate-200">
-                            <span>Current running version: <strong class="font-mono text-white text-brand-idfc dynamic-accent-fg">v5.2.145</strong></span>
+                            <span>Current running version: <strong class="font-mono text-white text-brand-idfc dynamic-accent-fg">{{VERSION}}</strong></span>
                             <div id="updateStatusText" class="text-xs font-semibold"></div>
                         </div>
                         <div class="flex items-center space-x-4">
@@ -978,13 +978,25 @@ HTML_CONTENT = """<!DOCTYPE html>
         const originalFetch = window.fetch;
         let _pywebviewReady = false;
 
-        // pywebview fires this event when the JS API bridge is fully initialized
-        if (window.pywebview) {
-            _pywebviewReady = true;
-        }
-        window.addEventListener('pywebviewready', () => { _pywebviewReady = true; });
+        // Create a readiness promise to block early fetch calls until IPC is initialized
+        const pywebviewPromise = new Promise(resolve => {
+            if (window.pywebview) {
+                _pywebviewReady = true;
+                resolve();
+            } else {
+                window.addEventListener('pywebviewready', () => { 
+                    _pywebviewReady = true; 
+                    resolve(); 
+                });
+                // Fallback timeout for normal web browser mode
+                setTimeout(() => resolve(), 2000);
+            }
+        });
 
         window.fetch = async function(url, options) {
+            // Block until we know whether we're using IPC or HTTP
+            await pywebviewPromise;
+            
             // Only intercept our own API calls, not external URLs
             if (_pywebviewReady && window.pywebview && window.pywebview.api && typeof url === 'string' && url.startsWith('/api/')) {
                 try {
@@ -2180,7 +2192,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const data = await resp.json();
                 
                 if (!data.update_ready) {
-                    statusText.textContent = `✓ Audit Engine Elite is fully up-to-date (${data.current || 'v5.2.145'}).`;
+                    statusText.textContent = `✓ Audit Engine Elite is fully up-to-date (${data.current || '{{VERSION}}'}).`;
                     statusText.className = 'text-xs text-emerald-400 font-semibold';
                     btn.disabled = false;
                     return;
@@ -2269,6 +2281,6 @@ HTML_CONTENT = """<!DOCTYPE html>
 """
 
 
-def get_html():
+def get_html(app_version="v5.0"):
     """Return the full HTML content for the Audit Engine UI."""
-    return HTML_CONTENT
+    return HTML_CONTENT.replace('{{VERSION}}', app_version)

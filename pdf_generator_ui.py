@@ -885,7 +885,7 @@ def worker_equitas_thread(inp, out_base, stage, equitas_format, equitas_pack):
 # =========================================================
 @route('/')
 def serve_index():
-    return web_assets.HTML_CONTENT
+    return web_assets.get_html(VERSION)
 
 @route('/api/dashboard')
 def api_dashboard():
@@ -1432,7 +1432,7 @@ if __name__ == "__main__":
         # Load the UI purely from memory and bridge API calls through IPC to defeat Sophos loopback blocking
         # Some enterprise security software (Sophos) blocks data: HTML URIs, and sometimes restricts %TEMP%.
         # Write to a hidden file in the user's home directory and use file://
-        html_content = web_assets.get_html()
+        html_content = web_assets.get_html(VERSION)
         temp_html_path = os.path.expanduser("~/.audit_engine_ui.html")
         with open(temp_html_path, "w", encoding="utf-8") as f:
             f.write(html_content)
