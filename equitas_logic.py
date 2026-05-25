@@ -437,7 +437,7 @@ def _create_pdf_table_data(rows, branch_name, verification_id,
         Paragraph("<b>Branch Valuation Details</b>", _header_style),
         "", "", "", "", "",
         Paragraph(
-            f"<b>Verification Details</b><br/>{verification_id}",
+            f"<b>Verification Details</b>",
             _header_style,
         ),
         "", "", "", "", "", "", "",
@@ -610,11 +610,11 @@ def generate_branch_pdf(branch_name, branch_df, output_dir):
             elements.append(PageBreak())
         page_no += 1
 
-    # Summary page
-    elements.append(PageBreak())
-    elements.append(_generate_summary_page(
-        branch_name, total_rows, branch_sole_id, verification_id,
-    ))
+    # Summary page disabled per user request
+    # elements.append(PageBreak())
+    # elements.append(_generate_summary_page(
+    #     branch_name, total_rows, branch_sole_id, verification_id,
+    # ))
 
     doc.build(elements)
     return output_path

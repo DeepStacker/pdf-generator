@@ -140,11 +140,11 @@ if %errorlevel% neq 0 (
 )
 
 :: 5. INSTALL LIBRARIES
-echo [*] Syncing required libraries (openpyxl, pandas, reportlab, pyinstaller)...
-"!PY_CMD!" -m pip install openpyxl pandas reportlab pyinstaller --no-warn-script-location --quiet
+echo [*] Syncing required libraries (openpyxl, pandas, reportlab, pyinstaller, pywebview)...
+"!PY_CMD!" -m pip install openpyxl pandas reportlab pyinstaller pywebview --no-warn-script-location --quiet
 if %errorlevel% neq 0 (
     echo [!] Standard installation had warnings. Retrying with --user...
-    "!PY_CMD!" -m pip install openpyxl pandas reportlab pyinstaller --no-warn-script-location --user --quiet
+    "!PY_CMD!" -m pip install openpyxl pandas reportlab pyinstaller pywebview --no-warn-script-location --user --quiet
 )
 
 :: 6. EXECUTE PYINSTALLER BUILD

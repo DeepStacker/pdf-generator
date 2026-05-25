@@ -154,8 +154,8 @@ fi
 echo -e "[*] Upgrading pip..."
 $PIP_INSTALL --upgrade pip --quiet 2>/dev/null || echo -e "${YELLOW}[!] Non-critical: Pip upgrade skipped.${NC}"
 
-echo -e "[*] Installing required libraries (openpyxl, pandas, reportlab, pyinstaller)..."
-if $PIP_INSTALL openpyxl pandas reportlab pyinstaller --quiet; then
+echo -e "[*] Installing required libraries (openpyxl, pandas, reportlab, pyinstaller, pywebview)..."
+if $PIP_INSTALL openpyxl pandas reportlab pyinstaller pywebview --quiet; then
     echo -e "[*] Libraries installation: ${GREEN}SUCCESS${NC}"
 else
     echo -e "${RED}[!!!] ERROR: Failed to install dependencies. Please check network connection and try again.${NC}"

@@ -8,8 +8,8 @@ block_cipher = None
 # We collect dynamic library files for NumPy safely.
 numpy_dlls = collect_dynamic_libs('numpy')
 
-# Pack certifi certificates and local font assets
-datas = [('fonts', 'fonts')] + collect_data_files('certifi')
+# Pack certifi certificates, local font assets, and pywebview static files
+datas = [('fonts', 'fonts')] + collect_data_files('certifi') + collect_data_files('webview')
 
 # Collect numpy.random submodules
 np_extra = [m for m in collect_submodules('numpy.random') if isinstance(m, str)]
@@ -23,7 +23,13 @@ a = Analysis(
         # --- Local Web Server framework ---
         'bottle',
         'web_assets',
+        # --- PyWebView native desktop rendering (proxy bypass) ---
         'webview',
+        'webview.platforms',
+        'webview.platforms.cocoa',
+        'webview.platforms.edgechromium',
+        'webview.platforms.gtk',
+        'webview.platforms.qt',
         # --- Standard Tkinter (headless file dialgos) ---
         '_tkinter',
         'tkinter',
