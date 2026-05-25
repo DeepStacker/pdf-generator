@@ -1481,8 +1481,15 @@ if __name__ == "__main__":
         api_bridge = WebViewAPI(app_instance)
         
         # Load the UI purely from memory and bridge API calls through IPC to defeat Sophos loopback blocking
+        # Some enterprise security software (Sophos) blocks data: HTML URIs. Write to temp file and use file://
         html_content = web_assets.get_html()
-        window = webview.create_window('Audit Engine', html=html_content, js_api=api_bridge, width=1200, height=800)
+        import tempfile
+        temp_html_path = os.path.join(tempfile.gettempdir(), "audit_engine_ui.html")
+        with open(temp_html_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        
+        file_url = "file://" + temp_html_path
+        window = webview.create_window('Audit Engine', url=file_url, js_api=api_bridge, width=1200, height=800)
         webview.start()
     except Exception as e:
         import traceback
