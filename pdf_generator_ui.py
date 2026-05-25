@@ -1354,7 +1354,7 @@ def find_free_port(start_port=52140):
     for port in range(start_port, start_port + 20):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
-                s.bind(('127.0.0.1', port))
+                s.bind(('localhost', port))
                 return port
             except OSError:
                 continue
@@ -1362,7 +1362,7 @@ def find_free_port(start_port=52140):
 
 def open_browser(port):
     time.sleep(0.6)
-    webbrowser.open(f"http://127.0.0.1:{port}")
+    webbrowser.open(f"http://localhost:{port}")
 
 if __name__ == "__main__":
     # Required for PyInstaller frozen executables on Windows
@@ -1379,5 +1379,5 @@ if __name__ == "__main__":
     threading.Thread(target=heartbeat_monitor, daemon=True).start()
 
     # Run the WSGI Micro webserver
-    print(f"Audit Engine Headless Server listening on http://127.0.0.1:{port}")
-    run(host='127.0.0.1', port=port, quiet=True)
+    print(f"Audit Engine Headless Server listening on http://localhost:{port}")
+    run(host='localhost', port=port, quiet=True)
