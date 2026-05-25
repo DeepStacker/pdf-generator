@@ -1465,12 +1465,6 @@ if __name__ == "__main__":
     import multiprocessing
     multiprocessing.freeze_support()
 
-    # Find free local port
-    port = find_free_port()
-
-    # Spawn background client tab heartbeat auto-closer daemon thread
-    threading.Thread(target=heartbeat_monitor, daemon=True).start()
-
     try:
         import webview
         import bottle
@@ -1481,10 +1475,10 @@ if __name__ == "__main__":
         api_bridge = WebViewAPI(app_instance)
         
         # Load the UI purely from memory and bridge API calls through IPC to defeat Sophos loopback blocking
-        # Some enterprise security software (Sophos) blocks data: HTML URIs. Write to temp file and use file://
+        # Some enterprise security software (Sophos) blocks data: HTML URIs, and sometimes restricts %TEMP%.
+        # Write to a hidden file in the user's home directory and use file://
         html_content = web_assets.get_html()
-        import tempfile
-        temp_html_path = os.path.join(tempfile.gettempdir(), "audit_engine_ui.html")
+        temp_html_path = os.path.expanduser("~/.audit_engine_ui.html")
         with open(temp_html_path, "w", encoding="utf-8") as f:
             f.write(html_content)
         
@@ -1500,6 +1494,11 @@ if __name__ == "__main__":
         except: pass
         
         print(f"[!] PyWebView native engine failed to start: {e}. Falling back to standard browser UI.")
+        
+        # We only allocate a TCP port and start the heartbeat monitor if we are falling back to browser mode
+        port = find_free_port()
+        threading.Thread(target=heartbeat_monitor, daemon=True).start()
+        
         # Spawn auto-browser launch thread
         threading.Thread(target=open_browser, args=(port,), daemon=True).start()
 
