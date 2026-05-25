@@ -1361,8 +1361,31 @@ def find_free_port(start_port=52140):
     return start_port
 
 def open_browser(port):
+    import os
+    import subprocess
+    import platform
     time.sleep(0.6)
-    webbrowser.open(f"http://127.0.0.1:{port}")
+    url = f"http://localhost:{port}"
+    
+    # Try to launch Chrome/Edge with explicit proxy bypass flags for corporate zero-admin environments
+    if platform.system() == "Windows":
+        chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        chrome_x86 = r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+        edge_path = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        
+        flags = ["--proxy-bypass-list=localhost,127.0.0.1", "--app=" + url]
+        
+        if os.path.exists(chrome_path):
+            subprocess.Popen([chrome_path] + flags)
+            return
+        elif os.path.exists(chrome_x86):
+            subprocess.Popen([chrome_x86] + flags)
+            return
+        elif os.path.exists(edge_path):
+            subprocess.Popen([edge_path] + flags)
+            return
+            
+    webbrowser.open(url)
 
 if __name__ == "__main__":
     # Required for PyInstaller frozen executables on Windows
@@ -1381,6 +1404,13 @@ if __name__ == "__main__":
         window = webview.create_window('Audit Engine', app, width=1200, height=800)
         webview.start()
     except Exception as e:
+        import traceback
+        import os
+        try:
+            with open(os.path.expanduser("~/Desktop/webview_error.txt"), "w") as f:
+                f.write(f"PyWebView Error: {e}\n{traceback.format_exc()}")
+        except: pass
+        
         print(f"[!] PyWebView native engine failed to start: {e}. Falling back to standard browser UI.")
         # Spawn auto-browser launch thread
         threading.Thread(target=open_browser, args=(port,), daemon=True).start()
