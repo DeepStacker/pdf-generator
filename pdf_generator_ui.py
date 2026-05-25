@@ -32,7 +32,7 @@ import web_assets
 # =========================================================
 # VERSION & CONSTANTS
 # =========================================================
-VERSION = "5.2.183"
+VERSION = "5.2.181"
 APP_TITLE = "Audit Engine v5.0"
 
 # File logging setup
@@ -1354,7 +1354,7 @@ def find_free_port(start_port=52140):
     for port in range(start_port, start_port + 20):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
-                s.bind(('localhost', port))
+                s.bind(('127.0.0.1', port))
                 return port
             except OSError:
                 continue
@@ -1362,7 +1362,7 @@ def find_free_port(start_port=52140):
 
 def open_browser(port):
     time.sleep(0.6)
-    webbrowser.open(f"http://localhost:{port}")
+    webbrowser.open(f"http://127.0.0.1:{port}")
 
 if __name__ == "__main__":
     # Required for PyInstaller frozen executables on Windows
@@ -1372,12 +1372,18 @@ if __name__ == "__main__":
     # Find free local port
     port = find_free_port()
 
-    # Spawn auto-browser launch thread
-    threading.Thread(target=open_browser, args=(port,), daemon=True).start()
-
     # Spawn background client tab heartbeat auto-closer daemon thread
     threading.Thread(target=heartbeat_monitor, daemon=True).start()
 
-    # Run the WSGI Micro webserver
-    print(f"Audit Engine Headless Server listening on http://localhost:{port}")
-    run(host='localhost', port=port, quiet=True)
+    try:
+        import webview
+        print("Launching native desktop window using pywebview...")
+        window = webview.create_window('Audit Engine', app, width=1200, height=800)
+        webview.start()
+    except ImportError:
+        # Spawn auto-browser launch thread
+        threading.Thread(target=open_browser, args=(port,), daemon=True).start()
+
+        # Run the WSGI Micro webserver
+        print(f"Audit Engine Headless Server listening on http://localhost:{port}")
+        run(host='localhost', port=port, quiet=True)

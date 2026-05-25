@@ -23,6 +23,7 @@ a = Analysis(
         # --- Local Web Server framework ---
         'bottle',
         'web_assets',
+        'webview',
         # --- Standard Tkinter (headless file dialgos) ---
         '_tkinter',
         'tkinter',
