@@ -1400,8 +1400,10 @@ if __name__ == "__main__":
 
     try:
         import webview
+        import bottle
         print("Launching native desktop window using pywebview...")
-        window = webview.create_window('Audit Engine', app, width=1200, height=800)
+        app_instance = bottle.default_app()
+        window = webview.create_window('Audit Engine', app_instance, width=1200, height=800)
         webview.start()
     except Exception as e:
         import traceback
