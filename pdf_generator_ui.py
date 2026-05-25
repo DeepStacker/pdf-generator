@@ -452,54 +452,32 @@ def _install_binary_update(zip_path, install_dir, log_callback=print):
     old_exe = sys.executable
     log_callback(f"Replacing {old_exe} with {src}")
     if sys.platform == "win32":
-        new_exe = os.path.join(extract_to, os.path.basename(old_exe))
-        if src != new_exe:
-            shutil.copy2(src, new_exe)
-        bat_path = os.path.join(extract_to, "_update.bat")
-        bat_contents = (
-            "@echo off\r\n"
-            "REM === Audit Engine Auto-Update Script ===\r\n"
-            "REM Wait for the parent process to exit cleanly\r\n"
-            ":wait_exit\r\n"
-            'tasklist /fi "PID eq %PARENT_PID%" 2>nul | find "%PARENT_PID%" >nul\r\n'
-            "if not errorlevel 1 (\r\n"
-            "  timeout /t 1 /nobreak >nul\r\n"
-            "  goto wait_exit\r\n"
-            ")\r\n"
-            "REM Extra wait for PyInstaller _MEI temp dir cleanup\r\n"
-            "timeout /t 3 /nobreak >nul\r\n"
-            "REM Copy new exe over old with retry (antivirus may briefly lock)\r\n"
-            "set RETRIES=0\r\n"
-            ":retry_copy\r\n"
-            'copy /y "' + new_exe.replace('/', '\\') + '" "' + old_exe.replace('/', '\\') + '" >nul 2>&1\r\n'
-            "if errorlevel 1 (\r\n"
-            "  set /a RETRIES+=1\r\n"
-            "  if %RETRIES% lss 10 (\r\n"
-            "    timeout /t 2 /nobreak >nul\r\n"
-            "    goto retry_copy\r\n"
-            "  )\r\n"
-            "  REM Copy failed after retries — launch old exe anyway\r\n"
-            ")\r\n"
-            "REM Clean up stale _MEI temp directories from previous runs\r\n"
-            'for /d %%D in ("%TEMP%\\_MEI*") do rd /s /q "%%D" 2>nul\r\n'
-            "REM Launch the updated application\r\n"
-            'start "" "' + old_exe.replace('/', '\\') + '"\r\n'
-            "REM Clean up staging directory and self-delete\r\n"
-            'rd /s /q "' + extract_to.replace('/', '\\') + '" 2>nul\r\n'
-        )
-        with open(bat_path, "w") as f:
-            f.write(bat_contents)
+        backup = old_exe + ".bak"
+        if os.path.exists(backup):
+            try:
+                os.remove(backup)
+            except OSError:
+                pass # Might be locked from a previous run, that's okay
+        
+        # Windows allows renaming a running executable, just not deleting/overwriting it
+        os.rename(old_exe, backup)
+        
+        # Now we can safely copy the new binary to the original path
+        shutil.copy2(src, old_exe)
+        
+        # Launch the new binary directly without any shell/batch scripts
         startup = subprocess.STARTUPINFO()
         startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startup.wShowWindow = 0
         subprocess.Popen(
-            ["cmd.exe", "/c", bat_path],
-            env={**os.environ, "PARENT_PID": str(os.getpid())},
+            [old_exe],
             close_fds=True,
             startupinfo=startup,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
         )
-        log_callback("Update staged; batch script launched. Waiting for clean exit.")
-        return bat_path
+        log_callback("Update staged in-place. Launching new binary and cleanly exiting.")
+        return "IN_PLACE_UPDATE"
+        
     backup = old_exe + ".bak"
     if os.path.exists(old_exe):
         os.rename(old_exe, backup)
@@ -611,18 +589,6 @@ cancel_event = threading.Event()
 # HEADLESS DIALOG POPUPS
 # =========================================================
 def ask_file_dialog():
-    import sys
-    if sys.platform == "darwin":
-        import subprocess
-        try:
-            script = 'tell application "System Events" to activate\ntell application "System Events" to return POSIX path of (choose file with prompt "Select Master Excel File" of type {"org.openxmlformats.spreadsheetml.sheet", "com.microsoft.excel.xls"})'
-            res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-            if res.returncode == 0 and res.stdout.strip():
-                return res.stdout.strip()
-            return ""
-        except Exception:
-            pass
-
     import tkinter as tk
     from tkinter import filedialog
     root = tk.Tk()
@@ -639,18 +605,6 @@ def ask_file_dialog():
     return file_path
 
 def ask_directory_dialog():
-    import sys
-    if sys.platform == "darwin":
-        import subprocess
-        try:
-            script = 'tell application "System Events" to activate\ntell application "System Events" to return POSIX path of (choose folder with prompt "Select Output Directory")'
-            res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-            if res.returncode == 0 and res.stdout.strip():
-                return res.stdout.strip()
-            return ""
-        except Exception:
-            pass
-
     import tkinter as tk
     from tkinter import filedialog
     root = tk.Tk()
@@ -1343,8 +1297,9 @@ def update_progress():
 def _delayed_apply():
     import time
     time.sleep(1)
-    if update_state.staged_bat:
-        # Exit forcefully so Windows batch script can overwrite the binary
+    if update_state.staged_bat == "IN_PLACE_UPDATE":
+        # Windows in-place update already launched the new process in the worker thread.
+        # We just need to cleanly kill the old process.
         os._exit(0)
     else:
         _restart_app()
