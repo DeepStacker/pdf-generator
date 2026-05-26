@@ -37,14 +37,14 @@ def create_app(register_routes: bool = True) -> object:
     app = default_app()
 
     # Request body size limit middleware (10 MB)
-    _MAX_REQUEST_BODY = 10 * 1024 * 1024
+    _max_body = 10 * 1024 * 1024
 
     @app.hook("before_request")
     def _log_request() -> None:
         from audit_engine.lib.bottle import abort, request as _req
         raw_cl = _req.headers.get("Content-Length", "0")
         content_length = int(raw_cl) if raw_cl.strip() else 0
-        if content_length > _MAX_REQUEST_BODY:
+        if content_length > _max_body:
             abort(413, "Request body too large")
         log.info("--> %s %s", _req.method, _req.path)
 
