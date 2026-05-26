@@ -593,35 +593,82 @@ cancel_event = threading.Event()
 # HEADLESS DIALOG POPUPS
 # =========================================================
 def ask_file_dialog():
-    import tkinter as tk
-    from tkinter import filedialog
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    root.update()
-    root.attributes('-topmost', False)
-    file_path = filedialog.askopenfilename(
-        parent=root,
-        title="Select Master Excel File",
-        filetypes=[("Excel Files", "*.xlsx;*.xls")]
-    )
-    root.destroy()
-    return file_path
+    # Try using PyWebView active window dialog if available for a premium, native OS look
+    try:
+        import webview
+        active_win = webview.active_window()
+        if active_win:
+            file_types = (
+                'Excel Files (*.xlsx;*.xls;*.XLSX;*.XLS;*.xlsm;*.XLSM)',
+                '*.xlsx;*.xls;*.XLSX;*.XLS;*.xlsm;*.XLSM',
+                'All files (*.*)',
+                '*.*'
+            )
+            result = active_win.create_file_dialog(
+                dialog_type=webview.OPEN_DIALOG,
+                file_types=file_types
+            )
+            if result:
+                return result[0] if isinstance(result, (list, tuple)) else result
+            return ""
+    except Exception as e:
+        file_logger.info(f"PyWebView native file dialog not active or not available: {e}")
+
+    # Fallback to Tkinter with robust case-insensitive extension filters for Linux
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        root.update()
+        root.attributes('-topmost', False)
+        file_path = filedialog.askopenfilename(
+            parent=root,
+            title="Select Master Excel File",
+            filetypes=[
+                ("Excel Files", "*.xlsx *.xls *.XLSX *.XLS *.xlsm *.XLSM"),
+                ("All Files", "*")
+            ]
+        )
+        root.destroy()
+        return file_path
+    except Exception as te:
+        file_logger.warning(f"Tkinter file dialog fallback failed: {te}")
+        return ""
 
 def ask_directory_dialog():
-    import tkinter as tk
-    from tkinter import filedialog
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    root.update()
-    root.attributes('-topmost', False)
-    dir_path = filedialog.askdirectory(
-        parent=root,
-        title="Select Output Directory"
-    )
-    root.destroy()
-    return dir_path
+    # Try using PyWebView active window dialog if available
+    try:
+        import webview
+        active_win = webview.active_window()
+        if active_win:
+            result = active_win.create_file_dialog(
+                dialog_type=webview.FOLDER_DIALOG
+            )
+            if result:
+                return result[0] if isinstance(result, (list, tuple)) else result
+            return ""
+    except Exception as e:
+        file_logger.info(f"PyWebView native directory dialog not active or not available: {e}")
+
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        root.update()
+        root.attributes('-topmost', False)
+        dir_path = filedialog.askdirectory(
+            parent=root,
+            title="Select Output Directory"
+        )
+        root.destroy()
+        return dir_path
+    except Exception as te:
+        file_logger.warning(f"Tkinter directory dialog fallback failed: {te}")
+        return ""
 
 # =========================================================
 # THREAD WORKERS
