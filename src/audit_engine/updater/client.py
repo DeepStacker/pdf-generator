@@ -207,7 +207,7 @@ def _macos_codesign(path: str) -> None:
     if sys.platform != "darwin":
         return
     try:
-        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", path], capture_output=True, timeout=30)
+        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", path], capture_output=True, timeout=30, check=False)
     except Exception as exc:
         file_logger.warning("macOS ad-hoc code signing failed (non-fatal): %s", exc)
 
