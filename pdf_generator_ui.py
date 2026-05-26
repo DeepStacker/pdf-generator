@@ -404,12 +404,30 @@ def _check_latest_release():
     tag = data["tag_name"]
     source_url = data["zipball_url"]
     body = data.get("body", "")
-    suffix = f"binary_{_get_platform_suffix()}.zip"
+    
+    suffix = _get_platform_suffix()
     binary_url = ""
+    
+    if suffix == "macos":
+        keywords = ["macos", "mac-os", "darwin", "osx", "mac"]
+    elif suffix == "windows":
+        keywords = ["windows", "win32", "win64", "win"]
+    else:
+        keywords = ["linux", "ubuntu", "debian"]
+        
     for asset in data.get("assets", []):
-        if suffix in asset["name"] and asset["name"].endswith(".zip"):
+        asset_name = asset["name"].lower()
+        is_platform_match = any(kw in asset_name for kw in keywords)
+        is_package_ext = asset_name.endswith(".zip") or asset_name.endswith(".tar.gz") or (suffix == "windows" and asset_name.endswith(".exe"))
+        
+        if is_platform_match and is_package_ext:
             binary_url = asset["browser_download_url"]
             break
+            
+    # Fallback to the first asset if no explicit platform-specific match was found but assets are available
+    if not binary_url and data.get("assets"):
+        binary_url = data["assets"][0]["browser_download_url"]
+        
     return tag, source_url, body, binary_url
 
 def _parse_version(tag):
@@ -614,27 +632,34 @@ def ask_file_dialog():
     except Exception as e:
         file_logger.info(f"PyWebView native file dialog not active or not available: {e}")
 
-    # Fallback to Tkinter with robust case-insensitive extension filters for Linux
+    # Fallback: Spawn a short-lived subprocess to open the Tkinter dialog.
+    # This is 100% crash-proof on macOS/HIToolbox because it executes Tkinter
+    # on the main thread of the child process, returning the selected path via stdout.
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        root.update()
-        root.attributes('-topmost', False)
-        file_path = filedialog.askopenfilename(
-            parent=root,
-            title="Select Master Excel File",
-            filetypes=[
-                ("Excel Files", "*.xlsx *.xls *.XLSX *.XLS *.xlsm *.XLSM"),
-                ("All Files", "*")
-            ]
-        )
-        root.destroy()
-        return file_path
+        import subprocess
+        import sys
+        
+        cmd = [
+            sys.executable,
+            "-c",
+            "import tkinter as tk; from tkinter import filedialog; "
+            "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
+            "path = filedialog.askopenfilename(title='Select Master Excel File', "
+            "filetypes=[('Excel Files', '*.xlsx *.xls *.XLSX *.XLS *.xlsm *.XLSM'), ('All Files', '*')]); "
+            "print(path)"
+        ]
+        
+        startupinfo = None
+        if sys.platform == "win32":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 0
+            
+        res = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo, check=True)
+        path = res.stdout.strip()
+        return path
     except Exception as te:
-        file_logger.warning(f"Tkinter file dialog fallback failed: {te}")
+        file_logger.warning(f"Subprocess Tkinter file dialog fallback failed: {te}")
         return ""
 
 def ask_directory_dialog():
@@ -652,22 +677,32 @@ def ask_directory_dialog():
     except Exception as e:
         file_logger.info(f"PyWebView native directory dialog not active or not available: {e}")
 
+    # Fallback: Spawn a short-lived subprocess to open the Tkinter directory dialog.
+    # This is 100% crash-proof on macOS/HIToolbox because it executes on the main thread of the child process.
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        root.update()
-        root.attributes('-topmost', False)
-        dir_path = filedialog.askdirectory(
-            parent=root,
-            title="Select Output Directory"
-        )
-        root.destroy()
-        return dir_path
+        import subprocess
+        import sys
+        
+        cmd = [
+            sys.executable,
+            "-c",
+            "import tkinter as tk; from tkinter import filedialog; "
+            "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
+            "path = filedialog.askdirectory(title='Select Output Directory'); "
+            "print(path)"
+        ]
+        
+        startupinfo = None
+        if sys.platform == "win32":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 0
+            
+        res = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo, check=True)
+        path = res.stdout.strip()
+        return path
     except Exception as te:
-        file_logger.warning(f"Tkinter directory dialog fallback failed: {te}")
+        file_logger.warning(f"Subprocess Tkinter directory dialog fallback failed: {te}")
         return ""
 
 # =========================================================
