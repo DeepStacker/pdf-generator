@@ -41,7 +41,7 @@ def create_app(register_routes: bool = True) -> object:
 
     @app.hook("before_request")
     def _log_request() -> None:
-        from audit_engine.lib.bottle import abort, request as _req
+        from audit_engine.lib.bottle import abort, request as _req  # noqa: I001
         raw_cl = _req.headers.get("Content-Length", "0")
         content_length = int(raw_cl) if raw_cl.strip() else 0
         if content_length > _max_body:
