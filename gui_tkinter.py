@@ -29,8 +29,9 @@ CONFIG_FILE = os.path.expanduser("~/.audit_engine_config.json")
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.expanduser("~"), "AuditEngine_Reports")
 MAX_RECENT = 8
 GITHUB_REPO = "DeepStacker/pdf-generator"
-GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
 GITHUB_RELEASES = f"https://github.com/{GITHUB_REPO}/releases"
+TK_TAG_PREFIX = "tk-"
 
 
 def _load_config():
@@ -68,6 +69,20 @@ def _open_folder(path):
             subprocess.run(["xdg-open", path], check=False)
     except Exception:
         pass
+
+
+def _fetch_latest_tk_release():
+    req = urllib.request.Request(
+        GITHUB_API,
+        headers={"User-Agent": "AuditEngine/5.0", "Accept": "application/vnd.github.v3+json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        releases = json.loads(resp.read().decode())
+    for r in releases:
+        tag = r.get("tag_name", "")
+        if tag.startswith(TK_TAG_PREFIX):
+            return r
+    return None
 
 
 class AuditEngineGUI:
@@ -647,12 +662,9 @@ class AuditEngineGUI:
 
         def bg_check():
             try:
-                req = urllib.request.Request(
-                    GITHUB_API,
-                    headers={"User-Agent": "AuditEngine/5.0", "Accept": "application/vnd.github.v3+json"},
-                )
-                with urllib.request.urlopen(req, timeout=8) as resp:
-                    data = json.loads(resp.read().decode())
+                data = _fetch_latest_tk_release()
+                if data is None:
+                    return
                 tag = data.get("tag_name", "").lstrip("v")
                 current = [int(x) for x in VERSION.split(".")]
                 latest = [int(x) for x in tag.split(".")]
@@ -684,12 +696,13 @@ class AuditEngineGUI:
 
         def worker():
             try:
-                req = urllib.request.Request(
-                    GITHUB_API,
-                    headers={"User-Agent": "AuditEngine/5.0", "Accept": "application/vnd.github.v3+json"},
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    data = json.loads(resp.read().decode())
+                data = _fetch_latest_tk_release()
+                if data is None:
+                    self.root.after(0, self.btn_update.configure,
+                                    {"text": "\u2b06 Check Update"})
+                    self.root.after(0, lambda: messagebox.showinfo(
+                        "No Updates", "No tkinter release found on GitHub."))
+                    return
                 latest_tag = data.get("tag_name", "").lstrip("v")
                 body = data.get("body", "No release notes.")
                 html_url = data.get("html_url", "")
@@ -699,7 +712,7 @@ class AuditEngineGUI:
                 mac_asset = None
                 for a in assets:
                     name = a.get("name", "")
-                    if name.endswith(".app.zip"):
+                    if "macos" in name and name.endswith(".zip"):
                         mac_asset = a
                         break
 
@@ -753,12 +766,12 @@ class AuditEngineGUI:
 
         def worker():
             try:
-                req = urllib.request.Request(
-                    GITHUB_API,
-                    headers={"User-Agent": "AuditEngine/5.0", "Accept": "application/vnd.github.v3+json"},
-                )
-                with urllib.request.urlopen(req, timeout=15) as resp:
-                    data = json.loads(resp.read().decode())
+                data = _fetch_latest_tk_release()
+                if data is None:
+                    self.root.after(0, self.btn_dl.configure, {"text": "\u2b07 Download Latest"})
+                    self.root.after(0, lambda: messagebox.showinfo(
+                        "No Release", "No tkinter release found on GitHub."))
+                    return
                 tag = data.get("tag_name", "").lstrip("v")
                 url = data.get("zipball_url", "")
                 if not url:
