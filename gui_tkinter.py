@@ -71,6 +71,13 @@ def _open_folder(path):
         pass
 
 
+def _clean_tag(tag):
+    for prefix in ("tk-v", "tk-", "v"):
+        if tag.startswith(prefix):
+            return tag[len(prefix):]
+    return tag
+
+
 def _fetch_latest_tk_release():
     req = urllib.request.Request(
         GITHUB_API,
@@ -665,7 +672,7 @@ class AuditEngineGUI:
                 data = _fetch_latest_tk_release()
                 if data is None:
                     return
-                tag = data.get("tag_name", "").lstrip("v")
+                tag = _clean_tag(data.get("tag_name", ""))
                 current = [int(x) for x in VERSION.split(".")]
                 latest = [int(x) for x in tag.split(".")]
                 while len(current) < len(latest):
@@ -703,7 +710,7 @@ class AuditEngineGUI:
                     self.root.after(0, lambda: messagebox.showinfo(
                         "No Updates", "No tkinter release found on GitHub."))
                     return
-                latest_tag = data.get("tag_name", "").lstrip("v")
+                latest_tag = _clean_tag(data.get("tag_name", ""))
                 body = data.get("body", "No release notes.")
                 html_url = data.get("html_url", "")
                 zipball_url = data.get("zipball_url", "")
