@@ -12,3 +12,13 @@ scratch/
 *.log
 *.egg-info
 .DS_Store
+
+# Data and Output Directories
+new_bank/raw_excel/
+new_bank/manual_converted/
+new_bank/auto_converted/
+new_bank/generated_pdfs/
+raw_excel/
+manual_converted/
+auto_converted/
+generated_pdfs/

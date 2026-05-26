@@ -332,6 +332,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                         <select id="bankSelector" class="w-full bg-slate-900 border border-brand-borderLine rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer">
                             <option value="IDFC First Bank">IDFC First Bank</option>
                             <option value="Equitas Small Finance Bank">Equitas Small Finance Bank</option>
+                            <option value="Arvog Bank">Arvog Bank</option>
                         </select>
                         <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-slate-500">
                             <svg class="icon w-4 h-4" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
@@ -573,6 +574,98 @@ HTML_CONTENT = """<!DOCTYPE html>
                     <div class="space-y-2">
                         <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Console Logs</span>
                         <div id="idfcConsole" class="bg-brand-termBg border border-brand-borderLine rounded-xl h-56 font-mono text-[11px] p-5 overflow-y-auto space-y-1.5 shadow-inner">
+                            <div class="text-slate-500">[00:00:00] Terminal logger online. Ready.</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SECTION: PROCESS (ARVOG WORKFLOW) -->
+                <section id="tab-PROCESS-ARVOG" class="space-y-6 hidden">
+                    <!-- Title Header -->
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-3xl font-bold tracking-tight text-white">Generate Reports</h2>
+                        <span class="px-3 py-1.5 text-xs font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Arvog Bank</span>
+                    </div>
+
+                    <!-- Primary Setup Controls Panel -->
+                    <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-5 shadow-md">
+                        <!-- Source File -->
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-300 mb-2">Source Master Excel</label>
+                            <div class="flex space-x-3">
+                                <input type="text" id="arvogInputFile" readonly class="flex-1 bg-slate-900 border border-brand-borderLine rounded-lg px-4 py-2.5 text-sm text-slate-200 focus:outline-none" placeholder="No file selected">
+                                <button onclick="browseFile('arvogInputFile')" class="bg-slate-800 text-slate-300 text-sm font-semibold px-5 py-2.5 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Browse...</button>
+                            </div>
+                        </div>
+
+                        <!-- Validation Box -->
+                        <div id="arvogValidationBox" class="hidden text-xs rounded-lg px-4 py-2.5"></div>
+
+                        <!-- Recent Files -->
+                        <div id="arvogRecentContainer" class="flex items-center space-x-3 text-xs">
+                            <span class="font-semibold text-slate-500">Recent:</span>
+                            <div id="arvogRecentList" class="flex space-x-2 overflow-x-auto">
+                                <span class="text-slate-600 italic">None saved</span>
+                            </div>
+                        </div>
+
+                        <!-- File Preview -->
+                        <div id="arvogPreviewBox" class="hidden bg-emerald-950/20 border border-emerald-900/30 rounded-lg px-4 py-3 flex items-center space-x-2 text-emerald-400 text-xs">
+                            <svg class="icon w-4 h-4" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+                            <span id="arvogPreviewText">File loaded successfully</span>
+                        </div>
+
+                        <!-- Options config -->
+                        <div class="flex items-center space-x-3 pt-2">
+                            <label class="flex items-center space-x-3 cursor-pointer">
+                                <input type="checkbox" id="arvogAutoOpen" class="w-4 h-4 text-emerald-500 rounded bg-slate-900 border-brand-borderLine focus:ring-0 cursor-pointer">
+                                <span class="text-xs text-slate-300">Auto-open destination folder after generation</span>
+                            </label>
+                        </div>
+
+                        <!-- Output Folder -->
+                        <div class="pt-2">
+                            <label class="block text-sm font-semibold text-slate-300 mb-2">Output Directory</label>
+                            <div class="flex space-x-3">
+                                <input type="text" id="arvogOutputDir" readonly class="flex-1 bg-slate-900 border border-brand-borderLine rounded-lg px-4 py-2.5 text-sm text-slate-200 focus:outline-none" placeholder="No directory selected">
+                                <button onclick="browseFolder('arvogOutputDir')" class="bg-slate-800 text-slate-300 text-sm font-semibold px-5 py-2.5 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Browse...</button>
+                            </div>
+                        </div>
+
+                        <!-- Divider line -->
+                        <div class="border-t border-brand-borderLine pt-2"></div>
+
+                        <!-- Action Buttons and Progress bar -->
+                        <div class="flex items-center space-x-4">
+                            <button id="arvogBtnRun" onclick="startGeneration()" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3.5 px-6 rounded-lg hover:bg-emerald-500 transition shadow-md">Generate Reports</button>
+                            <button id="arvogBtnCancel" onclick="cancelGeneration()" disabled class="bg-rose-600 text-white text-sm font-bold py-3.5 px-6 rounded-lg hover:bg-rose-500 transition disabled:opacity-40 disabled:pointer-events-none">Stop</button>
+                        </div>
+
+                        <!-- Progress indicator (Circular Gauge) -->
+                        <div id="arvogProgressContainer" class="hidden bg-slate-950/30 border border-brand-borderLine rounded-xl p-5 flex items-center justify-between shadow-inner">
+                            <div class="flex items-center space-x-6">
+                                <!-- Circular Gauge Ring -->
+                                <div class="relative w-20 h-20 flex-shrink-0">
+                                    <svg class="w-full h-full transform -rotate-90">
+                                        <!-- Track Ring -->
+                                        <circle cx="40" cy="40" r="34" stroke-width="6" stroke="#1E293B" fill="transparent"/>
+                                        <!-- Active Progress Ring -->
+                                        <circle id="arvogProgressRing" cx="40" cy="40" r="34" stroke-width="6" stroke="#10B981" fill="transparent"
+                                                stroke-dasharray="213.6" stroke-dashoffset="213.6" stroke-linecap="round" class="transition-all duration-300"/>
+                                    </svg>
+                                    <span id="arvogProgressPct" class="absolute inset-0 flex items-center justify-center text-sm font-extrabold text-white font-mono">0%</span>
+                                </div>
+                                <div class="space-y-1">
+                                    <span id="arvogProgressBranch" class="block text-xs font-bold text-slate-200">Initializing thread...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Console Logs terminal -->
+                    <div class="space-y-2">
+                        <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Console Logs</span>
+                        <div id="arvogConsole" class="bg-brand-termBg border border-brand-borderLine rounded-xl h-56 font-mono text-[11px] p-5 overflow-y-auto space-y-1.5 shadow-inner">
                             <div class="text-slate-500">[00:00:00] Terminal logger online. Ready.</div>
                         </div>
                     </div>
@@ -1046,6 +1139,8 @@ HTML_CONTENT = """<!DOCTYPE html>
         const idfcOutputDir = document.getElementById('idfcOutputDir');
         const eqInputFile = document.getElementById('eqInputFile');
         const eqOutputDir = document.getElementById('eqOutputDir');
+        const arvogInputFile = document.getElementById('arvogInputFile');
+        const arvogOutputDir = document.getElementById('arvogOutputDir');
 
         // HEARTBEAT self-termination loop
         setInterval(() => {
@@ -1090,6 +1185,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         function updateThemeBranding() {
             const isIDFC = (state.activeBank === 'IDFC First Bank');
+            const isArvog = (state.activeBank === 'Arvog Bank');
             
             // 1. Update logo area text and icons
             const logoText1 = document.querySelector('.logo-text-primary');
@@ -1103,6 +1199,12 @@ HTML_CONTENT = """<!DOCTYPE html>
                 logoText2.className = 'text-[10px] font-extrabold tracking-widest text-blue-500 mt-1 logo-text-secondary';
                 logoIcon.className = 'w-8 h-8 text-blue-500 logo-icon';
                 logoCopyright.textContent = '© 2026 IDFC FIRST Bank';
+            } else if (isArvog) {
+                logoText1.textContent = 'ARVOG';
+                logoText2.textContent = 'AUDIT ENGINE';
+                logoText2.className = 'text-[10px] font-extrabold tracking-widest text-emerald-500 mt-1 logo-text-secondary';
+                logoIcon.className = 'w-8 h-8 text-emerald-500 logo-icon';
+                logoCopyright.textContent = '© 2026 Arvog Bank';
             } else {
                 logoText1.textContent = 'EQUITAS';
                 logoText2.textContent = 'AUDIT ENGINE';
@@ -1114,14 +1216,16 @@ HTML_CONTENT = """<!DOCTYPE html>
             // 2. Adjust active sidebar navigation indicator border-color and icons
             const activeBtn = document.getElementById(`tabBtn-${state.activeTab}`);
             if (activeBtn) {
-                activeBtn.className = isIDFC 
-                    ? 'w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 border-blue-500 nav-btn'
-                    : 'w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 border-amber-500 nav-btn';
+                let borderCol = 'border-amber-500';
+                if (isIDFC) borderCol = 'border-blue-500';
+                else if (isArvog) borderCol = 'border-emerald-500';
+                activeBtn.className = `w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 ${borderCol} nav-btn`;
             }
 
             // 3. Inject CSS dynamically for classes marked as "dynamic-accent-*"
-            const primaryColor = isIDFC ? '#2563EB' : '#D97706';
-            const hoverColor = isIDFC ? '#1D4ED8' : '#B45309';
+            let primaryColor = '#D97706';
+            if (isIDFC) primaryColor = '#2563EB';
+            else if (isArvog) primaryColor = '#10B981';
 
             // Apply style dynamically
             document.querySelectorAll('.dynamic-accent-bg').forEach(el => {
@@ -1136,14 +1240,19 @@ HTML_CONTENT = """<!DOCTYPE html>
 
             // Toggle show workflow sections
             const idfcSection = document.getElementById('tab-PROCESS-IDFC');
+            const arvogSection = document.getElementById('tab-PROCESS-ARVOG');
             const eqSection = document.getElementById('tab-PROCESS-EQUITAS');
+            
+            idfcSection.classList.add('hidden');
+            arvogSection.classList.add('hidden');
+            eqSection.classList.add('hidden');
             
             if (state.activeTab === 'PROCESS') {
                 if (isIDFC) {
                     idfcSection.classList.remove('hidden');
-                    eqSection.classList.add('hidden');
+                } else if (isArvog) {
+                    arvogSection.classList.remove('hidden');
                 } else {
-                    idfcSection.classList.add('hidden');
                     eqSection.classList.remove('hidden');
                 }
             }
@@ -1165,15 +1274,18 @@ HTML_CONTENT = """<!DOCTYPE html>
             });
             
             const isIDFC = (state.activeBank === 'IDFC First Bank');
+            const isArvog = (state.activeBank === 'Arvog Bank');
             const activeBtn = document.getElementById(`tabBtn-${tabId}`);
             if (activeBtn) {
-                activeBtn.className = isIDFC 
-                    ? 'w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 border-blue-500 nav-btn'
-                    : 'w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 border-amber-500 nav-btn';
+                let borderCol = 'border-amber-500';
+                if (isIDFC) borderCol = 'border-blue-500';
+                else if (isArvog) borderCol = 'border-emerald-500';
+                activeBtn.className = `w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 ${borderCol} nav-btn`;
             }
 
             // Hide all tab sections
             document.getElementById('tab-PROCESS-IDFC').classList.add('hidden');
+            document.getElementById('tab-PROCESS-ARVOG').classList.add('hidden');
             document.getElementById('tab-PROCESS-EQUITAS').classList.add('hidden');
             document.getElementById('tab-STATS').classList.add('hidden');
             document.getElementById('tab-HISTORY').classList.add('hidden');
@@ -1183,6 +1295,8 @@ HTML_CONTENT = """<!DOCTYPE html>
             if (tabId === 'PROCESS') {
                 if (isIDFC) {
                     document.getElementById('tab-PROCESS-IDFC').classList.remove('hidden');
+                } else if (isArvog) {
+                    document.getElementById('tab-PROCESS-ARVOG').classList.remove('hidden');
                 } else {
                     document.getElementById('tab-PROCESS-EQUITAS').classList.remove('hidden');
                 }
@@ -1331,6 +1445,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 if (data.auto_open !== undefined) {
                     document.getElementById('idfcAutoOpen').checked = data.auto_open;
                     document.getElementById('prefAutoOpen').checked = data.auto_open;
+                    document.getElementById('arvogAutoOpen').checked = data.auto_open;
                 }
                 
                 // Equitas Preferences
@@ -1347,12 +1462,14 @@ HTML_CONTENT = """<!DOCTYPE html>
                 if (data.last_file) {
                     idfcInputFile.value = data.last_file;
                     eqInputFile.value = data.last_file;
+                    arvogInputFile.value = data.last_file;
                     // Trigger validation peek
                     validateFile(data.last_file);
                 }
                 if (data.out_path) {
                     idfcOutputDir.value = data.out_path;
                     eqOutputDir.value = data.out_path;
+                    arvogOutputDir.value = data.out_path;
                 }
                 
                 // Stats numbers
@@ -1382,11 +1499,13 @@ HTML_CONTENT = """<!DOCTYPE html>
         function renderRecentFiles(files) {
             const idfcList = document.getElementById('idfcRecentList');
             const eqList = document.getElementById('eqRecentList');
+            const arvogList = document.getElementById('arvogRecentList');
             
             if (!files || files.length === 0) {
                 const empty = '<span class="text-slate-600 italic">None saved</span>';
                 idfcList.innerHTML = empty;
                 eqList.innerHTML = empty;
+                if (arvogList) arvogList.innerHTML = empty;
                 return;
             }
             
@@ -1398,11 +1517,13 @@ HTML_CONTENT = """<!DOCTYPE html>
             
             idfcList.innerHTML = html;
             eqList.innerHTML = html;
+            if (arvogList) arvogList.innerHTML = html;
         }
 
         function selectRecentFile(path) {
             idfcInputFile.value = path;
             eqInputFile.value = path;
+            if (arvogInputFile) arvogInputFile.value = path;
             saveConfig('last_file', path);
             validateFile(path);
         }
@@ -1454,6 +1575,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         function populateMapperDropdowns(prefix, headers) {
             const container = document.getElementById(`${prefix}MapperContainer`);
+            if (!container) return;
             if (!headers || headers.length === 0) {
                 container.classList.add('hidden');
                 return;
@@ -1506,9 +1628,22 @@ HTML_CONTENT = """<!DOCTYPE html>
         // PREVIEW & VALIDATION OF EXCEL PEAK
         async function validateFile(filepath) {
             const isIDFC = (state.activeBank === 'IDFC First Bank');
-            const validationBox = isIDFC ? document.getElementById('idfcValidationBox') : document.getElementById('eqValidationBox');
-            const previewBox = isIDFC ? document.getElementById('idfcPreviewBox') : document.getElementById('eqPreviewBox');
-            const previewText = isIDFC ? document.getElementById('idfcPreviewText') : document.getElementById('eqPreviewText');
+            const isArvog = (state.activeBank === 'Arvog Bank');
+            
+            let validationBox, previewBox, previewText;
+            if (isIDFC) {
+                validationBox = document.getElementById('idfcValidationBox');
+                previewBox = document.getElementById('idfcPreviewBox');
+                previewText = document.getElementById('idfcPreviewText');
+            } else if (isArvog) {
+                validationBox = document.getElementById('arvogValidationBox');
+                previewBox = document.getElementById('arvogPreviewBox');
+                previewText = document.getElementById('arvogPreviewText');
+            } else {
+                validationBox = document.getElementById('eqValidationBox');
+                previewBox = document.getElementById('eqPreviewBox');
+                previewText = document.getElementById('eqPreviewText');
+            }
             
             try {
                 const resp = await fetch('/api/validate', {
@@ -1533,30 +1668,38 @@ HTML_CONTENT = """<!DOCTYPE html>
                         return;
                     }
 
-                    validationBox.classList.add('hidden');
-                    previewBox.classList.remove('hidden');
-                    previewBox.className = "bg-emerald-950/20 border border-emerald-900/30 rounded-lg px-4 py-3 flex items-center space-x-2 text-emerald-400 text-xs";
-                    previewText.innerHTML = `<strong>✓ Excel Loaded:</strong> Found ${data.rows || 0} rows, representing ${data.branches || 0} branches to audit.`;
+                    if (validationBox) validationBox.classList.add('hidden');
+                    if (previewBox) {
+                        previewBox.classList.remove('hidden');
+                        previewBox.className = "bg-emerald-950/20 border border-emerald-900/30 rounded-lg px-4 py-3 flex items-center space-x-2 text-emerald-400 text-xs";
+                    }
+                    if (previewText) {
+                        previewText.innerHTML = `<strong>✓ Excel Loaded:</strong> Found ${data.rows || 0} rows, representing ${data.branches || 0} branches to audit.`;
+                    }
                     
                     state.totalBranches = parseInt(data.branches) || 0;
                     state.totalRows = parseInt(data.rows) || 0;
                     
-                    const prefix = isIDFC ? 'idfc' : 'eq';
+                    const prefix = isIDFC ? 'idfc' : (isArvog ? 'arvog' : 'eq');
                     renderPreviewGrid(prefix, data.headers, data.preview);
                     populateMapperDropdowns(prefix, data.headers);
                 } else {
-                    previewBox.classList.add('hidden');
-                    validationBox.classList.remove('hidden');
-                    validationBox.className = "bg-rose-950/20 border border-rose-900/30 rounded-lg px-4 py-3 text-rose-400 text-xs";
-                    validationBox.innerHTML = `<strong>✗ Load Error:</strong> ${data.error || 'Invalid spreadsheet file format.'}`;
+                    if (previewBox) previewBox.classList.add('hidden');
+                    if (validationBox) {
+                        validationBox.classList.remove('hidden');
+                        validationBox.className = "bg-rose-950/20 border border-rose-900/30 rounded-lg px-4 py-3 text-rose-400 text-xs";
+                        validationBox.innerHTML = `<strong>✗ Load Error:</strong> ${data.error || 'Invalid spreadsheet file format.'}`;
+                    }
                     
-                    const prefix = isIDFC ? 'idfc' : 'eq';
+                    const prefix = isIDFC ? 'idfc' : (isArvog ? 'arvog' : 'eq');
                     if (data.headers && data.headers.length > 0 && data.preview && data.preview.length > 0) {
                         renderPreviewGrid(prefix, data.headers, data.preview);
                         populateMapperDropdowns(prefix, data.headers);
                     } else {
-                        document.getElementById(`${prefix}GridContainer`).classList.add('hidden');
-                        document.getElementById(`${prefix}MapperContainer`).classList.add('hidden');
+                        const gridContainer = document.getElementById(`${prefix}GridContainer`);
+                        if (gridContainer) gridContainer.classList.add('hidden');
+                        const mapperContainer = document.getElementById(`${prefix}MapperContainer`);
+                        if (mapperContainer) mapperContainer.classList.add('hidden');
                     }
                 }
             } catch (err) {
@@ -1574,6 +1717,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     // Sync other view just in case
                     idfcInputFile.value = data.path;
                     eqInputFile.value = data.path;
+                    if (arvogInputFile) arvogInputFile.value = data.path;
                     
                     saveConfig('last_file', data.path);
                     validateFile(data.path);
@@ -1592,6 +1736,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     // Sync both inputs
                     idfcOutputDir.value = data.path;
                     eqOutputDir.value = data.path;
+                    if (arvogOutputDir) arvogOutputDir.value = data.path;
                     
                     saveConfig('out_path', data.path);
                 }
@@ -1607,8 +1752,19 @@ HTML_CONTENT = """<!DOCTYPE html>
             if (state.isGenerating) return;
             
             const isIDFC = (state.activeBank === 'IDFC First Bank');
-            const file = isIDFC ? idfcInputFile.value : eqInputFile.value;
-            const output = isIDFC ? idfcOutputDir.value : eqOutputDir.value;
+            const isArvog = (state.activeBank === 'Arvog Bank');
+            
+            let file, output;
+            if (isIDFC) {
+                file = idfcInputFile.value;
+                output = idfcOutputDir.value;
+            } else if (isArvog) {
+                file = arvogInputFile.value;
+                output = arvogOutputDir.value;
+            } else {
+                file = eqInputFile.value;
+                output = eqOutputDir.value;
+            }
             
             if (!file) {
                 alert('Please select a source Excel master file first.');
@@ -1626,29 +1782,51 @@ HTML_CONTENT = """<!DOCTYPE html>
             setUiGeneratingState(true);
             
             // Console clearing and focus
-            const consoleBox = isIDFC ? document.getElementById('idfcConsole') : document.getElementById('eqConsole');
+            let consoleBox;
+            if (isIDFC) {
+                consoleBox = document.getElementById('idfcConsole');
+            } else if (isArvog) {
+                consoleBox = document.getElementById('arvogConsole');
+            } else {
+                consoleBox = document.getElementById('eqConsole');
+            }
             consoleBox.innerHTML = '<div class="text-slate-500">[00:00:00] Initializing generation background worker thread...</div>';
             state.logsCount = 0;
             
             // Gather custom column mappings
-            const columnMappings = isIDFC ? {
-                prospect: document.getElementById('idfcMap-prospect').value,
-                cuid: document.getElementById('idfcMap-cuid').value,
-                tare: document.getElementById('idfcMap-tare').value,
-                branch: document.getElementById('idfcMap-branch').value
-            } : {
-                svs: document.getElementById('eqMap-svs').value,
-                sole: document.getElementById('eqMap-sole').value,
-                branch: document.getElementById('eqMap-branch').value,
-                loan: document.getElementById('eqMap-loan').value
-            };
+            let columnMappings = null;
+            if (isIDFC) {
+                columnMappings = {
+                    prospect: document.getElementById('idfcMap-prospect').value,
+                    cuid: document.getElementById('idfcMap-cuid').value,
+                    tare: document.getElementById('idfcMap-tare').value,
+                    branch: document.getElementById('idfcMap-branch').value
+                };
+            } else if (!isArvog) {
+                columnMappings = {
+                    svs: document.getElementById('eqMap-svs').value,
+                    sole: document.getElementById('eqMap-sole').value,
+                    branch: document.getElementById('eqMap-branch').value,
+                    loan: document.getElementById('eqMap-loan').value
+                };
+            }
+            
+            // Auto open checked state
+            let autoOpenChecked = true;
+            if (isIDFC) {
+                autoOpenChecked = document.getElementById('idfcAutoOpen').checked;
+            } else if (isArvog) {
+                autoOpenChecked = document.getElementById('arvogAutoOpen').checked;
+            } else {
+                autoOpenChecked = document.getElementById('eqAutoOpen').checked;
+            }
             
             // Gather run parameters
             const payload = {
                 bank: state.activeBank,
                 filepath: file,
                 out_path: output,
-                auto_open: isIDFC ? document.getElementById('idfcAutoOpen').checked : document.getElementById('eqAutoOpen').checked,
+                auto_open: autoOpenChecked,
                 naming_pattern: document.getElementById('settingsNamingPattern').value || '{branch}_{type}',
                 column_mappings: columnMappings,
                 
@@ -1659,7 +1837,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 // Equitas specific
                 equitas_stage: state.equitas.stage,
                 equitas_format: state.equitas.outputFormat,
-                equitas_pack: document.getElementById('eqPackagingSelector').value
+                equitas_pack: document.getElementById('eqPackagingSelector') ? document.getElementById('eqPackagingSelector').value : 'FOLDER'
             };
             
             try {
@@ -1705,7 +1883,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const data = await resp.json();
                 
                 const isIDFC = (state.activeBank === 'IDFC First Bank');
-                const prefix = isIDFC ? 'idfc' : 'eq';
+                const isArvog = (state.activeBank === 'Arvog Bank');
+                const prefix = isIDFC ? 'idfc' : (isArvog ? 'arvog' : 'eq');
                 
                 const pct = Math.round(data.pct || 0);
                 const branchText = data.active_branch || 'Processing spreadsheet records...';
@@ -1821,7 +2000,15 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         function appendConsoleLog(level, message, timestamp) {
             const isIDFC = (state.activeBank === 'IDFC First Bank');
-            const consoleBox = isIDFC ? document.getElementById('idfcConsole') : document.getElementById('eqConsole');
+            const isArvog = (state.activeBank === 'Arvog Bank');
+            let consoleBox;
+            if (isIDFC) {
+                consoleBox = document.getElementById('idfcConsole');
+            } else if (isArvog) {
+                consoleBox = document.getElementById('arvogConsole');
+            } else {
+                consoleBox = document.getElementById('eqConsole');
+            }
             
             const time = timestamp || new Date().toTimeString().split(' ')[0];
             
@@ -1838,10 +2025,15 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         function setUiGeneratingState(busy) {
             const isIDFC = (state.activeBank === 'IDFC First Bank');
+            const isArvog = (state.activeBank === 'Arvog Bank');
             
             const idfcBtnRun = document.getElementById('idfcBtnRun');
             const idfcBtnCancel = document.getElementById('idfcBtnCancel');
             const idfcProgressContainer = document.getElementById('idfcProgressContainer');
+            
+            const arvogBtnRun = document.getElementById('arvogBtnRun');
+            const arvogBtnCancel = document.getElementById('arvogBtnCancel');
+            const arvogProgressContainer = document.getElementById('arvogProgressContainer');
             
             const eqBtnRun = document.getElementById('eqBtnRun');
             const eqBtnCancel = document.getElementById('eqBtnCancel');
@@ -1855,6 +2047,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                 idfcBtnCancel.disabled = false;
                 idfcProgressContainer.classList.remove('hidden');
                 
+                arvogBtnRun.textContent = 'Generating... Please wait';
+                arvogBtnRun.disabled = true;
+                arvogBtnCancel.disabled = false;
+                arvogProgressContainer.classList.remove('hidden');
+                
                 eqBtnRun.textContent = 'Processing Stage...';
                 eqBtnRun.disabled = true;
                 eqBtnCancel.disabled = false;
@@ -1867,12 +2064,16 @@ HTML_CONTENT = """<!DOCTYPE html>
                 idfcBtnRun.disabled = false;
                 idfcBtnCancel.disabled = true;
                 
+                arvogBtnRun.textContent = 'Generate Reports';
+                arvogBtnRun.disabled = false;
+                arvogBtnCancel.disabled = true;
+                
                 const stageText = (state.equitas.stage === 'STAGE 1') ? 'Generate (Stage 1)' : 'Consolidate (Stage 2)';
                 eqBtnRun.textContent = stageText;
                 eqBtnRun.disabled = false;
                 eqBtnCancel.disabled = true;
                 
-                footerStatus.textContent = 'STATUS: Idle. Ready.';
+                footerStatus.textContent = 'STATUS: Headless Worker Pool Idle';
                 footerStatus.className = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider';
             }
         }

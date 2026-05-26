@@ -319,6 +319,7 @@ def _add_recent_file(filepath):
 # Auto-detect Bank Profile fingerprint
 IDFC_FINGERPRINT_COLS = {"prospectno", "cuid", "tare weight", "currentbranch"}
 EQUITAS_FINGERPRINT_COLS = {"svs_loan_no", "sole_id", "branch_name", "loan no"}
+ARVOG_FINGERPRINT_COLS = {"jewellery1", "jewellery2"}
 
 def _detect_bank_from_file(filepath):
     """Peek at Excel headers to determine which bank the file is for."""
@@ -337,10 +338,13 @@ def _detect_bank_from_file(filepath):
                         headers_set = set(header_row)
                         idfc_score = len(IDFC_FINGERPRINT_COLS & headers_set)
                         equitas_score = len(EQUITAS_FINGERPRINT_COLS & headers_set)
+                        arvog_score = len(ARVOG_FINGERPRINT_COLS & headers_set)
                         if idfc_score >= 3:
                             return "IDFC First Bank"
                         if equitas_score >= 3:
                             return "Equitas Small Finance Bank"
+                        if arvog_score >= 2:
+                            return "Arvog Bank"
                 except Exception:
                     continue
         finally:
@@ -879,6 +883,78 @@ def worker_equitas_thread(inp, out_base, stage, equitas_format, equitas_pack):
                     os.remove(inp)
             except OSError:
                 pass
+def worker_arvog_thread(inp, out_base, auto_open):
+    try:
+        global_tracker.log("INFO", f"Initializing Arvog Build: {os.path.basename(inp)}")
+        
+        inp = os.path.abspath(os.path.normpath(inp))
+        out_base = os.path.abspath(os.path.normpath(out_base))
+
+        excel_name = os.path.splitext(os.path.basename(inp))[0]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        out = os.path.join(out_base, f"{excel_name}_ARVOG_{timestamp}")
+        out = os.path.abspath(os.path.normpath(out))
+        os.makedirs(out, exist_ok=True)
+
+        import time as _time
+        _start_time = _time.time()
+
+        # Call the robust arvog converter and pdf generator logic!
+        import new_bank.bank as arvog_bank
+        arvog_bank.process_excel(
+            input_excel=inp,
+            output_dir=out,
+            log_func=lambda msg: global_tracker.log("INFO", msg)
+        )
+
+        # Count PDFs generated
+        pdf_count = len([f for f in os.listdir(out) if f.endswith(".pdf")])
+        _elapsed = _time.time() - _start_time
+        
+        log_generation(excel_name, pdf_count, out, "Arvog Bank", full_path=inp)
+        global_tracker.log("OK", f"SUCCESS: {pdf_count} Reports Created in {_elapsed:.1f}s.")
+        global_tracker.update_pct(100)
+
+        # Calculate total output size
+        total_size = 0
+        for root_dir, _, files in os.walk(out):
+            for f in files:
+                total_size += os.path.getsize(os.path.join(root_dir, f))
+        size_str = f"{total_size / 1024:.1f} KB" if total_size < 1024*1024 else f"{total_size / 1024 / 1024:.1f} MB"
+
+        if auto_open:
+            if os.path.exists(out):
+                open_path(out)
+
+        global_tracker.summary = {
+            "title": "Generation Complete",
+            "items": [
+                {"label": "Status", "value": "✓ Success"},
+                {"label": "Audit Type", "value": "Arvog Audit"},
+                {"label": "Branches Completed", "value": str(pdf_count)},
+                {"label": "Time Elapsed", "value": f"{_elapsed:.1f}s"},
+                {"label": "Total Output Size", "value": size_str},
+                {"label": "Output Staged At", "value": out}
+            ]
+        }
+        trigger_desktop_notification("Audit Engine Elite", f"✓ Generation complete! Created {pdf_count} branch reports.")
+
+    except Exception as e:
+        global_tracker.log("ERROR", f"FAILURE: {e}")
+        global_tracker.summary = {
+            "title": "Arvog Generation Failed",
+            "message": str(e)
+        }
+        trigger_desktop_notification("Arvog Generation Failed", f"✗ Batch compilation failed: {e}")
+    finally:
+        global_tracker.is_running = False
+        if "mapped_" in os.path.basename(inp) and ".temp_audit_engine" in inp:
+            try:
+                if os.path.exists(inp):
+                    os.remove(inp)
+            except OSError:
+                pass
 
 # =========================================================
 # WSGI BOTTLE WEB SERVICE ROUTING
@@ -1029,6 +1105,35 @@ def api_validate():
                     "headers": headers,
                     "preview": preview_rows
                 }
+        elif detected_bank == "Arvog Bank":
+            import new_bank.bank as arvog_bank
+            sheet_name, header_row = arvog_bank.detect_raw_excel(filepath)
+            if sheet_name is not None:
+                import pandas as pd
+                df_raw = pd.read_excel(filepath, sheet_name=sheet_name, header=header_row)
+                rows_count = len(df_raw)
+                
+                branches_count = 1
+                branch_cols = [c for c in df_raw.columns if str(c).strip().lower() == "branch"]
+                if branch_cols:
+                    branches_count = df_raw[branch_cols[0]].nunique()
+                
+                return {
+                    "success": True,
+                    "detected_bank": detected_bank,
+                    "rows": rows_count,
+                    "branches": branches_count,
+                    "headers": headers,
+                    "preview": preview_rows
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Arvog Bank raw excel is missing required columns (e.g. Jewellery1, Jewellery2).",
+                    "detected_bank": detected_bank,
+                    "headers": headers,
+                    "preview": preview_rows
+                }
         
         return {
             "success": False, 
@@ -1093,6 +1198,13 @@ def api_run():
         t = threading.Thread(
             target=worker_idfc_thread,
             args=(filepath, out_path, audit_type, output_mode, auto_open, naming_pattern),
+            daemon=True
+        )
+        t.start()
+    elif bank == "Arvog Bank":
+        t = threading.Thread(
+            target=worker_arvog_thread,
+            args=(filepath, out_path, auto_open),
             daemon=True
         )
         t.start()
