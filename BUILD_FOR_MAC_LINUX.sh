@@ -173,7 +173,7 @@ rm -rf dist build
 
 # Run PyInstaller via the python module interface for maximum platform compatibility
 echo -e "[*] Invoking PyInstaller spec..."
-if python -m PyInstaller --noconfirm --clean pdf_generator.spec; then
+if python -m PyInstaller --noconfirm --clean gui_tkinter.spec; then
     echo ""
     echo -e "${BLUE}========================================================${NC}"
     echo -e "${GREEN}[+++] SUCCESS: BUILD COMPLETED SUCCESSFULLY! [+++]${NC}"

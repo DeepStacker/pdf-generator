@@ -1,0 +1,134 @@
+name: Build Tkinter Binaries
+on:
+  push:
+    branches:
+      - tkinter
+    tags:
+      - "tk-v*"
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: pip-tk-win-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-tk-win-
+      - uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pyinstaller
+          key: pyi-tk-win-${{ hashFiles('gui_tkinter.spec') }}
+          restore-keys: pyi-tk-win-
+      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" certifi
+      - name: Verify Tcl/Tk environment
+        run: |
+          python -c "import tkinter; r=tkinter.Tk(); r.withdraw(); print('TCL_LIBRARY:', r.tk.exprstring('$tcl_library')); r.destroy(); print('tkinter OK')"
+      - run: pyinstaller --noconfirm --clean gui_tkinter.spec
+      - name: Verify built exe
+        shell: pwsh
+        run: |
+          $exe = "dist\Audit_Engine_Elite.exe"
+          if (Test-Path $exe) {
+            $size = (Get-Item $exe).Length / 1MB
+            Write-Host "Built exe size: $([math]::Round($size, 2)) MB"
+          } else {
+            Write-Error "Build failed: exe not found!"
+            exit 1
+          }
+      - name: Extract Version
+        shell: bash
+        run: |
+          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' gui_tkinter.py | cut -d '"' -f 2)
+          echo "TAG=tk-v$VERSION" >> $GITHUB_ENV
+      - shell: pwsh
+        run: Compress-Archive -Path dist\* -DestinationPath "Audit_Engine_Tk_${env:TAG}_windows.zip"
+      - if: github.ref == 'refs/heads/tkinter'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $zip = "Audit_Engine_Tk_${env:TAG}_windows.zip"
+          gh release upload $env:TAG $zip --clobber 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:TAG --title $env:TAG --notes "Windows Tkinter binary" 2>$null
+            gh release upload $env:TAG $zip --clobber
+          }
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip
+          key: pip-tk-macos-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-tk-macos-
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pyinstaller
+          key: pyi-tk-macos-${{ hashFiles('gui_tkinter.spec') }}
+          restore-keys: pyi-tk-macos-
+      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2"
+      - run: pyinstaller --noconfirm gui_tkinter.spec
+      - run: codesign --force --options runtime --entitlements entitlements.plist --sign - dist/Audit_Engine_Elite
+      - name: Extract Version
+        shell: bash
+        run: |
+          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' gui_tkinter.py | cut -d '"' -f 2)
+          echo "TAG=tk-v$VERSION" >> $GITHUB_ENV
+      - run: cd dist && zip -r "../Audit_Engine_Tk_${TAG}_macos.zip" .
+      - if: github.ref == 'refs/heads/tkinter'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${TAG}"
+          ZIP="Audit_Engine_Tk_${TAG}_macos.zip"
+          gh release upload "$TAG" "$ZIP" --clobber 2>/dev/null || {
+            gh release create "$TAG" --title "$TAG" --notes "macOS Tkinter binary" 2>/dev/null || true
+            gh release upload "$TAG" "$ZIP" --clobber
+          }
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-tk-linux-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-tk-linux-
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pyinstaller
+          key: pyi-tk-linux-${{ hashFiles('gui_tkinter.spec') }}
+          restore-keys: pyi-tk-linux-
+      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2"
+      - run: pyinstaller --noconfirm gui_tkinter.spec
+      - name: Extract Version
+        shell: bash
+        run: |
+          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' gui_tkinter.py | cut -d '"' -f 2)
+          echo "TAG=tk-v$VERSION" >> $GITHUB_ENV
+      - run: cd dist && zip -r "../Audit_Engine_Tk_${TAG}_linux.zip" .
+      - if: github.ref == 'refs/heads/tkinter'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${TAG}"
+          ZIP="Audit_Engine_Tk_${TAG}_linux.zip"
+          gh release upload "$TAG" "$ZIP" --clobber 2>/dev/null || {
+            gh release create "$TAG" --title "$TAG" --notes "Linux Tkinter binary" 2>/dev/null || true
+            gh release upload "$TAG" "$ZIP" --clobber
+          }

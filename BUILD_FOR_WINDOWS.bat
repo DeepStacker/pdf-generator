@@ -154,7 +154,7 @@ if exist "build" rd /s /q "build"
 echo ========================================================
 echo [+] COMPILING SINGLE-FILE EXECUTIVE WITH PYINSTALLER...
 echo ========================================================
-"!PY_CMD!" -m PyInstaller --noconfirm --clean pdf_generator.spec
+"!PY_CMD!" -m PyInstaller --noconfirm --clean gui_tkinter.spec
 
 if %errorlevel% equ 0 (
     echo.

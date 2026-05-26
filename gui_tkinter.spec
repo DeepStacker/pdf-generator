@@ -5,37 +5,23 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, coll
 
 block_cipher = None
 
-# We collect dynamic library files for NumPy safely.
 numpy_dlls = collect_dynamic_libs('numpy')
 
-# Pack certifi certificates, local font assets, and pywebview static files
-datas = [('fonts', 'fonts')] + collect_data_files('certifi') + collect_data_files('webview')
+datas = [('fonts', 'fonts')] + collect_data_files('certifi')
 
-# Collect numpy.random submodules
 np_extra = [m for m in collect_submodules('numpy.random') if isinstance(m, str)]
 
 a = Analysis(
-    ['pdf_generator_ui.py'],
+    ['gui_tkinter.py'],
     pathex=[],
     binaries=numpy_dlls,
     datas=datas,
     hiddenimports=[
-        # --- Local Web Server framework ---
-        'bottle',
-        'web_assets',
-        # --- PyWebView native desktop rendering (proxy bypass) ---
-        'webview',
-        'webview.platforms',
-        'webview.platforms.cocoa',
-        'webview.platforms.edgechromium',
-        'webview.platforms.gtk',
-        'webview.platforms.qt',
-        # --- Standard Tkinter (headless file dialgos) ---
         '_tkinter',
         'tkinter',
         'tkinter.filedialog',
         'tkinter.messagebox',
-        # --- Core Excel / PDF ---
+        'tkinter.ttk',
         'openpyxl',
         'openpyxl.styles',
         'pandas',
@@ -52,10 +38,8 @@ a = Analysis(
         'reportlab.pdfbase.pdfmetrics',
         'reportlab.pdfbase.ttfonts',
         'reportlab.lib.colors',
-        # --- App modules ---
         'pdf_logic',
         'equitas_logic',
-        # --- Required by pyi_rth_multiprocessing runtime hook ---
         'select',
         'selectors',
         '_multiprocessing',

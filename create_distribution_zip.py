@@ -12,8 +12,8 @@ import zipfile
 import sys
 
 def _read_version():
-    """Extract version from pdf_generator_ui.py."""
-    ui_path = os.path.join(os.path.dirname(__file__), "pdf_generator_ui.py")
+    """Extract version from gui_tkinter.py."""
+    ui_path = os.path.join(os.path.dirname(__file__), "gui_tkinter.py")
     with open(ui_path) as f:
         content = f.read()
     m = re.search(r'^VERSION\s*=\s*"([^"]+)"', content, re.M)
