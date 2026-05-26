@@ -765,261 +765,240 @@ def ask_directory_dialog():
 # =========================================================
 def worker_idfc_thread(inp, out_base, typ, output_mode, auto_open, naming_pattern):
     try:
-        global_tracker.log("INFO", f"Initializing Build: {os.path.basename(inp)}")
+        inp_list = inp if isinstance(inp, list) else [inp]
+        total_files = len(inp_list)
         
-        inp = os.path.abspath(os.path.normpath(inp))
-        out_base = os.path.abspath(os.path.normpath(out_base))
-
-        excel_name = os.path.splitext(os.path.basename(inp))[0]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        out = os.path.join(out_base, f"{excel_name}_{timestamp}")
-        out = os.path.abspath(os.path.normpath(out))
-        os.makedirs(out, exist_ok=True)
-
-        s, h, rows = pdf_logic.read_excel(inp, lambda x: global_tracker.log("INFO", x))
-        groups = pdf_logic.group_by_branch(rows)
-
-        total = len(groups)
-        count = 0
-        needs_zip = output_mode in ("ZIP ONLY", "BOTH")
-        pdf_pct_max = 90.0 if needs_zip else 100.0
-
+        global_tracker.log("INFO", f"Initializing IDFC Build: Found {total_files} master file(s).")
+        
         import time as _time
         _start_time = _time.time()
-        _per_item_times = []
-
-        for c, br in sorted(groups.items()):
+        
+        pdf_count = 0
+        total_size = 0
+        
+        for idx, current_file in enumerate(inp_list, 1):
             if cancel_event.is_set():
-                global_tracker.log("WARN", f"CANCELLED by user after {count}/{total} branches.")
+                global_tracker.log("WARN", f"CANCELLED by user after processing {idx-1}/{total_files} files.")
                 break
-
-            name = str(br[0].get("CurrentBranchName", "Branch")).strip()
-            st = str(br[0].get("State", "")).strip()
-            safe_name = "".join(x for x in name if x.isalnum() or x in " -_").strip()
-            if not safe_name:
-                safe_name = str(c)
                 
-            branch_part = safe_name
-            type_part = typ
-            filename = naming_pattern.replace("{branch}", branch_part).replace("{type}", type_part)
-            filename = "".join(x for x in filename if x.isalnum() or x in " -_.").strip()
-            if not filename.endswith(".pdf"):
-                filename += ".pdf"
-            path = os.path.join(out, filename)
-            path = os.path.abspath(os.path.normpath(path))
+            global_tracker.update_pct((idx - 1) / total_files * 100, active_branch=f"File {idx}/{total_files}: {os.path.basename(current_file)}")
+            global_tracker.log("INFO", f"=== File {idx}/{total_files}: {os.path.basename(current_file)} ===")
+            
+            curr_inp = os.path.abspath(os.path.normpath(current_file))
+            curr_out_base = os.path.abspath(os.path.normpath(out_base))
 
-            global_tracker.update_pct((count / total) * pdf_pct_max, active_branch=f"Building: {safe_name}")
-            global_tracker.log("INFO", f"Building: {safe_name}")
-            pdf_logic.generate_pdf(typ, c, name, st, br, path)
-            count += 1
+            excel_name = os.path.splitext(os.path.basename(curr_inp))[0]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            # ETA calculation
-            elapsed = _time.time() - _start_time
-            _per_item_times.append(elapsed / count)
-            avg_time = sum(_per_item_times) / len(_per_item_times)
-            remaining = avg_time * (total - count)
+            out = os.path.join(curr_out_base, f"{excel_name}_{timestamp}")
+            out = os.path.abspath(os.path.normpath(out))
+            os.makedirs(out, exist_ok=True)
 
-        was_cancelled = cancel_event.is_set()
+            s, h, rows = pdf_logic.read_excel(curr_inp, lambda x: global_tracker.log("INFO", x))
+            groups = pdf_logic.group_by_branch(rows)
 
-        if not was_cancelled:
-            log_generation(excel_name, count, out, typ, full_path=inp)
-            _elapsed = _time.time() - _start_time
-            global_tracker.log("OK", f"SUCCESS: {count} Reports Created in {_elapsed:.1f}s.")
+            total_branches = len(groups)
+            count = 0
+            needs_zip = output_mode in ("ZIP ONLY", "BOTH")
+            pdf_pct_max = 90.0 if needs_zip else 100.0
 
-            zip_path = f"{out}.zip"
+            _per_item_times = []
 
-            if output_mode in ("ZIP ONLY", "BOTH"):
-                try:
-                    global_tracker.log("INFO", "Compressing files...")
-                    global_tracker.update_pct(92)
-                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                        for root_dir, _, files in os.walk(out):
-                            for file in files:
-                                zipf.write(os.path.join(root_dir, file), file)
-                    global_tracker.update_pct(97)
-                    global_tracker.log("OK", f"ZIP READY: {os.path.basename(zip_path)}")
-                except OSError as ze:
-                    global_tracker.log("ERROR", f"Zip Error: {ze}")
+            for c, br in sorted(groups.items()):
+                if cancel_event.is_set():
+                    global_tracker.log("WARN", f"CANCELLED by user after {count}/{total_branches} branches.")
+                    break
 
-            if output_mode == "ZIP ONLY":
-                try:
-                    global_tracker.log("INFO", "Cleaning up raw PDFs (Space Saved)...")
+                name = str(br[0].get("CurrentBranchName", "Branch")).strip()
+                st = str(br[0].get("State", "")).strip()
+                safe_name = "".join(x for x in name if x.isalnum() or x in " -_").strip()
+                if not safe_name:
+                    safe_name = str(c)
+                    
+                branch_part = safe_name
+                type_part = typ
+                filename = naming_pattern.replace("{branch}", branch_part).replace("{type}", type_part)
+                filename = "".join(x for x in filename if x.isalnum() or x in " -_.").strip()
+                if not filename.endswith(".pdf"):
+                    filename += ".pdf"
+                path = os.path.join(out, filename)
+                path = os.path.abspath(os.path.normpath(path))
+
+                # Compute dynamic inner progression
+                inner_pct = (idx - 1) / total_files * 100 + (count / total_branches) * (1 / total_files) * pdf_pct_max
+                global_tracker.update_pct(inner_pct, active_branch=f"File {idx}/{total_files} - {safe_name}")
+                global_tracker.log("INFO", f"File {idx}/{total_files}: Building branch {safe_name}")
+                pdf_logic.generate_pdf(typ, c, name, st, br, path)
+                count += 1
+                pdf_count += 1
+
+            # ZIP packaging if requested
+            if needs_zip and not cancel_event.is_set():
+                global_tracker.log("INFO", "Compressing PDF bundle...")
+                zip_path = os.path.join(curr_out_base, f"{excel_name}_{timestamp}.zip")
+                import zipfile
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root_dir, _, files in os.walk(out):
+                        for file in files:
+                            zipf.write(os.path.join(root_dir, file), file)
+                
+                global_tracker.log("INFO", f"Saved ZIP archive to: {os.path.basename(zip_path)}")
+                if output_mode == "ZIP ONLY":
                     import shutil
-                    shutil.rmtree(out)
-                except OSError as re:
-                    global_tracker.log("ERROR", f"Cleanup Error: {re}")
+                    shutil.rmtree(out, ignore_errors=True)
+            
+            # Sum size
+            for root_dir, _, files in os.walk(curr_out_base):
+                for f in files:
+                    if f.startswith(excel_name) and (f.endswith(".zip") or os.path.isdir(os.path.join(root_dir, f))):
+                        total_size += os.path.getsize(os.path.join(root_dir, f)) if os.path.isfile(os.path.join(root_dir, f)) else 0
 
-            global_tracker.update_pct(100)
+            if auto_open and total_files == 1:
+                if os.path.exists(out):
+                    open_path(out)
 
-            # Calculate total output size
-            final_target = zip_path if (output_mode == "ZIP ONLY" and os.path.exists(zip_path)) else out
-            total_size = 0
-            if os.path.isfile(final_target):
-                total_size = os.path.getsize(final_target)
-            elif os.path.isdir(final_target):
-                for root_dir, _, files in os.walk(final_target):
-                    for f in files:
-                        total_size += os.path.getsize(os.path.join(root_dir, f))
+            if "mapped_" in os.path.basename(curr_inp) and ".temp_audit_engine" in curr_inp:
+                try:
+                    if os.path.exists(curr_inp):
+                        os.remove(curr_inp)
+                except OSError:
+                    pass
 
-            size_str = f"{total_size / 1024:.1f} KB" if total_size < 1024*1024 else f"{total_size / 1024 / 1024:.1f} MB"
-            global_tracker.log("INFO", f"Total output size: {size_str}")
+        _elapsed = _time.time() - _start_time
+        log_generation(", ".join([os.path.basename(f) for f in inp_list]), pdf_count, out_base, f"IDFC Bulk {typ}", full_path="; ".join(inp_list))
+        global_tracker.log("OK", f"SUCCESS: Completed {total_files} files, {pdf_count} Reports Created in {_elapsed:.1f}s.")
+        global_tracker.update_pct(100)
 
-            if auto_open:
-                if os.path.exists(final_target):
-                    open_path(final_target)
+        size_str = f"{total_size / 1024:.1f} KB" if total_size < 1024*1024 else f"{total_size / 1024 / 1024:.1f} MB"
+        
+        if auto_open and total_files > 1:
+            if os.path.exists(out_base):
+                open_path(out_base)
 
-            global_tracker.summary = {
-                "title": "Generation Complete",
-                "items": [
-                    {"label": "Status", "value": "✓ Success"},
-                    {"label": "Audit Type", "value": typ},
-                    {"label": "Branches Completed", "value": str(count)},
-                    {"label": "Time Elapsed", "value": f"{_elapsed:.1f}s"},
-                    {"label": "Total Output Size", "value": size_str},
-                    {"label": "Output Staged At", "value": final_target}
-                ]
-            }
-            trigger_desktop_notification("Audit Engine Elite", f"✓ Generation complete! Created {count} branch reports.")
-        else:
-            log_generation(excel_name, count, out, f"{typ} (CANCELLED)", full_path=inp)
-            global_tracker.log("WARN", f"Wound down gracefully after {count}/{total} branches.")
-            global_tracker.summary = {
-                "title": "Generation Cancelled",
-                "message": f"Processing was stopped. Successfully saved reports for {count} branches."
-            }
+        global_tracker.summary = {
+            "title": "IDFC Bulk Generation Complete",
+            "items": [
+                {"label": "Status", "value": "✓ Success"},
+                {"label": "Audit Type", "value": f"IDFC {typ} Bulk"},
+                {"label": "Files Processed", "value": f"{total_files} Master Excels"},
+                {"label": "Total PDF Reports", "value": str(pdf_count)},
+                {"label": "Total Time Taken", "value": f"{_elapsed:.1f}s"},
+                {"label": "Total Output Size", "value": size_str},
+                {"label": "Staging Directory", "value": out_base}
+            ]
+        }
+        trigger_desktop_notification("Audit Engine Elite", f"✓ IDFC Bulk generation complete! Created {pdf_count} branch reports.")
 
     except Exception as e:
         global_tracker.log("ERROR", f"FAILURE: {e}")
         global_tracker.summary = {
-            "title": "Generation Failed",
+            "title": "IDFC Bulk Generation Failed",
             "message": str(e)
         }
-        trigger_desktop_notification("Generation Failed", f"✗ Batch compilation failed: {e}")
+        trigger_desktop_notification("IDFC Generation Failed", f"✗ Batch compilation failed: {e}")
     finally:
         global_tracker.is_running = False
-        if "mapped_" in os.path.basename(inp) and ".temp_audit_engine" in inp:
-            try:
-                if os.path.exists(inp):
-                    os.remove(inp)
-            except OSError:
-                pass
 
 def worker_equitas_thread(inp, out_base, stage, equitas_format, equitas_pack):
     try:
-        global_tracker.log("INFO", f"Initializing Equitas {stage}: {os.path.basename(inp)}")
+        inp_list = inp if isinstance(inp, list) else [inp]
+        total_files = len(inp_list)
+        
+        global_tracker.log("INFO", f"Initializing Equitas {stage} Build: Found {total_files} master file(s).")
+        
+        import time as _time
+        _start_time = _time.time()
+        
+        item_count = 0
+        total_size = 0
+        
+        for idx, current_file in enumerate(inp_list, 1):
+            if cancel_event.is_set():
+                global_tracker.log("WARN", f"CANCELLED by user after processing {idx-1}/{total_files} files.")
+                break
+                
+            global_tracker.update_pct((idx - 1) / total_files * 100, active_branch=f"File {idx}/{total_files}: {os.path.basename(current_file)}")
+            global_tracker.log("INFO", f"=== File {idx}/{total_files}: {os.path.basename(current_file)} ===")
+            
+            curr_inp = os.path.abspath(os.path.normpath(current_file))
+            curr_out_base = os.path.abspath(os.path.normpath(out_base))
 
-        inp = os.path.abspath(os.path.normpath(inp))
-        out_base = os.path.abspath(os.path.normpath(out_base))
+            excel_name = os.path.splitext(os.path.basename(curr_inp))[0]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        excel_name = os.path.splitext(os.path.basename(inp))[0]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            out = os.path.join(curr_out_base, f"{excel_name}_EQ_{stage.replace(' ', '')}_{timestamp}")
+            out = os.path.abspath(os.path.normpath(out))
+            os.makedirs(out, exist_ok=True)
 
-        out = os.path.join(out_base, f"{excel_name}_EQ_{stage.replace(' ', '')}_{timestamp}")
-        out = os.path.abspath(os.path.normpath(out))
-        os.makedirs(out, exist_ok=True)
-
-        if stage == "STAGE 1":
-            import time as _time
-            _eqs1_start = _time.time()
-            pdf_c, exc_c = equitas_logic.run_equitas_stage1(
-                inp, out, 
-                lambda x, level="INFO": global_tracker.log(level, x), 
-                cancel_event, 
-                lambda pct: global_tracker.update_pct(pct),
-                output_format=equitas_format, output_mode=equitas_pack
-            )
-            _eqs1_elapsed = _time.time() - _eqs1_start
-            was_cancelled = cancel_event.is_set()
-
-            if not was_cancelled:
-                log_generation(excel_name, pdf_c + exc_c, out, "Equitas-S1", full_path=inp)
-                global_tracker.log("OK", f"SUCCESS: {pdf_c} PDFs, {exc_c} Excels created. ({_eqs1_elapsed:.1f}s)")
-                global_tracker.update_pct(100)
-
-                # Calculate size
-                total_size = 0
-                for root_dir, _, files in os.walk(out):
-                    for f in files:
-                        total_size += os.path.getsize(os.path.join(root_dir, f))
-                size_str = f"{total_size / 1024:.1f} KB" if total_size < 1024*1024 else f"{total_size / 1024 / 1024:.1f} MB"
-
-                if get_config("auto_open", "True") == "True":
-                    open_path(out)
-
-                global_tracker.summary = {
-                    "title": "Stage 1 Complete",
-                    "items": [
-                        {"label": "Status", "value": "✓ Success"},
-                        {"label": "PDF Worksheets", "value": str(pdf_c)},
-                        {"label": "Excel Templates", "value": str(exc_c)},
-                        {"label": "Time Taken", "value": f"{_eqs1_elapsed:.1f}s"},
-                        {"label": "Total Size", "value": size_str},
-                        {"label": "Output Directory", "value": out}
-                    ]
-                }
-                trigger_desktop_notification("Audit Engine Elite", f"✓ Stage 1 Complete! {pdf_c} PDFs and {exc_c} Excels built.")
+            if stage == "STAGE 1":
+                pdf_c, exc_c = equitas_logic.run_equitas_stage1(
+                    curr_inp, out, 
+                    lambda x, level="INFO": global_tracker.log(level, x), 
+                    cancel_event, 
+                    lambda pct: global_tracker.update_pct((idx - 1) / total_files * 100 + pct / total_files),
+                    output_format=equitas_format, output_mode=equitas_pack
+                )
+                item_count += (pdf_c + exc_c)
             else:
-                log_generation(excel_name, pdf_c + exc_c, out, "Equitas-S1 (CANCELLED)", full_path=inp)
-                global_tracker.log("WARN", "Stage 1 Generation Cancelled.")
-                global_tracker.summary = {
-                    "title": "Stage 1 Cancelled",
-                    "message": f"Stage 1 stopped by user. Generated {pdf_c} PDFs and {exc_c} Excels."
-                }
+                out_path = equitas_logic.run_equitas_stage2(
+                    curr_inp, out, 
+                    lambda x, level="INFO": global_tracker.log(level, x), 
+                    cancel_event, 
+                    lambda pct: global_tracker.update_pct((idx - 1) / total_files * 100 + pct / total_files)
+                )
+                if out_path:
+                    item_count += 1
 
-        else:
-            # Stage 2 Consolidation
-            out_path = equitas_logic.run_equitas_stage2(
-                inp, out, 
-                lambda x, level="INFO": global_tracker.log(level, x), 
-                cancel_event, 
-                lambda pct: global_tracker.update_pct(pct)
-            )
-            was_cancelled = cancel_event.is_set()
+            # Count size for this output folder
+            for root_dir, _, files in os.walk(out):
+                for f in files:
+                    total_size += os.path.getsize(os.path.join(root_dir, f))
 
-            if not was_cancelled and out_path:
-                log_generation(excel_name, 1, out_path, "Equitas-S2", full_path=inp)
-                total_size = os.path.getsize(out_path) if os.path.isfile(out_path) else 0
-                size_str = f"{total_size / 1024:.1f} KB" if total_size < 1024*1024 else f"{total_size / 1024 / 1024:.1f} MB"
-                global_tracker.log("OK", f"SUCCESS: Consolidated worksheet created. ({size_str})")
-                global_tracker.update_pct(100)
+            if get_config("auto_open", "True") == "True" and total_files == 1:
+                open_path(out)
 
-                if get_config("auto_open", "True") == "True":
-                    open_path(out)
+            if "mapped_" in os.path.basename(curr_inp) and ".temp_audit_engine" in curr_inp:
+                try:
+                    if os.path.exists(curr_inp):
+                        os.remove(curr_inp)
+                except OSError:
+                    pass
 
-                global_tracker.summary = {
-                    "title": "Stage 2 Complete",
-                    "items": [
-                        {"label": "Status", "value": "✓ Success"},
-                        {"label": "Consolidated Excel", "value": os.path.basename(out_path)},
-                        {"label": "Total File Size", "value": size_str},
-                        {"label": "Output Excel File", "value": out_path}
-                    ]
-                }
-                trigger_desktop_notification("Audit Engine Elite", "✓ Stage 2 Complete! Consolidated worksheet created.")
-            else:
-                log_generation(excel_name, 0, out, "Equitas-S2 (CANCELLED)", full_path=inp)
-                global_tracker.log("WARN", "Stage 2 Consolidation Cancelled.")
-                global_tracker.summary = {
-                    "title": "Stage 2 Cancelled",
-                    "message": "Consolidation workbook creation stopped."
-                }
+        _elapsed = _time.time() - _start_time
+        log_generation(", ".join([os.path.basename(f) for f in inp_list]), item_count, out_base, f"Equitas Bulk {stage}", full_path="; ".join(inp_list))
+        global_tracker.log("OK", f"SUCCESS: Completed {total_files} files, {item_count} outputs created in {_elapsed:.1f}s.")
+        global_tracker.update_pct(100)
+
+        size_str = f"{total_size / 1024:.1f} KB" if total_size < 1024*1024 else f"{total_size / 1024 / 1024:.1f} MB"
+        
+        if get_config("auto_open", "True") == "True" and total_files > 1:
+            if os.path.exists(out_base):
+                open_path(out_base)
+
+        global_tracker.summary = {
+            "title": f"Equitas {stage} Complete",
+            "items": [
+                {"label": "Status", "value": "✓ Success"},
+                {"label": "Stage", "value": stage},
+                {"label": "Files Processed", "value": f"{total_files} Master Excels"},
+                {"label": "Generated Items", "value": str(item_count)},
+                {"label": "Total Time Taken", "value": f"{_elapsed:.1f}s"},
+                {"label": "Total File Size", "value": size_str},
+                {"label": "Output Directory", "value": out_base}
+            ]
+        }
+        trigger_desktop_notification("Audit Engine Elite", f"✓ Equitas Bulk {stage} complete! Generated {item_count} items.")
 
     except Exception as e:
         global_tracker.log("ERROR", f"FAILURE: {e}")
         global_tracker.summary = {
-            "title": "Equitas Generation Failed",
+            "title": f"Equitas Bulk {stage} Failed",
             "message": str(e)
         }
         trigger_desktop_notification("Equitas Generation Failed", f"✗ Batch compilation failed: {e}")
     finally:
         global_tracker.is_running = False
-        if "mapped_" in os.path.basename(inp) and ".temp_audit_engine" in inp:
-            try:
-                if os.path.exists(inp):
-                    os.remove(inp)
-            except OSError:
-                pass
+
 def worker_arvog_thread(inp, out_base, auto_open):
     try:
         inp_list = inp if isinstance(inp, list) else [inp]
@@ -1147,7 +1126,10 @@ def api_dashboard():
         "recent_files": recent_files,
         "total_sessions": total_sessions,
         "total_pdfs": total_pdfs,
-        "last_run": last_run
+        "last_run": last_run,
+        "selected_files_idfc": get_config("selected_files_IDFC First Bank", "[]"),
+        "selected_files_eq": get_config("selected_files_Equitas Small Finance Bank", "[]"),
+        "selected_files_arvog": get_config("selected_files_Arvog Bank", "[]")
     }
 
 @route('/api/config/save', method='POST')

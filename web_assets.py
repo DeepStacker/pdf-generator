@@ -451,30 +451,51 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                     <!-- Primary Setup Controls Panel -->
                     <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-5 shadow-md">
-                        <!-- Source File -->
+                        <!-- Source File (Drag & Drop Zone with Bulk Upload Support) -->
                         <div>
-                            <label class="block text-sm font-semibold text-slate-300 mb-2">Source Master Excel</label>
-                            <div class="flex space-x-3">
-                                <input type="text" id="idfcInputFile" readonly class="flex-1 bg-slate-900 border border-brand-borderLine rounded-lg px-4 py-2.5 text-sm text-slate-200 focus:outline-none" placeholder="No file selected">
-                                <button onclick="browseFile('idfcInputFile')" class="bg-slate-800 text-slate-300 text-sm font-semibold px-5 py-2.5 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Browse...</button>
+                            <label class="block text-sm font-semibold text-slate-300 mb-2">Source Master Excel (Bulk Upload / Drag & Drop)</label>
+                            
+                            <!-- Hidden input for file dialog browse fallback -->
+                            <input type="file" id="idfcFileInputHidden" multiple accept=".xlsx,.xls,.xlsm" class="hidden" onchange="handleNativeFileSelect(event)">
+                            
+                            <div id="idfcDropZone" class="arvog-drag-zone rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer relative"
+                                 onclick="triggerBrowseMultipleFiles()"
+                                 ondragover="handleDragOver(event)"
+                                 ondragleave="handleDragLeave(event)"
+                                 ondrop="handleDrop(event)">
+                                <div class="flex flex-col items-center space-y-3 pointer-events-none">
+                                    <!-- Upload SVG Icon -->
+                                    <svg class="icon w-12 h-12 text-slate-400 group-hover:text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                    <span class="block text-sm font-medium text-slate-200">
+                                        Drag & Drop Master Excel Sheets here or <span style="color: #2563EB; font-weight: 600;" class="dynamic-accent-fg">browse local files</span>
+                                    </span>
+                                    <span class="block text-[11px] text-slate-500">Supports multiple .xlsx, .xls, .xlsm files at once</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Keep the input idfcInputFile in DOM but hidden to prevent JS reference crash -->
+                            <input type="text" id="idfcInputFile" class="hidden">
+                        </div>
+
+                        <!-- Selected Files List -->
+                        <div id="idfcSelectedFilesContainer" class="hidden space-y-3 pt-1">
+                            <div class="flex justify-between items-center text-xs font-bold text-slate-400">
+                                <span>SELECTED FILES (<span id="idfcSelectedCount">0</span>)</span>
+                                <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 transition bg-transparent border-0 cursor-pointer" style="font-weight: 600;">Clear All</button>
+                            </div>
+                            <div id="idfcSelectedFilesList" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                <!-- Populated dynamically by javascript -->
                             </div>
                         </div>
 
-                        <!-- Validation Banner -->
+                        <!-- Keep old boxes hidden to guarantee NO reference errors in validateFile() -->
                         <div id="idfcValidationBox" class="hidden text-xs rounded-lg px-4 py-2.5"></div>
-
-                        <!-- Recent Files -->
-                        <div id="idfcRecentContainer" class="flex items-center space-x-3 text-xs">
-                            <span class="font-semibold text-slate-500">Recent:</span>
-                            <div id="idfcRecentList" class="flex space-x-2 overflow-x-auto">
-                                <span class="text-slate-600 italic">None saved</span>
-                            </div>
-                        </div>
-
-                        <!-- File Preview -->
-                        <div id="idfcPreviewBox" class="hidden bg-emerald-950/20 border border-emerald-900/30 rounded-lg px-4 py-3 flex items-center space-x-2 text-emerald-400 text-xs">
-                            <svg class="icon w-4 h-4" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
-                            <span id="idfcPreviewText">File loaded successfully</span>
+                        <div id="idfcPreviewBox" class="hidden">
+                            <span id="idfcPreviewText"></span>
                         </div>
 
                         <!-- Excel Preview Grid (Collapsible) -->
@@ -771,30 +792,51 @@ HTML_CONTENT = """<!DOCTYPE html>
                         <!-- Stage Title label -->
                         <h3 id="eqStageTitle" class="text-sm font-bold text-slate-300">Stage 1: Generate Branch Audits & Excels</h3>
 
-                        <!-- Source File -->
+                        <!-- Source File (Drag & Drop Zone with Bulk Upload Support) -->
                         <div>
                             <label id="eqFileLabel" class="block text-sm font-semibold text-slate-300 mb-2">Source Excel (Normal + JSR sheets)</label>
-                            <div class="flex space-x-3">
-                                <input type="text" id="eqInputFile" readonly class="flex-1 bg-slate-900 border border-brand-borderLine rounded-lg px-4 py-2.5 text-sm text-slate-200 focus:outline-none" placeholder="No file selected">
-                                <button onclick="browseFile('eqInputFile')" class="bg-slate-800 text-slate-300 text-sm font-semibold px-5 py-2.5 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Browse...</button>
+                            
+                            <!-- Hidden input for file dialog browse fallback -->
+                            <input type="file" id="eqFileInputHidden" multiple accept=".xlsx,.xls,.xlsm" class="hidden" onchange="handleNativeFileSelect(event)">
+                            
+                            <div id="eqDropZone" class="arvog-drag-zone rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer relative"
+                                 onclick="triggerBrowseMultipleFiles()"
+                                 ondragover="handleDragOver(event)"
+                                 ondragleave="handleDragLeave(event)"
+                                 ondrop="handleDrop(event)">
+                                <div class="flex flex-col items-center space-y-3 pointer-events-none">
+                                    <!-- Upload SVG Icon -->
+                                    <svg class="icon w-12 h-12 text-slate-400 group-hover:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                    <span class="block text-sm font-medium text-slate-200">
+                                        Drag & Drop Master Excel Sheets here or <span style="color: #D97706; font-weight: 600;" class="dynamic-accent-fg">browse local files</span>
+                                    </span>
+                                    <span class="block text-[11px] text-slate-500">Supports multiple .xlsx, .xls, .xlsm files at once</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Keep the input eqInputFile in DOM but hidden to prevent JS reference crash -->
+                            <input type="text" id="eqInputFile" class="hidden">
+                        </div>
+
+                        <!-- Selected Files List -->
+                        <div id="eqSelectedFilesContainer" class="hidden space-y-3 pt-1">
+                            <div class="flex justify-between items-center text-xs font-bold text-slate-400">
+                                <span>SELECTED FILES (<span id="eqSelectedCount">0</span>)</span>
+                                <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 transition bg-transparent border-0 cursor-pointer" style="font-weight: 600;">Clear All</button>
+                            </div>
+                            <div id="eqSelectedFilesList" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                <!-- Populated dynamically by javascript -->
                             </div>
                         </div>
 
-                        <!-- Validation Banner -->
+                        <!-- Keep old boxes hidden to guarantee NO reference errors in validateFile() -->
                         <div id="eqValidationBox" class="hidden text-xs rounded-lg px-4 py-2.5"></div>
-
-                        <!-- Recent Files -->
-                        <div id="eqRecentContainer" class="flex items-center space-x-3 text-xs">
-                            <span class="font-semibold text-slate-500">Recent:</span>
-                            <div id="eqRecentList" class="flex space-x-2 overflow-x-auto">
-                                <span class="text-slate-600 italic">None saved</span>
-                            </div>
-                        </div>
-
-                        <!-- File Preview -->
-                        <div id="eqPreviewBox" class="hidden bg-emerald-950/20 border border-emerald-900/30 rounded-lg px-4 py-3 flex items-center space-x-2 text-emerald-400 text-xs">
-                            <svg class="icon w-4 h-4" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
-                            <span id="eqPreviewText">File loaded successfully</span>
+                        <div id="eqPreviewBox" class="hidden">
+                            <span id="eqPreviewText"></span>
                         </div>
 
                         <!-- Excel Preview Grid (Collapsible) -->
@@ -1207,8 +1249,16 @@ HTML_CONTENT = """<!DOCTYPE html>
                 stage: 'STAGE 1',
                 outputFormat: 'BOTH'
             },
-            arvogSelectedFiles: [],
-            arvogPreviewIndex: -1,
+            selectedFiles: {
+                'IDFC First Bank': [],
+                'Equitas Small Finance Bank': [],
+                'Arvog Bank': []
+            },
+            previewIndex: {
+                'IDFC First Bank': -1,
+                'Equitas Small Finance Bank': -1,
+                'Arvog Bank': -1
+            },
             isGenerating: false,
             logsCount: 0,
             genStartTime: null,
@@ -1264,7 +1314,62 @@ HTML_CONTENT = """<!DOCTYPE html>
             
             // Dynamic branding updates
             updateThemeBranding();
+            
+            // Render selection checklist for this newly active bank!
+            renderSelectedFilesList();
+            
+            // Trigger preview highlight for this bank if there are success files
+            const bankFiles = state.selectedFiles[val] || [];
+            const successIdx = bankFiles.findIndex(f => f.status === "success");
+            if (successIdx !== -1) {
+                selectPreviewFile(successIdx);
+            } else {
+                // Clear active preview input values
+                const prefix = getActivePrefix();
+                const targetInput = document.getElementById(`${prefix}InputFile`);
+                if (targetInput) targetInput.value = '';
+                const gridContainer = document.getElementById(`${prefix}GridContainer`);
+                if (gridContainer) gridContainer.classList.add('hidden');
+            }
         });
+
+        // OUTPUT DIRECTORY SYNC & PERSIST LISTENERS
+        ['idfcOutputDir', 'eqOutputDir', 'arvogOutputDir'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', () => {
+                    const val = el.value;
+                    idfcOutputDir.value = val;
+                    eqOutputDir.value = val;
+                    arvogOutputDir.value = val;
+                    saveConfig('out_path', val);
+                });
+            }
+        });
+
+        // AUTO-OPEN CHECKBOX SYNC & PERSIST LISTENERS
+        ['idfcAutoOpen', 'eqAutoOpen', 'arvogAutoOpen', 'prefAutoOpen'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', () => {
+                    const val = el.checked;
+                    document.getElementById('idfcAutoOpen').checked = val;
+                    document.getElementById('eqAutoOpen').checked = val;
+                    document.getElementById('arvogAutoOpen').checked = val;
+                    document.getElementById('prefAutoOpen').checked = val;
+                    saveConfig('auto_open', String(val));
+                });
+            }
+        });
+
+        // EQUITAS PACKAGING MODE PERSIST LISTENER
+        const eqPkgSel = document.getElementById('eqPackagingSelector');
+        if (eqPkgSel) {
+            eqPkgSel.addEventListener('change', () => {
+                state.equitas.packagingMode = eqPkgSel.value;
+                saveConfig('equitas_pack', eqPkgSel.value);
+            });
+        }
 
         function updateThemeBranding() {
             const isIDFC = (state.activeBank === 'IDFC First Bank');
@@ -1541,22 +1646,38 @@ HTML_CONTENT = """<!DOCTYPE html>
                     document.getElementById('eqAutoOpen').checked = data.eq_auto_open;
                 }
                 
-                // Set initial paths
-                if (data.last_file) {
-                    idfcInputFile.value = data.last_file;
-                    eqInputFile.value = data.last_file;
-                    arvogInputFile.value = data.last_file;
-                    
-                    if (state.activeBank === 'Arvog Bank') {
-                        addSelectedFiles([data.last_file]);
-                    } else {
-                        validateFile(data.last_file);
-                    }
-                }
+                // Set output path across all tabs
                 if (data.out_path) {
                     idfcOutputDir.value = data.out_path;
                     eqOutputDir.value = data.out_path;
                     arvogOutputDir.value = data.out_path;
+                }
+                
+                // Restore saved file checklists for each bank
+                const checklistKeys = [
+                    { key: 'selected_files_idfc', bank: 'IDFC First Bank' },
+                    { key: 'selected_files_eq', bank: 'Equitas Small Finance Bank' },
+                    { key: 'selected_files_arvog', bank: 'Arvog Bank' }
+                ];
+                let restoredAny = false;
+                checklistKeys.forEach(item => {
+                    try {
+                        const raw = data[item.key];
+                        if (raw) {
+                            const paths = JSON.parse(raw);
+                            if (Array.isArray(paths) && paths.length > 0) {
+                                addSelectedFiles(paths, item.bank);
+                                restoredAny = true;
+                            }
+                        }
+                    } catch (parseErr) {
+                        console.warn(`Failed to restore checklist for ${item.bank}:`, parseErr);
+                    }
+                });
+                
+                // Fallback: if no checklists were restored, use last_file for the active bank
+                if (!restoredAny && data.last_file) {
+                    addSelectedFiles([data.last_file]);
                 }
                 
                 // Stats numbers
@@ -1613,18 +1734,15 @@ HTML_CONTENT = """<!DOCTYPE html>
             if (arvogInputFile) arvogInputFile.value = path;
             saveConfig('last_file', path);
             
-            if (state.activeBank === 'Arvog Bank') {
-                addSelectedFiles([path]);
-            } else {
-                validateFile(path);
-            }
+            addSelectedFiles([path]);
         }
 
-        // SPREADSHEET PREVIEW GRID & DYNAMIC COLUMN MAPPER
         function renderPreviewGrid(prefix, headers, preview) {
             const container = document.getElementById(`${prefix}GridContainer`);
             const headerRow = document.getElementById(`${prefix}GridHeader`);
             const body = document.getElementById(`${prefix}GridBody`);
+            
+            if (!container || !headerRow || !body) return;
             
             if (!headers || headers.length === 0 || !preview || preview.length === 0) {
                 container.classList.add('hidden');
@@ -1756,12 +1874,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                         saveConfig('bank', data.detected_bank);
                         updateThemeBranding();
                         
-                        if (data.detected_bank === 'Arvog Bank') {
-                            addSelectedFiles([filepath]);
-                        } else {
-                            // Re-trigger validation on the correct bank view
-                            validateFile(filepath);
-                        }
+                        addSelectedFiles([filepath]);
                         return;
                     }
 
@@ -1804,25 +1917,34 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
         }
 
-        // DRAG & DROP AND BULK UPLOAD HANDLERS FOR ARVOG
+        // DRAG & DROP AND BULK UPLOAD HANDLERS (UNIFIED FOR ALL BANKS)
+        function getActivePrefix() {
+            if (state.activeBank === 'IDFC First Bank') return 'idfc';
+            if (state.activeBank === 'Equitas Small Finance Bank') return 'eq';
+            return 'arvog';
+        }
+
         function handleDragOver(e) {
             e.preventDefault();
             e.stopPropagation();
-            const zone = document.getElementById('arvogDropZone');
+            const prefix = getActivePrefix();
+            const zone = document.getElementById(`${prefix}DropZone`);
             if (zone) zone.classList.add('dragover');
         }
 
         function handleDragLeave(e) {
             e.preventDefault();
             e.stopPropagation();
-            const zone = document.getElementById('arvogDropZone');
+            const prefix = getActivePrefix();
+            const zone = document.getElementById(`${prefix}DropZone`);
             if (zone) zone.classList.remove('dragover');
         }
 
         function handleDrop(e) {
             e.preventDefault();
             e.stopPropagation();
-            const zone = document.getElementById('arvogDropZone');
+            const prefix = getActivePrefix();
+            const zone = document.getElementById(`${prefix}DropZone`);
             if (zone) zone.classList.remove('dragover');
 
             const dt = e.dataTransfer;
@@ -1860,7 +1982,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                 }
             } catch (err) {
                 console.error('Browse multiple files failed, falling back to hidden HTML file input:', err);
-                const hiddenInput = document.getElementById('arvogFileInputHidden');
+                const prefix = getActivePrefix();
+                const hiddenInput = document.getElementById(`${prefix}FileInputHidden`);
                 if (hiddenInput) hiddenInput.click();
             }
         }
@@ -1882,12 +2005,17 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
         }
 
-        function addSelectedFiles(paths) {
+        function addSelectedFiles(paths, targetBank = null) {
+            const bank = targetBank || state.activeBank;
+            if (!state.selectedFiles[bank]) {
+                state.selectedFiles[bank] = [];
+            }
+            
             paths.forEach(p => {
                 const pathStr = String(p).trim();
                 if (!pathStr) return;
                 
-                if (state.arvogSelectedFiles.some(f => f.path === pathStr)) return;
+                if (state.selectedFiles[bank].some(f => f.path === pathStr)) return;
                 
                 const name = pathStr.split(String.fromCharCode(47)).pop().split(String.fromCharCode(92)).pop();
                 const fileObj = {
@@ -1903,29 +2031,39 @@ HTML_CONTENT = """<!DOCTYPE html>
                     status: "loading"
                 };
                 
-                state.arvogSelectedFiles.push(fileObj);
+                state.selectedFiles[bank].push(fileObj);
             });
             
-            renderSelectedFilesList();
+            if (bank === state.activeBank) {
+                renderSelectedFilesList();
+            }
             
-            state.arvogSelectedFiles.forEach((fileObj, idx) => {
+            state.selectedFiles[bank].forEach((fileObj, idx) => {
                 if (fileObj.status === "loading") {
-                    validateIndividualFile(idx);
+                    validateIndividualFile(idx, bank);
                 }
             });
+
+            // Save checklists to SQLite configs persistently
+            const cleanPaths = state.selectedFiles[bank].map(f => f.path);
+            saveConfig(`selected_files_${bank}`, JSON.stringify(cleanPaths));
         }
 
-        async function validateIndividualFile(index) {
-            const fileObj = state.arvogSelectedFiles[index];
+        async function validateIndividualFile(index, targetBank = null) {
+            const bank = targetBank || state.activeBank;
+            const fileObj = state.selectedFiles[bank][index];
             if (!fileObj) return;
             
             try {
+                const isIDFC = (bank === 'IDFC First Bank');
+                const isEq = (bank === 'Equitas Small Finance Bank');
+                
                 const resp = await fetch('/api/validate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         filepath: fileObj.path,
-                        expected_stage: null
+                        expected_stage: isEq ? state.equitas.stage : null
                     })
                 });
                 const data = await resp.json();
@@ -1937,9 +2075,9 @@ HTML_CONTENT = """<!DOCTYPE html>
                     fileObj.branches = parseInt(data.branches) || 0;
                     fileObj.headers = data.headers || [];
                     fileObj.preview = data.preview || [];
-                    fileObj.size = `${(data.rows || 0)} rows, ${data.branches || 0} branches`;
+                    fileObj.size = isIDFC ? `${(data.rows || 0)} rows, ${data.branches || 0} branches` : `${data.rows || 0} rows`;
                     
-                    if (state.arvogPreviewIndex === -1) {
+                    if (state.previewIndex[bank] === -1 && bank === state.activeBank) {
                         selectPreviewFile(index);
                     }
                 } else {
@@ -1955,60 +2093,83 @@ HTML_CONTENT = """<!DOCTYPE html>
                 fileObj.size = "Connection error";
             }
             
-            renderSelectedFilesList();
+            if (bank === state.activeBank) {
+                renderSelectedFilesList();
+            }
         }
 
         function removeSelectedFile(index, event) {
             if (event) event.stopPropagation();
-            state.arvogSelectedFiles.splice(index, 1);
+            const bank = state.activeBank;
+            const prefix = getActivePrefix();
             
-            if (state.arvogPreviewIndex === index) {
-                state.arvogPreviewIndex = -1;
-                const firstSuccessIdx = state.arvogSelectedFiles.findIndex(f => f.status === "success");
+            state.selectedFiles[bank].splice(index, 1);
+            
+            if (state.previewIndex[bank] === index) {
+                state.previewIndex[bank] = -1;
+                const firstSuccessIdx = state.selectedFiles[bank].findIndex(f => f.status === "success");
                 if (firstSuccessIdx !== -1) {
                     selectPreviewFile(firstSuccessIdx);
                 } else {
-                    const gridContainer = document.getElementById('arvogGridContainer');
+                    const gridContainer = document.getElementById(`${prefix}GridContainer`);
                     if (gridContainer) gridContainer.classList.add('hidden');
                 }
-            } else if (state.arvogPreviewIndex > index) {
-                state.arvogPreviewIndex--;
+            } else if (state.previewIndex[bank] > index) {
+                state.previewIndex[bank]--;
             }
             
             renderSelectedFilesList();
+
+            // Save checklists to SQLite configs persistently
+            const cleanPaths = state.selectedFiles[bank].map(f => f.path);
+            saveConfig(`selected_files_${bank}`, JSON.stringify(cleanPaths));
         }
 
         function clearAllSelectedFiles() {
-            state.arvogSelectedFiles = [];
-            state.arvogPreviewIndex = -1;
+            const bank = state.activeBank;
+            const prefix = getActivePrefix();
             
-            const gridContainer = document.getElementById('arvogGridContainer');
+            state.selectedFiles[bank] = [];
+            state.previewIndex[bank] = -1;
+            
+            const gridContainer = document.getElementById(`${prefix}GridContainer`);
             if (gridContainer) gridContainer.classList.add('hidden');
             
             renderSelectedFilesList();
+
+            // Save checklists to SQLite configs persistently (empty list)
+            saveConfig(`selected_files_${bank}`, JSON.stringify([]));
         }
 
         function selectPreviewFile(index) {
-            const fileObj = state.arvogSelectedFiles[index];
+            const bank = state.activeBank;
+            const prefix = getActivePrefix();
+            const fileObj = state.selectedFiles[bank][index];
             if (!fileObj || fileObj.status !== "success") return;
             
-            state.arvogPreviewIndex = index;
+            state.previewIndex[bank] = index;
             
-            renderPreviewGrid('arvog', fileObj.headers, fileObj.preview);
+            renderPreviewGrid(prefix, fileObj.headers, fileObj.preview);
+            populateMapperDropdowns(prefix, fileObj.headers);
             
-            if (arvogInputFile) arvogInputFile.value = fileObj.path;
+            const targetInput = document.getElementById(`${prefix}InputFile`);
+            if (targetInput) targetInput.value = fileObj.path;
             
             renderSelectedFilesList();
         }
 
         function renderSelectedFilesList() {
-            const container = document.getElementById('arvogSelectedFilesContainer');
-            const list = document.getElementById('arvogSelectedFilesList');
-            const countLabel = document.getElementById('arvogSelectedCount');
+            const bank = state.activeBank;
+            const prefix = getActivePrefix();
+            
+            const container = document.getElementById(`${prefix}SelectedFilesContainer`);
+            const list = document.getElementById(`${prefix}SelectedFilesList`);
+            const countLabel = document.getElementById(`${prefix}SelectedCount`);
             
             if (!container || !list || !countLabel) return;
             
-            const totalFiles = state.arvogSelectedFiles.length;
+            const files = state.selectedFiles[bank] || [];
+            const totalFiles = files.length;
             countLabel.textContent = totalFiles;
             
             if (totalFiles === 0) {
@@ -2018,9 +2179,13 @@ HTML_CONTENT = """<!DOCTYPE html>
             
             container.classList.remove('hidden');
             
+            let accentColorClass = "text-emerald-400";
+            if (prefix === 'idfc') accentColorClass = "text-blue-400";
+            else if (prefix === 'eq') accentColorClass = "text-amber-400";
+            
             let html = "";
-            state.arvogSelectedFiles.forEach((file, idx) => {
-                const isActive = (state.arvogPreviewIndex === idx);
+            files.forEach((file, idx) => {
+                const isActive = (state.previewIndex[bank] === idx);
                 const activeClass = isActive ? "active-preview" : "";
                 
                 let iconHtml = "";
@@ -2030,7 +2195,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 
                 if (file.status === "loading") {
                     iconHtml = `
-                        <svg class="icon w-4 h-4 text-emerald-400 emerald-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <svg class="icon w-4 h-4 ${accentColorClass} emerald-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="12" y1="2" x2="12" y2="6"/>
                             <line x1="12" y1="18" x2="12" y2="22"/>
                             <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/>
@@ -2043,14 +2208,14 @@ HTML_CONTENT = """<!DOCTYPE html>
                     statusHtml = `<span class="text-[10px] text-slate-500 italic">Verifying spreadsheet schema...</span>`;
                 } else if (file.status === "success") {
                     iconHtml = `
-                        <svg class="icon w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <svg class="icon w-4 h-4 ${accentColorClass}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                             <polyline points="14 2 14 8 20 8"/>
                             <line x1="16" y1="13" x2="8" y2="13"/>
                             <line x1="16" y1="17" x2="8" y2="17"/>
                             <polyline points="10 9 9 9 8 9"/>
                         </svg>`;
-                    statusHtml = `<span class="text-[10px] text-emerald-400 font-semibold">✓ ${file.size}</span>`;
+                    statusHtml = `<span class="text-[10px] ${accentColorClass} font-semibold">✓ ${file.size}</span>`;
                     clickAction = `onclick="selectPreviewFile(${idx})"`;
                     cursorStyle = "cursor-pointer";
                 } else {
@@ -2131,30 +2296,23 @@ HTML_CONTENT = """<!DOCTYPE html>
             const isIDFC = (state.activeBank === 'IDFC First Bank');
             const isArvog = (state.activeBank === 'Arvog Bank');
             
-            let file, output;
-            if (isIDFC) {
-                file = idfcInputFile.value;
-                output = idfcOutputDir.value;
-                if (!file) {
-                    alert('Please select a source Excel master file first.');
-                    return;
-                }
-            } else if (isArvog) {
-                const validFiles = state.arvogSelectedFiles.filter(f => f.status === "success");
-                if (validFiles.length === 0) {
-                    alert('Please select and load at least one valid Arvog Bank Excel master file first.');
-                    return;
-                }
-                file = validFiles.map(f => f.path);
-                output = arvogOutputDir.value;
-            } else {
-                file = eqInputFile.value;
-                output = eqOutputDir.value;
-                if (!file) {
-                    alert('Please select a source Excel master file first.');
-                    return;
-                }
+            const prefix = getActivePrefix();
+            
+            // Unified file extraction from selected files checklist for ALL banks
+            const validFiles = (state.selectedFiles[state.activeBank] || []).filter(f => f.status === "success");
+            if (validFiles.length === 0) {
+                alert('Please select and load at least one valid Excel master file first.');
+                return;
             }
+            
+            let file;
+            if (validFiles.length === 1) {
+                file = validFiles[0].path;
+            } else {
+                file = validFiles.map(f => f.path);
+            }
+            
+            const output = document.getElementById(`${prefix}OutputDir`).value;
             
             if (!output) {
                 alert('Please select an output directory.');
@@ -2168,14 +2326,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             setUiGeneratingState(true);
             
             // Console clearing and focus
-            let consoleBox;
-            if (isIDFC) {
-                consoleBox = document.getElementById('idfcConsole');
-            } else if (isArvog) {
-                consoleBox = document.getElementById('arvogConsole');
-            } else {
-                consoleBox = document.getElementById('eqConsole');
-            }
+            const consoleBox = document.getElementById(`${prefix}Console`);
             consoleBox.innerHTML = '<div class="text-slate-500">[00:00:00] Initializing generation background worker thread...</div>';
             state.logsCount = 0;
             
@@ -2197,15 +2348,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 };
             }
             
-            // Auto open checked state
-            let autoOpenChecked = true;
-            if (isIDFC) {
-                autoOpenChecked = document.getElementById('idfcAutoOpen').checked;
-            } else if (isArvog) {
-                autoOpenChecked = document.getElementById('arvogAutoOpen').checked;
-            } else {
-                autoOpenChecked = document.getElementById('eqAutoOpen').checked;
-            }
+            const autoOpenChecked = document.getElementById(`${prefix}AutoOpen`).checked;
             
             // Gather run parameters
             const payload = {
