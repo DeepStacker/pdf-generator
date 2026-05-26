@@ -307,6 +307,46 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         /* ===== INLINE SVG ICON SIZING (replaces Lucide CSS) ===== */
         svg.icon { display: inline-block; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+        /* ===== DRAG & DROP PREMIUM EMERALD GLASSMORPHISM ===== */
+        .arvog-drag-zone {
+            border: 2px dashed #1E293B;
+            background-color: rgba(15, 23, 42, 0.2);
+            transition: all 0.3s ease;
+        }
+        .arvog-drag-zone.dragover {
+            border-color: #10B981;
+            background-color: rgba(16, 185, 129, 0.08);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+            transform: scale(1.005);
+        }
+        .arvog-drag-zone:hover {
+            border-color: rgba(16, 185, 129, 0.5);
+            background-color: rgba(16, 185, 129, 0.03);
+        }
+        .arvog-file-tile {
+            background-color: rgba(30, 41, 59, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.2s ease;
+            border-radius: 8px;
+            padding: 10px 14px;
+        }
+        .arvog-file-tile:hover {
+            border-color: rgba(16, 185, 129, 0.3);
+            background-color: rgba(30, 41, 59, 0.5);
+        }
+        .arvog-file-tile.active-preview {
+            border-color: #10B981;
+            background-color: rgba(16, 185, 129, 0.05);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.08);
+        }
+        .emerald-spin {
+            animation: arvog-spin 1s linear infinite;
+        }
+        @keyframes arvog-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="h-full flex overflow-hidden">
@@ -589,30 +629,51 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                     <!-- Primary Setup Controls Panel -->
                     <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-5 shadow-md">
-                        <!-- Source File -->
+                        <!-- Source File (Drag & Drop Zone with Bulk Upload Support) -->
                         <div>
-                            <label class="block text-sm font-semibold text-slate-300 mb-2">Source Master Excel</label>
-                            <div class="flex space-x-3">
-                                <input type="text" id="arvogInputFile" readonly class="flex-1 bg-slate-900 border border-brand-borderLine rounded-lg px-4 py-2.5 text-sm text-slate-200 focus:outline-none" placeholder="No file selected">
-                                <button onclick="browseFile('arvogInputFile')" class="bg-slate-800 text-slate-300 text-sm font-semibold px-5 py-2.5 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Browse...</button>
+                            <label class="block text-sm font-semibold text-slate-300 mb-2">Source Master Excel (Bulk Upload / Drag & Drop)</label>
+                            
+                            <!-- Hidden input for file dialog browse fallback -->
+                            <input type="file" id="arvogFileInputHidden" multiple accept=".xlsx,.xls,.xlsm" class="hidden" onchange="handleNativeFileSelect(event)">
+                            
+                            <div id="arvogDropZone" class="arvog-drag-zone rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer relative"
+                                 onclick="triggerBrowseMultipleFiles()"
+                                 ondragover="handleDragOver(event)"
+                                 ondragleave="handleDragLeave(event)"
+                                 ondrop="handleDrop(event)">
+                                <div class="flex flex-col items-center space-y-3 pointer-events-none">
+                                    <!-- Upload SVG Icon -->
+                                    <svg class="icon w-12 h-12 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                    <span class="block text-sm font-medium text-slate-200">
+                                        Drag & Drop Arvog Excel Sheets here or <span style="color: #10B981; font-weight: 600;">browse local files</span>
+                                    </span>
+                                    <span class="block text-[11px] text-slate-500">Supports multiple .xlsx, .xls, .xlsm files at once</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Keep the input arvogInputFile in DOM but hidden to prevent JS reference crash -->
+                            <input type="text" id="arvogInputFile" class="hidden">
+                        </div>
+
+                        <!-- Selected Files List -->
+                        <div id="arvogSelectedFilesContainer" class="hidden space-y-3 pt-1">
+                            <div class="flex justify-between items-center text-xs font-bold text-slate-400">
+                                <span>SELECTED FILES (<span id="arvogSelectedCount">0</span>)</span>
+                                <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 transition bg-transparent border-0 cursor-pointer" style="font-weight: 600;">Clear All</button>
+                            </div>
+                            <div id="arvogSelectedFilesList" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                <!-- Populated dynamically by javascript -->
                             </div>
                         </div>
 
-                        <!-- Validation Box -->
+                        <!-- Keep old boxes hidden to guarantee NO reference errors in validateFile() -->
                         <div id="arvogValidationBox" class="hidden text-xs rounded-lg px-4 py-2.5"></div>
-
-                        <!-- Recent Files -->
-                        <div id="arvogRecentContainer" class="flex items-center space-x-3 text-xs">
-                            <span class="font-semibold text-slate-500">Recent:</span>
-                            <div id="arvogRecentList" class="flex space-x-2 overflow-x-auto">
-                                <span class="text-slate-600 italic">None saved</span>
-                            </div>
-                        </div>
-
-                        <!-- File Preview -->
-                        <div id="arvogPreviewBox" class="hidden bg-emerald-950/20 border border-emerald-900/30 rounded-lg px-4 py-3 flex items-center space-x-2 text-emerald-400 text-xs">
-                            <svg class="icon w-4 h-4" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
-                            <span id="arvogPreviewText">File loaded successfully</span>
+                        <div id="arvogPreviewBox" class="hidden">
+                            <span id="arvogPreviewText"></span>
                         </div>
 
                         <!-- Options config -->
@@ -667,6 +728,26 @@ HTML_CONTENT = """<!DOCTYPE html>
                         <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Console Logs</span>
                         <div id="arvogConsole" class="bg-brand-termBg border border-brand-borderLine rounded-xl h-56 font-mono text-[11px] p-5 overflow-y-auto space-y-1.5 shadow-inner">
                             <div class="text-slate-500">[00:00:00] Terminal logger online. Ready.</div>
+                        </div>
+                    </div>
+
+                    <!-- Excel Preview Grid (Collapsible) -->
+                    <div id="arvogGridContainer" class="hidden space-y-3 pt-4">
+                        <button onclick="togglePreviewGrid('arvog')" class="flex items-center space-x-2 text-xs font-bold text-slate-400 hover:text-white transition bg-transparent border-0 cursor-pointer">
+                            <svg id="arvogGridIcon" class="icon w-4 h-4 transition-transform duration-200" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                            <span>Preview Gold Loan Spreadsheet Records (First 5 Rows)</span>
+                        </button>
+                        <div id="arvogGridWrapper" class="hidden overflow-x-auto rounded-xl border border-brand-borderLine bg-slate-950/40 shadow-inner">
+                            <table class="w-full text-left border-collapse text-[10px] font-mono whitespace-nowrap">
+                                <thead>
+                                    <tr id="arvogGridHeader" class="bg-slate-900 border-b border-brand-borderLine text-slate-500 uppercase tracking-wider font-sans font-bold">
+                                        <!-- Dynamic headers -->
+                                    </tr>
+                                </thead>
+                                <tbody id="arvogGridBody" class="divide-y divide-brand-borderLine text-slate-300">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </section>
@@ -1126,6 +1207,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                 stage: 'STAGE 1',
                 outputFormat: 'BOTH'
             },
+            arvogSelectedFiles: [],
+            arvogPreviewIndex: -1,
             isGenerating: false,
             logsCount: 0,
             genStartTime: null,
@@ -1463,8 +1546,12 @@ HTML_CONTENT = """<!DOCTYPE html>
                     idfcInputFile.value = data.last_file;
                     eqInputFile.value = data.last_file;
                     arvogInputFile.value = data.last_file;
-                    // Trigger validation peek
-                    validateFile(data.last_file);
+                    
+                    if (state.activeBank === 'Arvog Bank') {
+                        addSelectedFiles([data.last_file]);
+                    } else {
+                        validateFile(data.last_file);
+                    }
                 }
                 if (data.out_path) {
                     idfcOutputDir.value = data.out_path;
@@ -1525,7 +1612,12 @@ HTML_CONTENT = """<!DOCTYPE html>
             eqInputFile.value = path;
             if (arvogInputFile) arvogInputFile.value = path;
             saveConfig('last_file', path);
-            validateFile(path);
+            
+            if (state.activeBank === 'Arvog Bank') {
+                addSelectedFiles([path]);
+            } else {
+                validateFile(path);
+            }
         }
 
         // SPREADSHEET PREVIEW GRID & DYNAMIC COLUMN MAPPER
@@ -1663,8 +1755,13 @@ HTML_CONTENT = """<!DOCTYPE html>
                         bankSelector.value = data.detected_bank;
                         saveConfig('bank', data.detected_bank);
                         updateThemeBranding();
-                        // Re-trigger validation on the correct bank view
-                        validateFile(filepath);
+                        
+                        if (data.detected_bank === 'Arvog Bank') {
+                            addSelectedFiles([filepath]);
+                        } else {
+                            // Re-trigger validation on the correct bank view
+                            validateFile(filepath);
+                        }
                         return;
                     }
 
@@ -1705,6 +1802,286 @@ HTML_CONTENT = """<!DOCTYPE html>
             } catch (err) {
                 console.error('File validation request failed:', err);
             }
+        }
+
+        // DRAG & DROP AND BULK UPLOAD HANDLERS FOR ARVOG
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const zone = document.getElementById('arvogDropZone');
+            if (zone) zone.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const zone = document.getElementById('arvogDropZone');
+            if (zone) zone.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const zone = document.getElementById('arvogDropZone');
+            if (zone) zone.classList.remove('dragover');
+
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files && files.length > 0) {
+                const paths = [];
+                for (let i = 0; i < files.length; i++) {
+                    const f = files[i];
+                    if (f.path) {
+                        paths.push(f.path);
+                    } else {
+                        console.warn("Browser environment hidden path for file:", f.name);
+                    }
+                }
+                
+                if (paths.length > 0) {
+                    addSelectedFiles(paths);
+                } else {
+                    alert("Due to sandbox restrictions, please click the drop zone directly to browse and select local files using the native file picker.");
+                }
+            }
+        }
+
+        function triggerBrowseMultipleFiles() {
+            browseMultipleFiles();
+        }
+
+        async function browseMultipleFiles() {
+            try {
+                const resp = await fetch('/api/browse/files');
+                const data = await resp.json();
+                if (data.paths && data.paths.length > 0) {
+                    addSelectedFiles(data.paths);
+                }
+            } catch (err) {
+                console.error('Browse multiple files failed, falling back to hidden HTML file input:', err);
+                const hiddenInput = document.getElementById('arvogFileInputHidden');
+                if (hiddenInput) hiddenInput.click();
+            }
+        }
+
+        function handleNativeFileSelect(e) {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                const paths = [];
+                for (let i = 0; i < files.length; i++) {
+                    if (files[i].path) {
+                        paths.push(files[i].path);
+                    } else {
+                        console.warn("Selected virtual file path:", files[i].name);
+                    }
+                }
+                if (paths.length > 0) {
+                    addSelectedFiles(paths);
+                }
+            }
+        }
+
+        function addSelectedFiles(paths) {
+            paths.forEach(p => {
+                const pathStr = String(p).trim();
+                if (!pathStr) return;
+                
+                if (state.arvogSelectedFiles.some(f => f.path === pathStr)) return;
+                
+                const name = pathStr.split(String.fromCharCode(47)).pop().split(String.fromCharCode(92)).pop();
+                const fileObj = {
+                    path: pathStr,
+                    name: name,
+                    size: "Calculating...",
+                    isValid: null,
+                    error: "",
+                    rows: 0,
+                    branches: 0,
+                    headers: [],
+                    preview: [],
+                    status: "loading"
+                };
+                
+                state.arvogSelectedFiles.push(fileObj);
+            });
+            
+            renderSelectedFilesList();
+            
+            state.arvogSelectedFiles.forEach((fileObj, idx) => {
+                if (fileObj.status === "loading") {
+                    validateIndividualFile(idx);
+                }
+            });
+        }
+
+        async function validateIndividualFile(index) {
+            const fileObj = state.arvogSelectedFiles[index];
+            if (!fileObj) return;
+            
+            try {
+                const resp = await fetch('/api/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        filepath: fileObj.path,
+                        expected_stage: null
+                    })
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    fileObj.status = "success";
+                    fileObj.isValid = true;
+                    fileObj.rows = parseInt(data.rows) || 0;
+                    fileObj.branches = parseInt(data.branches) || 0;
+                    fileObj.headers = data.headers || [];
+                    fileObj.preview = data.preview || [];
+                    fileObj.size = `${(data.rows || 0)} rows, ${data.branches || 0} branches`;
+                    
+                    if (state.arvogPreviewIndex === -1) {
+                        selectPreviewFile(index);
+                    }
+                } else {
+                    fileObj.status = "error";
+                    fileObj.isValid = false;
+                    fileObj.error = data.error || "Validation failed";
+                    fileObj.size = "Failed to load";
+                }
+            } catch (err) {
+                fileObj.status = "error";
+                fileObj.isValid = false;
+                fileObj.error = String(err);
+                fileObj.size = "Connection error";
+            }
+            
+            renderSelectedFilesList();
+        }
+
+        function removeSelectedFile(index, event) {
+            if (event) event.stopPropagation();
+            state.arvogSelectedFiles.splice(index, 1);
+            
+            if (state.arvogPreviewIndex === index) {
+                state.arvogPreviewIndex = -1;
+                const firstSuccessIdx = state.arvogSelectedFiles.findIndex(f => f.status === "success");
+                if (firstSuccessIdx !== -1) {
+                    selectPreviewFile(firstSuccessIdx);
+                } else {
+                    const gridContainer = document.getElementById('arvogGridContainer');
+                    if (gridContainer) gridContainer.classList.add('hidden');
+                }
+            } else if (state.arvogPreviewIndex > index) {
+                state.arvogPreviewIndex--;
+            }
+            
+            renderSelectedFilesList();
+        }
+
+        function clearAllSelectedFiles() {
+            state.arvogSelectedFiles = [];
+            state.arvogPreviewIndex = -1;
+            
+            const gridContainer = document.getElementById('arvogGridContainer');
+            if (gridContainer) gridContainer.classList.add('hidden');
+            
+            renderSelectedFilesList();
+        }
+
+        function selectPreviewFile(index) {
+            const fileObj = state.arvogSelectedFiles[index];
+            if (!fileObj || fileObj.status !== "success") return;
+            
+            state.arvogPreviewIndex = index;
+            
+            renderPreviewGrid('arvog', fileObj.headers, fileObj.preview);
+            
+            if (arvogInputFile) arvogInputFile.value = fileObj.path;
+            
+            renderSelectedFilesList();
+        }
+
+        function renderSelectedFilesList() {
+            const container = document.getElementById('arvogSelectedFilesContainer');
+            const list = document.getElementById('arvogSelectedFilesList');
+            const countLabel = document.getElementById('arvogSelectedCount');
+            
+            if (!container || !list || !countLabel) return;
+            
+            const totalFiles = state.arvogSelectedFiles.length;
+            countLabel.textContent = totalFiles;
+            
+            if (totalFiles === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            
+            container.classList.remove('hidden');
+            
+            let html = "";
+            state.arvogSelectedFiles.forEach((file, idx) => {
+                const isActive = (state.arvogPreviewIndex === idx);
+                const activeClass = isActive ? "active-preview" : "";
+                
+                let iconHtml = "";
+                let statusHtml = "";
+                let clickAction = "";
+                let cursorStyle = "";
+                
+                if (file.status === "loading") {
+                    iconHtml = `
+                        <svg class="icon w-4 h-4 text-emerald-400 emerald-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="2" x2="12" y2="6"/>
+                            <line x1="12" y1="18" x2="12" y2="22"/>
+                            <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/>
+                            <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+                            <line x1="2" y1="12" x2="6" y2="12"/>
+                            <line x1="18" y1="12" x2="22" y2="12"/>
+                            <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/>
+                            <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+                        </svg>`;
+                    statusHtml = `<span class="text-[10px] text-slate-500 italic">Verifying spreadsheet schema...</span>`;
+                } else if (file.status === "success") {
+                    iconHtml = `
+                        <svg class="icon w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>`;
+                    statusHtml = `<span class="text-[10px] text-emerald-400 font-semibold">✓ ${file.size}</span>`;
+                    clickAction = `onclick="selectPreviewFile(${idx})"`;
+                    cursorStyle = "cursor-pointer";
+                } else {
+                    iconHtml = `
+                        <svg class="icon w-4 h-4 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>`;
+                    statusHtml = `<span class="text-[10px] text-rose-400 font-semibold" title="${file.error.replace(/"/g, '&quot;')}">✗ Load Error: ${file.error.substring(0, 50)}${file.error.length > 50 ? '...' : ''}</span>`;
+                }
+                
+                html += `
+                <div class="arvog-file-tile ${activeClass} ${cursorStyle} flex items-center justify-between space-x-3" ${clickAction}>
+                    <div class="flex items-center space-x-3 min-w-0 flex-1">
+                        ${iconHtml}
+                        <div class="min-w-0 flex-1">
+                            <span class="block text-xs font-bold text-slate-200 truncate" title="${file.path}">${file.name}</span>
+                            ${statusHtml}
+                        </div>
+                    </div>
+                    <button onclick="removeSelectedFile(${idx}, event)" class="bg-transparent border-0 text-slate-500 hover:text-rose-400 p-1 cursor-pointer transition" title="Remove file">
+                        <svg class="icon w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>`;
+            });
+            
+            list.innerHTML = html;
         }
 
         // HEADLESS BROWSE DIALOG TRIGGERS
@@ -1758,18 +2135,27 @@ HTML_CONTENT = """<!DOCTYPE html>
             if (isIDFC) {
                 file = idfcInputFile.value;
                 output = idfcOutputDir.value;
+                if (!file) {
+                    alert('Please select a source Excel master file first.');
+                    return;
+                }
             } else if (isArvog) {
-                file = arvogInputFile.value;
+                const validFiles = state.arvogSelectedFiles.filter(f => f.status === "success");
+                if (validFiles.length === 0) {
+                    alert('Please select and load at least one valid Arvog Bank Excel master file first.');
+                    return;
+                }
+                file = validFiles.map(f => f.path);
                 output = arvogOutputDir.value;
             } else {
                 file = eqInputFile.value;
                 output = eqOutputDir.value;
+                if (!file) {
+                    alert('Please select a source Excel master file first.');
+                    return;
+                }
             }
             
-            if (!file) {
-                alert('Please select a source Excel master file first.');
-                return;
-            }
             if (!output) {
                 alert('Please select an output directory.');
                 return;

@@ -662,6 +662,61 @@ def ask_file_dialog():
         file_logger.warning(f"Subprocess Tkinter file dialog fallback failed: {te}")
         return ""
 
+def ask_files_dialog():
+    # Try using PyWebView active window dialog if available for a premium, native OS look
+    try:
+        import webview
+        active_win = webview.active_window()
+        if active_win:
+            file_types = (
+                'Excel Files (*.xlsx;*.xls;*.XLSX;*.XLS;*.xlsm;*.XLSM)',
+                '*.xlsx;*.xls;*.XLSX;*.XLS;*.xlsm;*.XLSM',
+                'All files (*.*)',
+                '*.*'
+            )
+            result = active_win.create_file_dialog(
+                dialog_type=webview.OPEN_DIALOG,
+                file_types=file_types,
+                allow_multiple=True
+            )
+            if result:
+                return list(result) if isinstance(result, (list, tuple)) else [result]
+            return []
+    except Exception as e:
+        file_logger.info(f"PyWebView native multiple files dialog not active or not available: {e}")
+
+    # Fallback: Spawn a short-lived subprocess to open the Tkinter dialog.
+    # This is 100% crash-proof on macOS/HIToolbox because it executes on the main thread of the child process.
+    try:
+        import subprocess
+        import sys
+        import json
+        
+        cmd = [
+            sys.executable,
+            "-c",
+            "import tkinter as tk; from tkinter import filedialog; import json; "
+            "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
+            "paths = filedialog.askopenfilenames(title='Select Master Excel Files', "
+            "filetypes=[('Excel Files', '*.xlsx *.xls *.XLSX *.XLS *.xlsm *.XLSM'), ('All Files', '*')]); "
+            "print(json.dumps(paths))"
+        ]
+        
+        startupinfo = None
+        if sys.platform == "win32":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 0
+            
+        res = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo, check=True)
+        paths_str = res.stdout.strip()
+        if paths_str:
+            return json.loads(paths_str)
+        return []
+    except Exception as te:
+        file_logger.warning(f"Subprocess Tkinter multiple files dialog fallback failed: {te}")
+        return []
+
 def ask_directory_dialog():
     # Try using PyWebView active window dialog if available
     try:
@@ -967,76 +1022,94 @@ def worker_equitas_thread(inp, out_base, stage, equitas_format, equitas_pack):
                 pass
 def worker_arvog_thread(inp, out_base, auto_open):
     try:
-        global_tracker.log("INFO", f"Initializing Arvog Build: {os.path.basename(inp)}")
+        inp_list = inp if isinstance(inp, list) else [inp]
+        total_files = len(inp_list)
         
-        inp = os.path.abspath(os.path.normpath(inp))
-        out_base = os.path.abspath(os.path.normpath(out_base))
-
-        excel_name = os.path.splitext(os.path.basename(inp))[0]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        out = os.path.join(out_base, f"{excel_name}_ARVOG_{timestamp}")
-        out = os.path.abspath(os.path.normpath(out))
-        os.makedirs(out, exist_ok=True)
-
+        global_tracker.log("INFO", f"Initializing Arvog Build: Found {total_files} master file(s).")
+        
         import time as _time
         _start_time = _time.time()
+        
+        pdf_count = 0
+        total_size = 0
+        last_out_dir = None
+        
+        for idx, current_file in enumerate(inp_list, 1):
+            if cancel_event.is_set():
+                global_tracker.log("WARN", f"CANCELLED by user after processing {idx-1}/{total_files} files.")
+                break
+            
+            global_tracker.update_pct((idx - 1) / total_files * 100, active_branch=f"File {idx}/{total_files}: {os.path.basename(current_file)}")
+            global_tracker.log("INFO", f"=== File {idx}/{total_files}: {os.path.basename(current_file)} ===")
+            
+            curr_inp = os.path.abspath(os.path.normpath(current_file))
+            curr_out_base = os.path.abspath(os.path.normpath(out_base))
 
-        # Call the robust arvog converter and pdf generator logic!
-        import new_bank.bank as arvog_bank
-        arvog_bank.process_excel(
-            input_excel=inp,
-            output_dir=out,
-            log_func=lambda msg: global_tracker.log("INFO", msg)
-        )
+            excel_name = os.path.splitext(os.path.basename(curr_inp))[0]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Count PDFs generated
-        pdf_count = len([f for f in os.listdir(out) if f.endswith(".pdf")])
+            out = os.path.join(curr_out_base, f"{excel_name}_ARVOG_{timestamp}")
+            out = os.path.abspath(os.path.normpath(out))
+            os.makedirs(out, exist_ok=True)
+            last_out_dir = out
+
+            # Call the robust arvog converter and pdf generator logic!
+            import new_bank.bank as arvog_bank
+            arvog_bank.process_excel(
+                input_excel=curr_inp,
+                output_dir=out,
+                log_func=lambda msg: global_tracker.log("INFO", msg)
+            )
+
+            # Count PDFs generated
+            curr_pdf_count = len([f for f in os.listdir(out) if f.endswith(".pdf")])
+            pdf_count += curr_pdf_count
+            
+            # Calculate total output size for this file
+            for root_dir, _, files in os.walk(out):
+                for f in files:
+                    total_size += os.path.getsize(os.path.join(root_dir, f))
+            
+            if auto_open and total_files == 1:
+                if os.path.exists(out):
+                    open_path(out)
+
         _elapsed = _time.time() - _start_time
         
-        log_generation(excel_name, pdf_count, out, "Arvog Bank", full_path=inp)
-        global_tracker.log("OK", f"SUCCESS: {pdf_count} Reports Created in {_elapsed:.1f}s.")
+        # log_generation expects: excel_name, pdf_count, out_path, audit_type, full_path
+        log_generation(", ".join([os.path.basename(f) for f in inp_list]), pdf_count, out_base, "Arvog Bank Bulk", full_path="; ".join(inp_list))
+        global_tracker.log("OK", f"SUCCESS: Completed {total_files} files, {pdf_count} Reports Created in {_elapsed:.1f}s.")
         global_tracker.update_pct(100)
 
-        # Calculate total output size
-        total_size = 0
-        for root_dir, _, files in os.walk(out):
-            for f in files:
-                total_size += os.path.getsize(os.path.join(root_dir, f))
         size_str = f"{total_size / 1024:.1f} KB" if total_size < 1024*1024 else f"{total_size / 1024 / 1024:.1f} MB"
 
-        if auto_open:
-            if os.path.exists(out):
-                open_path(out)
+        if auto_open and total_files > 1:
+            if os.path.exists(out_base):
+                open_path(out_base)
 
         global_tracker.summary = {
-            "title": "Generation Complete",
+            "title": "Bulk Generation Complete",
             "items": [
                 {"label": "Status", "value": "✓ Success"},
-                {"label": "Audit Type", "value": "Arvog Audit"},
-                {"label": "Branches Completed", "value": str(pdf_count)},
-                {"label": "Time Elapsed", "value": f"{_elapsed:.1f}s"},
+                {"label": "Audit Type", "value": "Arvog Bulk Audit"},
+                {"label": "Files Processed", "value": f"{total_files} Excel sheets"},
+                {"label": "Total Reports", "value": str(pdf_count)},
+                {"label": "Total Time", "value": f"{_elapsed:.1f}s"},
                 {"label": "Total Output Size", "value": size_str},
-                {"label": "Output Staged At", "value": out}
+                {"label": "Output Directory", "value": out_base}
             ]
         }
-        trigger_desktop_notification("Audit Engine Elite", f"✓ Generation complete! Created {pdf_count} branch reports.")
+        trigger_desktop_notification("Audit Engine Elite", f"✓ Bulk generation complete! Created {pdf_count} branch reports.")
 
     except Exception as e:
         global_tracker.log("ERROR", f"FAILURE: {e}")
         global_tracker.summary = {
-            "title": "Arvog Generation Failed",
+            "title": "Arvog Bulk Generation Failed",
             "message": str(e)
         }
         trigger_desktop_notification("Arvog Generation Failed", f"✗ Batch compilation failed: {e}")
     finally:
         global_tracker.is_running = False
-        if "mapped_" in os.path.basename(inp) and ".temp_audit_engine" in inp:
-            try:
-                if os.path.exists(inp):
-                    os.remove(inp)
-            except OSError:
-                pass
 
 # =========================================================
 # WSGI BOTTLE WEB SERVICE ROUTING
@@ -1232,6 +1305,11 @@ def api_browse_file():
     path = ask_file_dialog()
     return {"path": path}
 
+@route('/api/browse/files')
+def api_browse_files():
+    paths = ask_files_dialog()
+    return {"paths": paths}
+
 @route('/api/browse/folder')
 def api_browse_folder():
     path = ask_directory_dialog()
@@ -1249,18 +1327,31 @@ def api_run():
     auto_open = data.get('auto_open', True)
     naming_pattern = data.get('naming_pattern', '{branch}_{type}')
 
-    if not filepath or not os.path.exists(filepath):
-        return {"success": False, "error": "Excel spreadsheet file is missing."}
+    # Support single string path or list of paths for bulk mode
+    if isinstance(filepath, str):
+        if not filepath or not os.path.exists(filepath):
+            return {"success": False, "error": f"Excel spreadsheet file is missing: {filepath}"}
+    elif isinstance(filepath, list):
+        if not filepath:
+            return {"success": False, "error": "No Excel spreadsheet files provided for bulk run."}
+        for f in filepath:
+            if not f or not os.path.exists(f):
+                return {"success": False, "error": f"Excel spreadsheet file is missing: {f}"}
+    else:
+        return {"success": False, "error": "Invalid filepath format."}
+
     if not out_path or not os.path.exists(out_path):
         return {"success": False, "error": "Output staging directory path is invalid."}
 
     # Save configs and recent links
     set_config("bank", bank)
-    set_config("last_file", filepath)
+    last_file_val = filepath if isinstance(filepath, str) else (filepath[0] if filepath else "")
+    set_config("last_file", last_file_val)
     set_config("out_path", out_path)
     set_config("auto_open", str(auto_open))
     set_config("naming_pattern", naming_pattern)
-    _add_recent_file(filepath)
+    if last_file_val:
+        _add_recent_file(last_file_val)
 
     cancel_event.clear()
     global_tracker.reset()
