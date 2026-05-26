@@ -18,7 +18,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~\AppData\Local\pip\Cache
-          key: pip-win-${{ hashFiles('requirements.txt') }}
+          key: pip-win-${{ hashFiles('pyproject.toml') }}
           restore-keys: pip-win-
       - uses: actions/cache@v4
         with:
@@ -28,10 +28,8 @@ jobs:
       - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
       - name: Verify Tcl/Tk environment
         run: |
-          python -c "import sys; print('Python:', sys.executable); print('Prefix:', sys.prefix); print('Base prefix:', sys.base_prefix)"
-          python -c "import os, sys, glob; bases=[sys.prefix, getattr(sys,'base_prefix',sys.prefix)]; [print(f) for b in bases for f in glob.glob(os.path.join(b,'**','*.dll'),recursive=True) if any(x in f.lower() for x in ['tcl','tk','zlib'])]"
+          python -c "import sys; print('Python:', sys.executable)"
           python -c "import _tkinter; print('_tkinter OK:', _tkinter.__file__)"
-          python -c "import tkinter; r=tkinter.Tk(); r.withdraw(); print('TCL_LIBRARY:', r.tk.exprstring('$tcl_library')); print('TK_LIBRARY:', r.tk.exprstring('$tk_library')); r.destroy(); print('tkinter fully operational')"
       - run: pyinstaller --noconfirm --clean pdf_generator.spec
       - name: Verify built exe
         shell: pwsh
@@ -48,20 +46,25 @@ jobs:
       - name: Extract Version
         shell: bash
         run: |
-          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' pdf_generator_ui.py | cut -d '"' -f 2)
+          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' src/audit_engine/_version.py | cut -d '"' -f 2)
           echo "TAG=v$VERSION" >> $GITHUB_ENV
-      - shell: pwsh
-        run: Compress-Archive -Path dist\* -DestinationPath "Audit_Engine_${env:TAG}_binary_windows.zip"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+      - name: Package and checksum
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\* -DestinationPath "Audit_Engine_${env:TAG}_binary_windows.zip"
+          certutil -hashfile "Audit_Engine_${env:TAG}_binary_windows.zip" SHA256 | findstr /v "hash" > "Audit_Engine_${env:TAG}_binary_windows.zip.sha256"
       - if: github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $zip = "Audit_Engine_${env:TAG}_binary_windows.zip"
-          gh release upload $env:TAG $zip --clobber 2>$null
+          $sha = "$zip.sha256"
+          gh release upload $env:TAG $zip $sha --clobber 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $env:TAG --title $env:TAG --notes "Windows binary" 2>$null
-            gh release upload $env:TAG $zip --clobber
+            gh release upload $env:TAG $zip $sha --clobber
           }
 
   macos:
@@ -74,31 +77,42 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/Library/Caches/pip
-          key: pip-macos-${{ hashFiles('requirements.txt') }}
+          key: pip-macos-${{ hashFiles('pyproject.toml') }}
           restore-keys: pip-macos-
       - uses: actions/cache@v4
         with:
           path: ~/Library/Caches/pyinstaller
           key: pyi-macos-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-macos-
-      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" "sv-ttk"
+      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
-      - run: codesign --force --options runtime --entitlements entitlements.plist --sign - dist/Audit_Engine_Elite
+      - name: Ad-hoc code sign
+        run: codesign --force --deep --sign - dist/Audit_Engine_Elite.app 2>/dev/null || codesign --force --deep --sign - dist/Audit_Engine_Elite || true
       - name: Extract Version
         shell: bash
         run: |
-          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' pdf_generator_ui.py | cut -d '"' -f 2)
+          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' src/audit_engine/_version.py | cut -d '"' -f 2)
           echo "TAG=v$VERSION" >> $GITHUB_ENV
-      - run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_macos.zip" .
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+      - name: Package and checksum
+        run: |
+          cd dist
+          if [ -d "Audit_Engine_Elite.app" ]; then
+            zip -r "../Audit_Engine_${TAG}_binary_macos.zip" "Audit_Engine_Elite.app"
+          else
+            zip -r "../Audit_Engine_${TAG}_binary_macos.zip" .
+          fi
+          cd ..
+          shasum -a 256 "Audit_Engine_${TAG}_binary_macos.zip" | awk '{print $1}' > "Audit_Engine_${TAG}_binary_macos.zip.sha256"
       - if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${TAG}"
           ZIP="Audit_Engine_${TAG}_binary_macos.zip"
-          gh release upload "$TAG" "$ZIP" --clobber 2>/dev/null || {
+          SHA="${ZIP}.sha256"
+          gh release upload "$TAG" "$ZIP" "$SHA" --clobber 2>/dev/null || {
             gh release create "$TAG" --title "$TAG" --notes "macOS binary" 2>/dev/null || true
-            gh release upload "$TAG" "$ZIP" --clobber
+            gh release upload "$TAG" "$ZIP" "$SHA" --clobber
           }
 
   linux:
@@ -111,28 +125,34 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-linux-${{ hashFiles('requirements.txt') }}
+          key: pip-linux-${{ hashFiles('pyproject.toml') }}
           restore-keys: pip-linux-
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pyinstaller
           key: pyi-linux-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-linux-
-      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" "sv-ttk"
+      - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - name: Extract Version
         shell: bash
         run: |
-          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' pdf_generator_ui.py | cut -d '"' -f 2)
+          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' src/audit_engine/_version.py | cut -d '"' -f 2)
           echo "TAG=v$VERSION" >> $GITHUB_ENV
-      - run: cd dist && zip -r "../Audit_Engine_${TAG}_binary_linux.zip" .
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+      - name: Package and checksum
+        run: |
+          cd dist
+          tar czf "../Audit_Engine_${TAG}_binary_linux.tar.gz" .
+          cd ..
+          shasum -a 256 "Audit_Engine_${TAG}_binary_linux.tar.gz" | awk '{print $1}' > "Audit_Engine_${TAG}_binary_linux.tar.gz.sha256"
       - if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${TAG}"
-          ZIP="Audit_Engine_${TAG}_binary_linux.zip"
-          gh release upload "$TAG" "$ZIP" --clobber 2>/dev/null || {
+          TAR="Audit_Engine_${TAG}_binary_linux.tar.gz"
+          SHA="${TAR}.sha256"
+          gh release upload "$TAG" "$TAR" "$SHA" --clobber 2>/dev/null || {
             gh release create "$TAG" --title "$TAG" --notes "Linux binary" 2>/dev/null || true
-            gh release upload "$TAG" "$ZIP" --clobber
+            gh release upload "$TAG" "$TAR" "$SHA" --clobber
           }

@@ -78,6 +78,11 @@ a = Analysis(
         'reportlab.pdfbase.pdfmetrics',
         'reportlab.pdfbase.ttfonts',
         'reportlab.lib.colors',
+        # --- Stdlib used by updater ---
+        'tarfile',
+        'hashlib',
+        'json',
+        'ssl',
         # --- multiprocessing ---
         'select',
         'selectors',
