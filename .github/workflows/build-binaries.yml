@@ -1,14 +1,49 @@
-name: Build Platform Binaries
+name: Build & Release
 on:
   push:
-    branches:
-      - main
-    tags:
-      - "v*"
+    branches: [main]
+    paths: ["src/audit_engine/_version.py"]
+    tags: ["v*"]
+  workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+      tag: ${{ steps.extract.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Extract version
+        id: extract
+        run: |
+          VERSION=$(grep -oE '__version__ = "[0-9.]+"' src/audit_engine/_version.py | cut -d '"' -f 2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Create tag if missing
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TAG="${{ steps.extract.outputs.tag }}"
+          if ! git tag -l "$TAG" | grep -q .; then
+            git tag "$TAG"
+            git push origin "$TAG" 2>/dev/null || true
+          fi
+      - name: Create release if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.extract.outputs.tag }}" \
+            --title "${{ steps.extract.outputs.tag }}" \
+            --notes "" 2>/dev/null || true
+
   windows:
+    needs: setup
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,31 +78,25 @@ jobs:
             Write-Error "Build failed: exe not found!"
             exit 1
           }
-      - name: Extract Version
-        shell: bash
-        run: |
-          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' src/audit_engine/_version.py | cut -d '"' -f 2)
-          echo "TAG=v$VERSION" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
       - name: Package and checksum
         shell: pwsh
         run: |
-          Compress-Archive -Path dist\* -DestinationPath "Audit_Engine_${env:TAG}_binary_windows.zip"
-          certutil -hashfile "Audit_Engine_${env:TAG}_binary_windows.zip" SHA256 | findstr /v "hash" > "Audit_Engine_${env:TAG}_binary_windows.zip.sha256"
-      - if: github.ref == 'refs/heads/main'
+          $TAG = "${{ needs.setup.outputs.tag }}"
+          Compress-Archive -Path dist\* -DestinationPath "Audit_Engine_${TAG}_binary_windows.zip"
+          certutil -hashfile "Audit_Engine_${TAG}_binary_windows.zip" SHA256 ^
+            | findstr /v "hash" > "Audit_Engine_${TAG}_binary_windows.zip.sha256"
+      - name: Upload to release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $zip = "Audit_Engine_${env:TAG}_binary_windows.zip"
+          $TAG = "${{ needs.setup.outputs.tag }}"
+          $zip = "Audit_Engine_${TAG}_binary_windows.zip"
           $sha = "$zip.sha256"
-          gh release upload $env:TAG $zip $sha --clobber 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create $env:TAG --title $env:TAG --notes "Windows binary" 2>$null
-            gh release upload $env:TAG $zip $sha --clobber
-          }
+          gh release upload $TAG $zip $sha --clobber
 
   macos:
+    needs: setup
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -87,15 +116,12 @@ jobs:
       - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - name: Ad-hoc code sign
-        run: codesign --force --deep --sign - dist/Audit_Engine_Elite.app 2>/dev/null || codesign --force --deep --sign - dist/Audit_Engine_Elite || true
-      - name: Extract Version
-        shell: bash
         run: |
-          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' src/audit_engine/_version.py | cut -d '"' -f 2)
-          echo "TAG=v$VERSION" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          codesign --force --deep --sign - dist/Audit_Engine_Elite.app 2>/dev/null \
+            || codesign --force --deep --sign - dist/Audit_Engine_Elite || true
       - name: Package and checksum
         run: |
+          TAG="${{ needs.setup.outputs.tag }}"
           cd dist
           if [ -d "Audit_Engine_Elite.app" ]; then
             zip -r "../Audit_Engine_${TAG}_binary_macos.zip" "Audit_Engine_Elite.app"
@@ -103,19 +129,19 @@ jobs:
             zip -r "../Audit_Engine_${TAG}_binary_macos.zip" .
           fi
           cd ..
-          shasum -a 256 "Audit_Engine_${TAG}_binary_macos.zip" | awk '{print $1}' > "Audit_Engine_${TAG}_binary_macos.zip.sha256"
-      - if: github.ref == 'refs/heads/main'
+          shasum -a 256 "Audit_Engine_${TAG}_binary_macos.zip" \
+            | awk '{print $1}' > "Audit_Engine_${TAG}_binary_macos.zip.sha256"
+      - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          TAG="${{ needs.setup.outputs.tag }}"
           ZIP="Audit_Engine_${TAG}_binary_macos.zip"
           SHA="${ZIP}.sha256"
-          gh release upload "$TAG" "$ZIP" "$SHA" --clobber 2>/dev/null || {
-            gh release create "$TAG" --title "$TAG" --notes "macOS binary" 2>/dev/null || true
-            gh release upload "$TAG" "$ZIP" "$SHA" --clobber
-          }
+          gh release upload "$TAG" "$ZIP" "$SHA" --clobber
 
   linux:
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -134,25 +160,19 @@ jobs:
           restore-keys: pyi-linux-
       - run: pip install pyinstaller reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
-      - name: Extract Version
-        shell: bash
-        run: |
-          VERSION=$(grep -oE 'VERSION = "[0-9.]+"' src/audit_engine/_version.py | cut -d '"' -f 2)
-          echo "TAG=v$VERSION" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
       - name: Package and checksum
         run: |
+          TAG="${{ needs.setup.outputs.tag }}"
           cd dist
           tar czf "../Audit_Engine_${TAG}_binary_linux.tar.gz" .
           cd ..
-          shasum -a 256 "Audit_Engine_${TAG}_binary_linux.tar.gz" | awk '{print $1}' > "Audit_Engine_${TAG}_binary_linux.tar.gz.sha256"
-      - if: github.ref == 'refs/heads/main'
+          shasum -a 256 "Audit_Engine_${TAG}_binary_linux.tar.gz" \
+            | awk '{print $1}' > "Audit_Engine_${TAG}_binary_linux.tar.gz.sha256"
+      - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          TAG="${{ needs.setup.outputs.tag }}"
           TAR="Audit_Engine_${TAG}_binary_linux.tar.gz"
           SHA="${TAR}.sha256"
-          gh release upload "$TAG" "$TAR" "$SHA" --clobber 2>/dev/null || {
-            gh release create "$TAG" --title "$TAG" --notes "Linux binary" 2>/dev/null || true
-            gh release upload "$TAG" "$TAR" "$SHA" --clobber
-          }
+          gh release upload "$TAG" "$TAR" "$SHA" --clobber
