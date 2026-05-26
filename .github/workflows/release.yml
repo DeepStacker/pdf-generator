@@ -1,0 +1,38 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 5.3.0)"
+        required: true
+        type: string
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          sed -i 's/__version__ = "[0-9.]*"/__version__ = "'"$VERSION"'"/' src/audit_engine/_version.py
+          grep "__version__" src/audit_engine/_version.py
+
+      - name: Commit and tag
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/audit_engine/_version.py
+          git commit -m "release v${VERSION}"
+          git tag "v${VERSION}"
+
+      - name: Push tag
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          git push origin "v${VERSION}"
