@@ -1,6 +1,6 @@
 """Tests for domain enumerations."""
 
-from audit_engine.domain.enums import BankType, EquitasStage, LogLevel, OutputMode
+from audit_engine.domain.enums import AuditType, BankType, EquitasFormat, EquitasStage, LogLevel, OutputMode
 
 
 def test_bank_type_values():
@@ -15,11 +15,22 @@ def test_bank_type_membership():
     assert BankType.UNKNOWN in BankType
 
 
-def test_output_mode_auto_values():
-    assert isinstance(OutputMode.FOLDER.value, int)
-    assert isinstance(OutputMode.ZIP_ONLY.value, int)
-    assert isinstance(OutputMode.BOTH.value, int)
+def test_output_mode_values():
+    assert OutputMode.FOLDER.value == "FOLDER"
+    assert OutputMode.ZIP_ONLY.value == "ZIP ONLY"
+    assert OutputMode.BOTH.value == "BOTH"
     assert OutputMode.FOLDER != OutputMode.BOTH
+
+
+def test_audit_type_values():
+    assert AuditType.POA.value == "POA"
+    assert AuditType.TAF.value == "TAF"
+
+
+def test_equitas_format_values():
+    assert EquitasFormat.PDF_ONLY.value == "PDF ONLY"
+    assert EquitasFormat.EXCEL_ONLY.value == "EXCEL ONLY"
+    assert EquitasFormat.BOTH.value == "BOTH"
 
 
 def test_equitas_stage_values():

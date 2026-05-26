@@ -24,16 +24,67 @@ from audit_engine.utils.platform import file_logger
 
 class UpdateState:
     def __init__(self) -> None:
+        self._lock = threading.Lock()
         self.update_ready: bool = False
         self.latest_version: str = ""
         self.binary_url: str = ""
-        self.expected_sha256: str = ""
         self.dest_zip_path: str = ""
-        self.progress_pct: float = 0.0
-        self.is_downloading: bool = False
-        self.success: bool = False
-        self.error: str = ""
         self.staged_bat: str | None = None
+        self._expected_sha256: str = ""
+        self._progress_pct: float = 0.0
+        self._is_downloading: bool = False
+        self._success: bool = False
+        self._error: str = ""
+
+    @property
+    def expected_sha256(self) -> str:
+        with self._lock:
+            return self._expected_sha256
+
+    @expected_sha256.setter
+    def expected_sha256(self, value: str) -> None:
+        with self._lock:
+            self._expected_sha256 = value
+
+    @property
+    def progress_pct(self) -> float:
+        with self._lock:
+            return self._progress_pct
+
+    @progress_pct.setter
+    def progress_pct(self, value: float) -> None:
+        with self._lock:
+            self._progress_pct = value
+
+    @property
+    def is_downloading(self) -> bool:
+        with self._lock:
+            return self._is_downloading
+
+    @is_downloading.setter
+    def is_downloading(self, value: bool) -> None:
+        with self._lock:
+            self._is_downloading = value
+
+    @property
+    def success(self) -> bool:
+        with self._lock:
+            return self._success
+
+    @success.setter
+    def success(self, value: bool) -> None:
+        with self._lock:
+            self._success = value
+
+    @property
+    def error(self) -> str:
+        with self._lock:
+            return self._error
+
+    @error.setter
+    def error(self, value: str) -> None:
+        with self._lock:
+            self._error = value
 
 
 update_state: UpdateState = UpdateState()
@@ -263,18 +314,21 @@ def check_latest_release() -> dict:
         latest_v = _parse_version(tag)
         if latest_v > current_v:
             if binary_url:
-                update_state.update_ready = True
-                update_state.latest_version = tag
-                update_state.binary_url = binary_url
-                update_state.expected_sha256 = expected_sha256
-                return {
-                    "update_ready": True,
-                    "current": VERSION,
-                    "latest": tag,
-                    "body": body
-                }
+                if not expected_sha256:
+                    file_logger.warning("Update %s has no checksum asset — rejecting for safety", tag)
+                else:
+                    update_state.update_ready = True
+                    update_state.latest_version = tag
+                    update_state.binary_url = binary_url
+                    update_state.expected_sha256 = expected_sha256
+                    return {
+                        "update_ready": True,
+                        "current": VERSION,
+                        "latest": tag,
+                        "body": body
+                    }
             else:
-                file_logger.info(f"Update tag {tag} exists, but binary for OS is missing/building. Deferring.")
+                file_logger.info("Update tag %s exists, but binary for OS is missing/building. Deferring.", tag)
     except Exception as e:
         file_logger.warning(f"Background updates repo search query failed: {e}")
     return {"update_ready": False, "current": VERSION}

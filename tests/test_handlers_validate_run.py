@@ -205,7 +205,7 @@ class TestHandleRunWithFiles:
             "bank": "Equitas Small Finance Bank",
             "filepath": p,
             "out_path": out,
-            "equitas_format": "FOLDER",
+            "equitas_format": "BOTH",
             "equitas_pack": "FOLDER",
         })
         assert result["success"] is True

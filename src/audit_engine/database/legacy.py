@@ -138,15 +138,8 @@ def add_recent_file(filepath: str) -> None:
     cursor = conn.cursor()
     filepath = os.path.abspath(os.path.normpath(filepath))
 
-    cursor.execute("SELECT key FROM config WHERE key LIKE 'recent_file_%' ORDER BY key")
-    keys = [row[0] for row in cursor.fetchall()]
-
-    existing: list[str] = []
-    for k in keys:
-        cursor.execute("SELECT value FROM config WHERE key = ?", (k,))
-        row = cursor.fetchone()
-        if row and row[0] and row[0] != filepath:
-            existing.append(row[0])
+    cursor.execute("SELECT value FROM config WHERE key LIKE 'recent_file_%' ORDER BY key")
+    existing = [row[0] for row in cursor.fetchall() if row[0] and row[0] != filepath and os.path.exists(row[0])]
 
     existing.insert(0, filepath)
     existing = existing[:ui.max_recent_files]

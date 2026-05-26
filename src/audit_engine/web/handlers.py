@@ -8,7 +8,7 @@ import os
 import time
 
 from audit_engine.database.repos import config_repo, history_repo
-from audit_engine.domain.enums import BankType
+from audit_engine.domain.enums import AuditType, BankType, EquitasFormat, EquitasStage, OutputMode
 from audit_engine.tasks.workers import cancel_event, global_tracker, worker_arvog_thread, worker_equitas_thread, worker_idfc_thread
 from audit_engine.updater.client import check_latest_release, download_update_worker, update_state
 from audit_engine.utils.config import paths
@@ -118,6 +118,18 @@ def handle_validate(data: dict) -> dict:
     }
 
 
+_VALID_OUTPUT_MODES = {e.value for e in OutputMode}
+_VALID_AUDIT_TYPES = {e.value for e in AuditType}
+_VALID_EQUITAS_STAGES = {e.value for e in EquitasStage}
+_VALID_EQUITAS_FORMATS = {e.value for e in EquitasFormat}
+
+
+def _validate_enum(value: str, valid_set: set[str], name: str) -> str | None:
+    if value not in valid_set:
+        return f"Invalid {name}: {value!r}. Valid values: {', '.join(sorted(valid_set))}"
+    return None
+
+
 def handle_run(data: dict) -> dict:
     if global_tracker.is_running:
         return {"success": False, "error": "A generation thread is already active."}
@@ -127,6 +139,21 @@ def handle_run(data: dict) -> dict:
     out_path: str = str(data.get("out_path") or "")
     auto_open = bool(data.get("auto_open", True))
     naming_pattern: str = str(data.get("naming_pattern", "{branch}_{type}"))
+
+    if bank == BankType.IDFC.value:
+        err = _validate_enum(str(data.get("audit_type", "POA")), _VALID_AUDIT_TYPES, "audit_type")
+        if err:
+            return {"success": False, "error": err}
+        err = _validate_enum(str(data.get("output_mode", "BOTH")), _VALID_OUTPUT_MODES, "output_mode")
+        if err:
+            return {"success": False, "error": err}
+    elif bank == BankType.EQUITAS.value:
+        err = _validate_enum(str(data.get("equitas_stage", "STAGE 1")), _VALID_EQUITAS_STAGES, "equitas_stage")
+        if err:
+            return {"success": False, "error": err}
+        err = _validate_enum(str(data.get("equitas_format", "BOTH")), _VALID_EQUITAS_FORMATS, "equitas_format")
+        if err:
+            return {"success": False, "error": err}
 
     if isinstance(filepath_raw, str):
         if not filepath_raw or not os.path.exists(filepath_raw):

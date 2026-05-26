@@ -7,8 +7,8 @@ from typing import Final
 
 @dataclass(frozen=True)
 class Paths:
-    log: str = field(default_factory=lambda: os.path.join(os.path.expanduser("~"), ".idfc_audit_engine.log"))
-    db: str = field(default_factory=lambda: os.path.join(os.path.expanduser("~"), ".idfc_pdf_generator_v3.db"))
+    log: str = field(default_factory=lambda: os.environ.get("AUDIT_ENGINE_LOG_PATH") or os.path.join(os.path.expanduser("~"), ".idfc_audit_engine.log"))
+    db: str = field(default_factory=lambda: os.environ.get("AUDIT_ENGINE_DB_PATH") or os.path.join(os.path.expanduser("~"), ".idfc_pdf_generator_v3.db"))
 
 
 @dataclass(frozen=True)

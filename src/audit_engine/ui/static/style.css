@@ -334,3 +334,129 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
+
+        /* ===== STICKY TABLE HEADERS ===== */
+        .sticky-header thead th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        /* ===== RESPONSIVE LAYOUT ===== */
+        @media (max-width: 1024px) {
+            .sidebar-collapsible { width: 100%; position: fixed; bottom: 0; left: 0; z-index: 100; flex-direction: row; height: auto !important; border-right: none; border-top: 1px solid #1E293B; padding: 0; }
+            .sidebar-collapsible .nav-links { display: flex; flex-direction: row; overflow-x: auto; }
+            .sidebar-collapsible .brand-area { display: none; }
+            .sidebar-collapsible .footer-area { display: none; }
+            .content-panel { padding-left: 1rem; padding-right: 1rem; margin-bottom: 4rem; }
+            .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .preview-grid { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 640px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .flex-row-responsive { flex-direction: column; }
+            .hidden-mobile { display: none !important; }
+        }
+
+        /* ===== KEYBOARD NAVIGATION FOR DROP ZONES ===== */
+        .arvog-drag-zone:focus-visible {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+        }
+
+        /* ===== SKELETON LOADING SHIMMER ===== */
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .skeleton {
+            background: linear-gradient(90deg, #1E293B 25%, #334155 50%, #1E293B 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s ease-in-out infinite;
+            border-radius: 4px;
+            color: transparent !important;
+            user-select: none;
+            pointer-events: none;
+        }
+        .skeleton-inline {
+            display: inline-block;
+            height: 1em;
+            width: 4em;
+            vertical-align: middle;
+        }
+        .skeleton-block {
+            display: block;
+            height: 1.5em;
+            width: 100%;
+            margin-top: 0.25rem;
+        }
+
+        /* ===== TAB TRANSITIONS ===== */
+        @keyframes tabFadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tab-content {
+            animation: tabFadeIn 0.2s ease-out forwards;
+        }
+
+        /* ===== CONSOLE LOG ENTRY ANIMATION ===== */
+        @keyframes logEntry {
+            from { opacity: 0; transform: translateX(-4px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .log-entry {
+            animation: logEntry 0.15s ease-out forwards;
+        }
+
+        /* ===== TOAST STAGGERED ENTRANCE ===== */
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(100%) scale(0.95); }
+            to { opacity: 1; transform: translateX(0) scale(1); }
+        }
+        .toast { animation: toastIn 0.25s ease-out; }
+
+        /* ===== EMPTY STATE ILLUSTRATIONS ===== */
+        .empty-state-svg {
+            opacity: 0.3;
+            transition: opacity 0.2s;
+        }
+        .empty-state:hover .empty-state-svg {
+            opacity: 0.5;
+        }
+
+        /* ===== SEARCH CLEAR BUTTON ===== */
+        .search-clear {
+            position: absolute;
+            right: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            padding: 4px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+        .search-clear:hover { color: #f43f5e; }
+        .search-wrapper input:not(:placeholder-shown) ~ .search-clear { display: flex; }
+
+        /* ===== LOADING SPINNER ON BUTTONS ===== */
+        .btn-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: btnSpin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 0.375rem;
+        }
+        @keyframes btnSpin {
+            to { transform: rotate(360deg); }
+        }

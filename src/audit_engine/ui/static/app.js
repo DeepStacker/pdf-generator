@@ -47,12 +47,19 @@
         // -------------------------------------------------
         
         // Toast notification system (replaces alert())
+        const TOAST_MAX_VISIBLE = 3;
         function showToast(message, type = 'info', duration = 4000) {
             const container = document.getElementById('toastContainer');
-            if (!container) { alert(message); return; }
+            if (!container) { return; }
+            while (container.children.length >= TOAST_MAX_VISIBLE) {
+                const oldest = container.children[0];
+                oldest.style.animation = 'toastOut 0.2s ease-in forwards';
+                setTimeout(() => oldest.remove(), 200);
+            }
             const el = document.createElement('div');
             el.className = 'toast toast-' + type;
             el.textContent = message;
+            el.setAttribute('role', 'alert');
             container.appendChild(el);
             setTimeout(() => {
                 el.style.animation = 'toastOut 0.2s ease-in forwards';
@@ -61,6 +68,13 @@
         }
 
         // Icons are inline SVGs — no external library needed
+
+        // HTML escape utility — prevents XSS when injecting user-supplied data
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = String(str);
+            return div.innerHTML;
+        }
 
         // APP STATE
         const state = {
@@ -427,6 +441,15 @@
             updateThemeBranding();
         }
 
+        // LOADING STATE INDICATORS
+        function setLoadingState(elements, loading) {
+            const text = loading ? 'Loading...' : '0';
+            elements.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = text;
+            });
+        }
+
         // CONFIG SAVE HELPER
         async function saveConfig(key, value) {
             try {
@@ -442,6 +465,7 @@
 
         // LOAD DASHBOARD DATA (Initial load)
         async function loadDashboardData() {
+            setLoadingState(['idfcStat-sessions', 'idfcStat-pdfs'], true);
             try {
                 const resp = await fetch('/api/dashboard');
                 const data = await resp.json();
@@ -545,7 +569,7 @@
             let html = '';
             files.forEach(f => {
                 const filename = f.split('/').pop().split('\\\\').pop();
-                html += `<button onclick="selectRecentFile('${f.replace(/\\\\/g, '\\\\\\\\')}')" class="bg-slate-900 border border-brand-borderLine text-slate-400 hover:text-white hover:border-slate-500 rounded px-2.5 py-1 transition truncate max-w-[200px]" title="${f}">${filename}</button>`;
+                html += `<button onclick="selectRecentFile('${encodeURIComponent(f)}')" class="bg-slate-900 border border-brand-borderLine text-slate-400 hover:text-white hover:border-slate-500 rounded px-2.5 py-1 transition truncate max-w-[200px]" title="${escapeHtml(f)}">${escapeHtml(filename)}</button>`;
             });
             
             idfcList.innerHTML = html;
@@ -554,6 +578,7 @@
         }
 
         function selectRecentFile(path) {
+            path = decodeURIComponent(path);
             idfcInputFile.value = path;
             eqInputFile.value = path;
             if (arvogInputFile) arvogInputFile.value = path;
@@ -577,7 +602,7 @@
             // Build headers
             let hHtml = '';
             headers.forEach(h => {
-                hHtml += `<th class="py-2.5 px-4 border-b border-brand-borderLine">${h}</th>`;
+                hHtml += `<th class="py-2.5 px-4 border-b border-brand-borderLine">${escapeHtml(h)}</th>`;
             });
             headerRow.innerHTML = hHtml;
             
@@ -586,7 +611,7 @@
             preview.forEach(row => {
                 rHtml += `<tr class="hover:bg-slate-900/30 transition border-b border-brand-borderLine">`;
                 row.forEach(val => {
-                    rHtml += `<td class="py-2.5 px-4 font-mono">${val}</td>`;
+                    rHtml += `<td class="py-2.5 px-4 font-mono">${escapeHtml(val)}</td>`;
                 });
                 rHtml += `</tr>`;
             });
@@ -709,7 +734,7 @@
                         previewBox.className = "bg-emerald-950/20 border border-emerald-900/30 rounded-lg px-4 py-3 flex items-center space-x-2 text-emerald-400 text-xs";
                     }
                     if (previewText) {
-                        previewText.innerHTML = `<strong>✓ Excel Loaded:</strong> Found ${data.rows || 0} rows, representing ${data.branches || 0} branches to audit.`;
+                        previewText.textContent = `✓ Excel Loaded: Found ${data.rows || 0} rows, representing ${data.branches || 0} branches to audit.`;
                     }
                     
                     state.totalBranches = parseInt(data.branches) || 0;
@@ -723,7 +748,7 @@
                     if (validationBox) {
                         validationBox.classList.remove('hidden');
                         validationBox.className = "bg-rose-950/20 border border-rose-900/30 rounded-lg px-4 py-3 text-rose-400 text-xs";
-                        validationBox.innerHTML = `<strong>✗ Load Error:</strong> ${data.error || 'Invalid spreadsheet file format.'}`;
+                        validationBox.textContent = `✗ Load Error: ${data.error || 'Invalid spreadsheet file format.'}`;
                     }
                     
                     const prefix = isIDFC ? 'idfc' : (isArvog ? 'arvog' : 'eq');
@@ -1050,7 +1075,7 @@
                             <line x1="12" y1="8" x2="12" y2="12"/>
                             <line x1="12" y1="16" x2="12.01" y2="16"/>
                         </svg>`;
-                    statusHtml = `<span class="text-[10px] text-rose-400 font-semibold" title="${file.error.replace(/"/g, '&quot;')}">✗ Load Error: ${file.error.substring(0, 50)}${file.error.length > 50 ? '...' : ''}</span>`;
+                    statusHtml = `<span class="text-[10px] text-rose-400 font-semibold" title="${escapeHtml(file.error)}">✗ Load Error: ${escapeHtml(file.error.substring(0, 50))}${file.error.length > 50 ? '...' : ''}</span>`;
                 }
                 
                 html += `
@@ -1058,7 +1083,7 @@
                     <div class="flex items-center space-x-3 min-w-0 flex-1">
                         ${iconHtml}
                         <div class="min-w-0 flex-1">
-                            <span class="block text-xs font-bold text-slate-200 truncate" title="${file.path}">${file.name}</span>
+                            <span class="block text-xs font-bold text-slate-200 truncate" title="${escapeHtml(file.path)}">${escapeHtml(file.name)}</span>
                             ${statusHtml}
                         </div>
                     </div>
@@ -1372,7 +1397,7 @@
             if (level === 'ERROR') color = 'text-rose-500 font-bold';
             if (level === 'DEBUG') color = 'text-slate-500';
             
-            const row = `<div class="font-mono text-[11px]"><span class="text-slate-600">[${time}]</span> <span class="${color}">[${level}]</span> <span class="text-slate-200">${message}</span></div>`;
+            const row = `<div class="font-mono text-[11px]"><span class="text-slate-600">[${time}]</span> <span class="${color}">[${escapeHtml(level)}]</span> <span class="text-slate-200">${escapeHtml(message)}</span></div>`;
             consoleBox.insertAdjacentHTML('beforeend', row);
             consoleBox.scrollTop = consoleBox.scrollHeight;
         }
@@ -1443,7 +1468,7 @@
             let html = '';
             if (summaryData.items && summaryData.items.length > 0) {
                 summaryData.items.forEach(item => {
-                    html += `<div class="py-1 border-b border-brand-borderLine flex justify-between"><span class="text-slate-400">${item.label}</span><strong class="text-emerald-400 font-mono">${item.value}</strong></div>`;
+                    html += `<div class="py-1 border-b border-brand-borderLine flex justify-between"><span class="text-slate-400">${escapeHtml(item.label)}</span><strong class="text-emerald-400 font-mono">${escapeHtml(item.value)}</strong></div>`;
                 });
             } else {
                 html = `<div class="text-slate-400 italic">${summaryData.message || 'Workflow finished successfully.'}</div>`;
@@ -1590,6 +1615,7 @@
 
         // STATS AND INSIGHT ANALYTICS
         async function refreshStats() {
+            setLoadingState(['statBadge-totalBatches', 'statBadge-totalPDFs', 'statBadge-totalExcels'], true);
             try {
                 const resp = await fetch('/api/stats');
                 const data = await resp.json();
@@ -1620,6 +1646,8 @@
 
         async function refreshHistory() {
             const query = document.getElementById('historySearch').value;
+            const body = document.getElementById('historyTableBody');
+            if (body) body.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-500 italic">Loading...</td></tr>';
             try {
                 const resp = await fetch(`/api/history?search=${encodeURIComponent(query)}`);
                 const data = await resp.json();
@@ -1632,15 +1660,18 @@
                 
                 let html = '';
                 data.forEach(row => {
-                    const escPath = (row.full_path || row.output_path || '').replace(/\\\\/g, '\\\\\\\\');
+                    const escTimestamp = escapeHtml(row.timestamp);
+                    const escExcelName = escapeHtml(row.excel_name);
+                    const escAuditType = escapeHtml(row.audit_type);
+                    const rawPath = row.full_path || row.output_path || '';
                     html += `
                         <tr class="hover:bg-slate-900/30 transition text-xs border-b border-brand-borderLine">
-                            <td class="py-3.5 px-6 font-mono text-slate-400">${row.timestamp}</td>
-                            <td class="py-3.5 px-6 font-semibold text-slate-200 truncate max-w-[250px]" title="${row.excel_name}">${row.excel_name}</td>
+                            <td class="py-3.5 px-6 font-mono text-slate-400">${escTimestamp}</td>
+                            <td class="py-3.5 px-6 font-semibold text-slate-200 truncate max-w-[250px]" title="${escExcelName}">${escExcelName}</td>
                             <td class="py-3.5 px-6 text-center font-bold text-sky-400">${row.pdf_count}</td>
-                            <td class="py-3.5 px-6 text-center"><span class="px-2 py-0.5 rounded-full font-bold bg-slate-900 border border-brand-borderLine text-slate-400">${row.audit_type}</span></td>
+                            <td class="py-3.5 px-6 text-center"><span class="px-2 py-0.5 rounded-full font-bold bg-slate-900 border border-brand-borderLine text-slate-400">${escAuditType}</span></td>
                             <td class="py-3.5 px-6 text-center">
-                                <button onclick="openSystemPath('${escPath}')" class="text-blue-500 hover:text-white bg-blue-500/10 hover:bg-blue-500 border border-blue-500/20 px-3 py-1.5 rounded transition font-semibold dynamic-accent-fg">Open Files</button>
+                                <button onclick="openSystemPath('${encodeURIComponent(rawPath)}')" class="text-blue-500 hover:text-white bg-blue-500/10 hover:bg-blue-500 border border-blue-500/20 px-3 py-1.5 rounded transition font-semibold dynamic-accent-fg">Open Files</button>
                             </td>
                         </tr>`;
                 });
@@ -1653,6 +1684,7 @@
 
         async function openSystemPath(path) {
             if (!path) return;
+            path = decodeURIComponent(path);
             try {
                 await fetch('/api/open', {
                     method: 'POST',
@@ -1687,32 +1719,57 @@
             }
         }
 
+        // Custom confirmation dialog (replaces confirm())
+        function showConfirm(message, okLabel, onConfirm) {
+            const modal = document.getElementById('confirmModal');
+            const title = document.getElementById('confirmModalTitle');
+            const msg = document.getElementById('confirmModalMessage');
+            const okBtn = document.getElementById('confirmModalOk');
+            const cancelBtn = document.getElementById('confirmModalCancel');
+            if (!modal) { if (onConfirm) onConfirm(); return; }
+            title.textContent = 'Confirm Action';
+            msg.textContent = message;
+            okBtn.textContent = okLabel || 'Confirm';
+            modal.classList.remove('hidden');
+            const cleanup = () => {
+                modal.classList.add('hidden');
+                okBtn.removeEventListener('click', handleOk);
+                cancelBtn.removeEventListener('click', handleCancel);
+            };
+            const handleOk = () => { cleanup(); if (onConfirm) onConfirm(); };
+            const handleCancel = () => { cleanup(); };
+            okBtn.addEventListener('click', handleOk);
+            cancelBtn.addEventListener('click', handleCancel);
+        }
+
         async function clearRecentFiles() {
-            if (!confirm('Are you sure you want to clear the cached recent master Excel paths?')) return;
-            try {
-                const resp = await fetch('/api/recent/clear', { method: 'POST' });
-                const data = await resp.json();
-                if (data.success) {
-                    showToast('Recent file cache links cleared.', 'success');
-                    loadDashboardData();
+            showConfirm('Are you sure you want to clear the cached recent master Excel paths?', 'Clear', async () => {
+                try {
+                    const resp = await fetch('/api/recent/clear', { method: 'POST' });
+                    const data = await resp.json();
+                    if (data.success) {
+                        showToast('Recent file cache links cleared.', 'success');
+                        loadDashboardData();
+                    }
+                } catch (err) {
+                    console.error(err);
                 }
-            } catch (err) {
-                console.error(err);
-            }
+            });
         }
 
         async function clearDatabaseHistory() {
-            if (!confirm('CAUTION: This will delete ALL historical audit logs and analytics statistics permanently! Are you absolutely sure?')) return;
-            try {
-                const resp = await fetch('/api/history/clear', { method: 'POST' });
-                const data = await resp.json();
-                if (data.success) {
-                    showToast('Database audit logs history purged completely.', 'success');
-                    loadDashboardData();
+            showConfirm('CAUTION: This will delete ALL historical audit logs and analytics statistics permanently! Are you absolutely sure?', 'Delete Everything', async () => {
+                try {
+                    const resp = await fetch('/api/history/clear', { method: 'POST' });
+                    const data = await resp.json();
+                    if (data.success) {
+                        showToast('Database audit logs history purged completely.', 'success');
+                        loadDashboardData();
+                    }
+                } catch (err) {
+                    console.error(err);
                 }
-            } catch (err) {
-                console.error(err);
-            }
+            });
         }
 
         // AUTO-UPDATER TRIGGERS

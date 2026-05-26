@@ -13,12 +13,25 @@ _FULL_PATH_IDX = 6
 
 
 class ConfigRepository:
-    """Key-value configuration store."""
+    """Key-value configuration store with in-memory cache."""
+
+    _NOT_FOUND = object()
+
+    def __init__(self) -> None:
+        self._cache: dict[str, str | object] = {}
+
+    def _clear_cache(self) -> None:
+        self._cache.clear()
 
     def get(self, key: str, default: str | None = None) -> str | None:
-        return _db.get_config(key, default)
+        if key not in self._cache:
+            val = _db.get_config(key)
+            self._cache[key] = val if val is not None else self._NOT_FOUND
+        val = self._cache[key]
+        return val if val is not self._NOT_FOUND else default
 
     def set(self, key: str, value: str) -> None:
+        self._cache[key] = value
         _db.set_config(key, value)
 
     def get_bool(self, key: str, default: bool = True) -> bool:

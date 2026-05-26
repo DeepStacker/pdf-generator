@@ -1,6 +1,6 @@
 """Domain enumerations."""
 
-from enum import Enum, auto
+from enum import Enum
 
 
 class BankType(Enum):
@@ -10,15 +10,26 @@ class BankType(Enum):
     UNKNOWN = "Unknown"
 
 
+class AuditType(Enum):
+    POA = "POA"
+    TAF = "TAF"
+
+
 class OutputMode(Enum):
-    FOLDER = auto()
-    ZIP_ONLY = auto()
-    BOTH = auto()
+    FOLDER = "FOLDER"
+    ZIP_ONLY = "ZIP ONLY"
+    BOTH = "BOTH"
 
 
 class EquitasStage(Enum):
     STAGE_1 = "STAGE 1"
     STAGE_2 = "STAGE 2"
+
+
+class EquitasFormat(Enum):
+    PDF_ONLY = "PDF ONLY"
+    EXCEL_ONLY = "EXCEL ONLY"
+    BOTH = "BOTH"
 
 
 class LogLevel(Enum):

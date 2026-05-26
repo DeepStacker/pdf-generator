@@ -65,6 +65,8 @@ class ProgressTracker:
         with self._lock:
             self._info.cancel_requested = value
 
+    MAX_LOG_ENTRIES = 500
+
     def log(self, level: str, message: str) -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")
         with self._lock:
@@ -73,6 +75,8 @@ class ProgressTracker:
                 "level": level,
                 "message": str(message),
             })
+            if len(self._info.logs) > self.MAX_LOG_ENTRIES:
+                self._info.logs.pop(0)
         logger.info("[%s] %s", level, message)
 
     def update_pct(self, pct: float, active_branch: str = "") -> None:

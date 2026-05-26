@@ -347,6 +347,182 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
+
+        /* ===== STICKY TABLE HEADERS ===== */
+        .sticky-header thead th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        /* ===== RESPONSIVE LAYOUT ===== */
+        @media (max-width: 1024px) {
+            .sidebar-collapsible { width: 100%; position: fixed; bottom: 0; left: 0; z-index: 100; flex-direction: row; height: auto !important; border-right: none; border-top: 1px solid #1E293B; padding: 6px 8px; gap: 4px; }
+            .sidebar-collapsible .nav-links { display: flex; flex-direction: row; overflow-x: auto; gap: 4px; padding: 0; }
+            .sidebar-collapsible .nav-links .nav-btn { flex: 1; flex-direction: column; gap: 2px; padding: 6px 8px; font-size: 10px; white-space: nowrap; min-width: 0; }
+            .sidebar-collapsible .nav-links .nav-btn svg { width: 16px; height: 16px; }
+            .sidebar-collapsible .brand-area { display: none; }
+            .sidebar-collapsible .footer-area { display: none; }
+            .content-panel { padding-left: 1rem; padding-right: 1rem; margin-bottom: 4.5rem; }
+            .bank-pill { font-size: 11px; padding: 5px 10px; }
+            .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .preview-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 640px) {
+            .bank-pill { font-size: 10px; padding: 4px 8px; gap: 4px; }
+            #bankSelector { gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+        }
+
+        @media (max-width: 640px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .flex-row-responsive { flex-direction: column; }
+            .hidden-mobile { display: none !important; }
+        }
+
+        /* ===== BANK PROFILE PILLS ===== */
+        .bank-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid #1E293B;
+            background: transparent;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .bank-pill:hover {
+            border-color: #475569;
+            color: #e2e8f0;
+            background: rgba(30, 41, 59, 0.4);
+        }
+        .bank-pill.active {
+            background: rgba(30, 41, 59, 0.6);
+            color: #ffffff;
+        }
+        .bank-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        /* ===== KEYBOARD NAVIGATION FOR DROP ZONES ===== */
+        .arvog-drag-zone:focus-visible {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+        }
+
+        /* ===== SKELETON LOADING SHIMMER ===== */
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .skeleton {
+            background: linear-gradient(90deg, #1E293B 25%, #334155 50%, #1E293B 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s ease-in-out infinite;
+            border-radius: 4px;
+            color: transparent !important;
+            user-select: none;
+            pointer-events: none;
+        }
+        .skeleton-inline {
+            display: inline-block;
+            height: 1em;
+            width: 4em;
+            vertical-align: middle;
+        }
+        .skeleton-block {
+            display: block;
+            height: 1.5em;
+            width: 100%;
+            margin-top: 0.25rem;
+        }
+
+        /* ===== TAB TRANSITIONS ===== */
+        @keyframes tabFadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tab-content {
+            animation: tabFadeIn 0.2s ease-out forwards;
+        }
+
+        /* ===== CONSOLE LOG ENTRY ANIMATION ===== */
+        @keyframes logEntry {
+            from { opacity: 0; transform: translateX(-4px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .log-entry {
+            animation: logEntry 0.15s ease-out forwards;
+        }
+
+        /* ===== TOAST STAGGERED ENTRANCE ===== */
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(100%) scale(0.95); }
+            to { opacity: 1; transform: translateX(0) scale(1); }
+        }
+        .toast { animation: toastIn 0.25s ease-out; }
+
+        /* ===== EMPTY STATE ILLUSTRATIONS ===== */
+        .empty-state-svg {
+            opacity: 0.3;
+            transition: opacity 0.2s;
+        }
+        .empty-state:hover .empty-state-svg {
+            opacity: 0.5;
+        }
+
+        /* ===== SEARCH CLEAR BUTTON ===== */
+        .search-clear {
+            position: absolute;
+            right: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            padding: 4px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: color 0.15s;
+        }
+        .search-clear:hover { color: #f43f5e; }
+        .search-wrapper input:not(:placeholder-shown) ~ .search-clear { display: flex; }
+
+        /* ===== FORM VALIDATION ===== */
+        .field-error { border-color: #f43f5e !important; box-shadow: 0 0 0 1px #f43f5e; }
+        @keyframes shake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+        .shake { animation: shake 0.3s ease-out; }
+        .field-valid { border-color: #10b981 !important; }
+
+        /* ===== ONLINE INDICATOR DOT ===== */
+        .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10b981; margin-right: 5px; vertical-align: middle; box-shadow: 0 0 6px rgba(16,185,129,0.4); }
+
+        /* ===== LOADING SPINNER ON BUTTONS ===== */
+        .btn-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: btnSpin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 0.375rem;
+        }
+        @keyframes btnSpin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="h-full flex overflow-hidden">
@@ -354,62 +530,60 @@
     <div class="flex-1 flex overflow-hidden">
         
         <!-- Sidebar Navigation -->
-        <aside class="w-64 bg-brand-slateBlack border-r border-brand-borderLine flex flex-col justify-between flex-shrink-0">
-            <div>
-                <!-- Brand logo area -->
-                <div class="px-6 py-8 flex flex-col items-center">
-                    <div class="flex items-center space-x-2">
-                        <svg class="icon w-8 h-8 text-blue-500 logo-icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                        <span class="text-2xl font-bold logo-font tracking-tight text-white logo-text-primary">IDFC FIRST</span>
-                    </div>
-                    <span class="text-[10px] font-extrabold tracking-widest text-blue-500 mt-1 logo-text-secondary">AUDIT ENGINE</span>
+        <aside class="sidebar-collapsible w-64 bg-brand-slateBlack border-r border-brand-borderLine flex flex-col flex-shrink-0">
+            <!-- Brand logo area -->
+            <div class="brand-area px-4 py-3.5 flex items-center gap-3 border-b border-brand-borderLine">
+                <svg class="icon w-7 h-7 text-blue-500 dynamic-accent-fg logo-icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                <div class="flex flex-col leading-tight">
+                    <span class="text-sm font-bold text-white tracking-tight logo-text-primary">IDFC FIRST</span>
+                    <span class="text-[9px] font-bold text-slate-500 tracking-widest uppercase logo-text-secondary">Audit Engine</span>
                 </div>
-
-                <!-- Bank Profile Selector -->
-                <div class="px-4 mb-6">
-                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Bank Profile</label>
-                    <div class="relative">
-                        <select id="bankSelector" class="w-full bg-slate-900 border border-brand-borderLine rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer">
-                            <option value="IDFC First Bank">IDFC First Bank</option>
-                            <option value="Equitas Small Finance Bank">Equitas Small Finance Bank</option>
-                            <option value="Arvog Bank">Arvog Bank</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-slate-500">
-                            <svg class="icon w-4 h-4" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Navigation Links -->
-                <nav class="px-2 space-y-1">
-                    <button onclick="switchTab('PROCESS')" id="tabBtn-PROCESS" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 border-blue-500 nav-btn">
-                        <svg class="icon w-4 h-4" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                        <span>New Batch</span>
-                    </button>
-                    <button onclick="switchTab('STATS')" id="tabBtn-STATS" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 text-slate-400 hover:bg-slate-900 hover:text-white nav-btn">
-                        <svg class="icon w-4 h-4" viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
-                        <span>Analytics</span>
-                    </button>
-                    <button onclick="switchTab('HISTORY')" id="tabBtn-HISTORY" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 text-slate-400 hover:bg-slate-900 hover:text-white nav-btn">
-                        <svg class="icon w-4 h-4" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
-                        <span>History</span>
-                    </button>
-                    <button onclick="switchTab('SETTINGS')" id="tabBtn-SETTINGS" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 text-slate-400 hover:bg-slate-900 hover:text-white nav-btn">
-                        <svg class="icon w-4 h-4" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-                        <span>Settings</span>
-                    </button>
-                </nav>
             </div>
 
+            <!-- Navigation Links -->
+            <nav class="nav-links flex-1 px-2 py-3 space-y-0.5">
+                <button onclick="switchTab('PROCESS')" id="tabBtn-PROCESS" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-slate-800 text-white nav-btn">
+                    <svg class="icon w-4 h-4 shrink-0" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>New Batch</span>
+                </button>
+                <button onclick="switchTab('STATS')" id="tabBtn-STATS" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 nav-btn">
+                    <svg class="icon w-4 h-4 shrink-0" viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+                    <span>Analytics</span>
+                </button>
+                <button onclick="switchTab('HISTORY')" id="tabBtn-HISTORY" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 nav-btn">
+                    <svg class="icon w-4 h-4 shrink-0" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+                    <span>History</span>
+                </button>
+                <button onclick="switchTab('SETTINGS')" id="tabBtn-SETTINGS" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 nav-btn">
+                    <svg class="icon w-4 h-4 shrink-0" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>Settings</span>
+                </button>
+            </nav>
+
             <!-- Footer area -->
-            <div class="px-6 py-6 border-t border-brand-borderLine flex flex-col items-center">
-                <span class="text-xs text-slate-600 font-mono version-label">{{VERSION}}</span>
-                <span class="text-[9px] text-slate-700 mt-1 copyright-label">© 2026 IDFC FIRST Bank</span>
+            <div class="footer-area px-4 py-3 border-t border-brand-borderLine flex items-center justify-between">
+                <span class="text-[10px] text-slate-600 font-mono version-label">{{VERSION}}</span>
+                <span class="text-[9px] text-slate-700 copyright-label">© 2026</span>
             </div>
         </aside>
 
         <!-- Toast container for inline notifications -->
         <div id="toastContainer" class="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
+
+        <!-- Custom confirmation modal -->
+        <div id="confirmModal" class="hidden fixed inset-0 z-[9998] bg-black/60 flex items-center justify-center backdrop-blur-sm">
+            <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 max-w-lg w-full shadow-xl mx-4">
+                <div class="flex items-center space-x-3 mb-4">
+                    <svg class="icon w-6 h-6 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <h3 id="confirmModalTitle" class="text-lg font-bold text-white">Confirm Action</h3>
+                </div>
+                <p id="confirmModalMessage" class="text-sm text-slate-300 mb-6">Are you sure?</p>
+                <div class="flex justify-end space-x-3">
+                    <button id="confirmModalCancel" class="px-4 py-2 text-sm font-semibold text-slate-400 bg-slate-900 border border-brand-borderLine rounded-lg hover:text-white transition">Cancel</button>
+                    <button id="confirmModalOk" class="px-4 py-2 text-sm font-bold text-white bg-rose-600 rounded-lg hover:bg-rose-500 transition">Confirm</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Main Content Panel Area -->
         <main class="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-950">
@@ -426,10 +600,27 @@
             </header>
 
             <!-- Scrollable Content Frame -->
-            <div class="flex-1 overflow-y-auto px-10 py-8 relative">
+            <div class="content-panel flex-1 overflow-y-auto px-10 py-8 relative">
+                
+                <!-- Bank Profile Switcher -->
+                <div id="bankSelector" class="flex items-center justify-end gap-2 mb-6">
+                    <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mr-1">Profile:</span>
+                    <button onclick="switchBank('IDFC First Bank')" class="bank-pill active" data-bank="IDFC First Bank" id="bankPill-IDFC">
+                        <span class="bank-dot" style="background:#2563EB"></span>
+                        IDFC First Bank
+                    </button>
+                    <button onclick="switchBank('Equitas Small Finance Bank')" class="bank-pill" data-bank="Equitas Small Finance Bank" id="bankPill-EQUITAS">
+                        <span class="bank-dot" style="background:#D97706"></span>
+                        Equitas
+                    </button>
+                    <button onclick="switchBank('Arvog Bank')" class="bank-pill" data-bank="Arvog Bank" id="bankPill-ARVOG">
+                        <span class="bank-dot" style="background:#10B981"></span>
+                        Arvog
+                    </button>
+                </div>
                 
                 <!-- SECTION: PROCESS (IDFC WORKFLOW) -->
-                <section id="tab-PROCESS-IDFC" class="space-y-6">
+                <section id="tab-PROCESS-IDFC" class="space-y-6 tab-content">
                     <!-- Title Header -->
                     <div class="flex justify-between items-center">
                         <h2 class="text-3xl font-bold tracking-tight text-white">Generate Reports</h2>
@@ -644,11 +835,27 @@
                 </section>
 
                 <!-- SECTION: PROCESS (ARVOG WORKFLOW) -->
-                <section id="tab-PROCESS-ARVOG" class="space-y-6 hidden">
+                <section id="tab-PROCESS-ARVOG" class="space-y-6 hidden tab-content">
                     <!-- Title Header -->
                     <div class="flex justify-between items-center">
                         <h2 class="text-3xl font-bold tracking-tight text-white">Generate Reports</h2>
                         <span class="px-3 py-1.5 text-xs font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Arvog Bank</span>
+                    </div>
+
+                    <!-- Statistics Card Widgets -->
+                    <div class="grid grid-cols-3 gap-6">
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-5 shadow-sm">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Total Sessions</span>
+                            <span id="arvogStat-sessions" class="text-2xl font-bold mt-2 block text-sky-400">0</span>
+                        </div>
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-5 shadow-sm">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Last Run</span>
+                            <span id="arvogStat-lastRun" class="text-base font-bold mt-2 block text-emerald-400 truncate">No activity yet</span>
+                        </div>
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-5 shadow-sm">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">PDF Reports Generated</span>
+                            <span id="arvogStat-pdfs" class="text-2xl font-bold mt-2 block text-emerald-500 dynamic-accent-fg">0</span>
+                        </div>
                     </div>
 
                     <!-- Primary Setup Controls Panel -->
@@ -777,11 +984,27 @@
                 </section>
 
                 <!-- SECTION: PROCESS (EQUITAS WORKFLOW) -->
-                <section id="tab-PROCESS-EQUITAS" class="space-y-6 hidden">
+                <section id="tab-PROCESS-EQUITAS" class="space-y-6 hidden tab-content">
                     <!-- Title Header -->
                     <div class="flex justify-between items-center">
                         <h2 class="text-3xl font-bold tracking-tight text-white">Generate Reports</h2>
                         <span class="px-3 py-1.5 text-xs font-bold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">Equitas Small Finance Bank</span>
+                    </div>
+
+                    <!-- Statistics Card Widgets -->
+                    <div class="grid grid-cols-3 gap-6">
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-5 shadow-sm">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Total Sessions</span>
+                            <span id="eqStat-sessions" class="text-2xl font-bold mt-2 block text-sky-400">0</span>
+                        </div>
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-5 shadow-sm">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Last Run</span>
+                            <span id="eqStat-lastRun" class="text-base font-bold mt-2 block text-emerald-400 truncate">No activity yet</span>
+                        </div>
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-5 shadow-sm">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">PDF Reports Generated</span>
+                            <span id="eqStat-pdfs" class="text-2xl font-bold mt-2 block text-amber-500 dynamic-accent-fg">0</span>
+                        </div>
                     </div>
 
                     <!-- Stage Tab Selector segmented pill bar -->
@@ -992,8 +1215,8 @@
                     </div>
                 </section>
 
-                <!-- SECTION: STATS (ANALYTICS) -->
-                <section id="tab-STATS" class="space-y-6 hidden">
+<!-- SECTION: STATS (ANALYTICS) -->
+<section id="tab-STATS" class="space-y-6 hidden tab-content">
                     <div class="flex justify-between items-center border-b border-brand-borderLine pb-4">
                         <h2 class="text-3xl font-bold tracking-tight text-white font-sans">Insight Analytics</h2>
                         <button onclick="refreshStats()" class="bg-slate-800 text-slate-300 text-xs font-semibold px-4 py-2 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Refresh</button>
@@ -1069,34 +1292,37 @@
                     </div>
                 </section>
 
-                <!-- SECTION: HISTORY -->
-                <section id="tab-HISTORY" class="space-y-6 hidden">
+<!-- SECTION: HISTORY -->
+<section id="tab-HISTORY" class="space-y-6 hidden tab-content">
                     <div class="border-b border-brand-borderLine pb-4">
                         <h2 class="text-3xl font-bold tracking-tight text-white font-sans">History Logs</h2>
                     </div>
 
                     <!-- Search panel -->
-                    <div class="relative">
-                        <input type="text" id="historySearch" oninput="debouncedSearch()" class="w-full bg-slate-900 border border-brand-borderLine rounded-lg pl-10 pr-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-blue-500" placeholder="Type branch or Excel filename to search past audit logs...">
-                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
-                            <svg class="icon w-4 h-4" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                        </div>
-                    </div>
+    <div class="relative search-wrapper">
+        <input type="text" id="historySearch" oninput="debouncedSearch()" class="w-full bg-slate-900 border border-brand-borderLine rounded-lg pl-10 pr-10 py-3 text-sm text-slate-200 focus:outline-none focus:border-blue-500" placeholder="Type branch or Excel filename to search past audit logs...">
+        <div class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 pointer-events-none">
+            <svg class="icon w-4 h-4" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </div>
+        <button class="search-clear" onclick="clearSearch()" aria-label="Clear search">
+            <svg class="icon w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+    </div>
 
                     <!-- History Table container -->
                     <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl overflow-hidden shadow-md">
                         <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse text-sm">
-                                <thead>
-                                    <tr class="bg-slate-900 border-b border-brand-borderLine text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                        <th class="py-3.5 px-6">Timestamp</th>
-                                        <th class="py-3.5 px-6">Master Excel Name</th>
-                                        <th class="py-3.5 px-6 text-center">Items Generated</th>
-                                        <th class="py-3.5 px-6 text-center">Audit Type</th>
-                                        <th class="py-3.5 px-6 text-center">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="historyTableBody" class="divide-y divide-brand-borderLine text-slate-300">
+            <table class="w-full text-left border-collapse text-sm sticky-header">
+                <thead>
+                    <tr class="bg-slate-900 border-b border-brand-borderLine text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th class="py-3.5 px-6">Timestamp</th>
+                        <th class="py-3.5 px-6">Master Excel Name</th>
+                        <th class="py-3.5 px-6 text-center">Items Generated</th>
+                        <th class="py-3.5 px-6 text-center">Audit Type</th>
+                        <th class="py-3.5 px-6 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody" class="divide-y divide-brand-borderLine text-slate-300">
                                     <tr>
                                         <td colspan="5" class="py-8 text-center text-slate-500 italic">No logs found</td>
                                     </tr>
@@ -1106,8 +1332,8 @@
                     </div>
                 </section>
 
-                <!-- SECTION: SETTINGS -->
-                <section id="tab-SETTINGS" class="space-y-6 hidden">
+<!-- SECTION: SETTINGS -->
+<section id="tab-SETTINGS" class="space-y-6 hidden tab-content">
                     <div class="border-b border-brand-borderLine pb-4">
                         <h2 class="text-3xl font-bold tracking-tight text-white font-sans">Settings</h2>
                     </div>
@@ -1117,7 +1343,7 @@
                         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Output File Naming Pattern</h3>
                         <p class="text-xs text-slate-500">Placeholders: <code>{branch}</code> = branch name, <code>{type}</code> = audit type (POA or TAF)</p>
                         <div class="flex space-x-3">
-                            <input type="text" id="settingsNamingPattern" class="flex-1 bg-slate-900 border border-brand-borderLine rounded-lg px-4 py-2.5 text-sm text-slate-200 focus:outline-none" placeholder="{branch}_{type}">
+                            <input type="text" id="settingsNamingPattern" oninput="updateNamingPreview()" class="flex-1 bg-slate-900 border border-brand-borderLine rounded-lg px-4 py-2.5 text-sm text-slate-200 focus:outline-none" placeholder="{branch}_{type}">
                             <button onclick="saveNamingPattern()" class="bg-blue-600 text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-blue-500 transition dynamic-accent-bg dynamic-accent-hover-bg">Save</button>
                         </div>
                         <div class="text-xs text-slate-500 italic">Preview: <span id="namingPreview" class="font-mono text-slate-400">e.g. BRANCH_A_POA.pdf</span></div>
@@ -1165,7 +1391,7 @@
 
             <!-- Bottom status status bar -->
             <footer class="h-10 bg-brand-slateBlack border-t border-brand-borderLine flex items-center justify-between px-6 flex-shrink-0">
-                <span id="footerStatusText" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">STATUS: Idle. Ready.</span>
+                <span id="footerStatusText" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider"><span class="status-dot"></span>STATUS: Idle. Ready.</span>
                 <span class="text-[9px] text-slate-700 italic">Audit Engine Premium WSGI Portal</span>
             </footer>
         </main>
@@ -1173,10 +1399,13 @@
 
     <!-- MODAL POPUP: SUMMARY DIALOG -->
     <div id="summaryModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-        <div class="bg-brand-slateBlack border border-brand-borderLine w-full max-w-lg rounded-2xl shadow-xl overflow-hidden transform scale-95 transition-all duration-300">
-            <div class="px-6 py-5 border-b border-brand-borderLine">
-                <h3 id="summaryTitle" class="text-base font-bold text-white tracking-tight">Generation Complete</h3>
-            </div>
+            <div class="bg-brand-slateBlack border border-brand-borderLine w-full max-w-lg rounded-2xl shadow-xl overflow-hidden transform scale-95 transition-all duration-300">
+                <div class="px-6 py-5 border-b border-brand-borderLine flex items-center justify-between">
+                    <h3 id="summaryTitle" class="text-base font-bold text-white tracking-tight">Generation Complete</h3>
+                    <button onclick="closeSummaryModal()" class="text-slate-500 hover:text-white transition bg-transparent border-0 cursor-pointer p-1 rounded" aria-label="Close">
+                        <svg class="icon w-5 h-5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
             <div class="p-6">
                 <div id="summaryTextContent" class="bg-slate-950 border border-brand-borderLine font-mono text-xs p-5 rounded-xl h-52 overflow-y-auto space-y-1">
                     <!-- Dynamic summary items -->
@@ -1237,7 +1466,35 @@
             return originalFetch.call(window, url, options);
         };
         // -------------------------------------------------
-        
+
+        // HTML escape utility — prevents XSS when injecting user-supplied data
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = String(str);
+            return div.innerHTML;
+        }
+
+        // Toast notification system (replaces alert())
+        const TOAST_MAX_VISIBLE = 3;
+        function showToast(message, type = 'info', duration = 4000) {
+            const container = document.getElementById('toastContainer');
+            if (!container) { return; }
+            while (container.children.length >= TOAST_MAX_VISIBLE) {
+                const oldest = container.children[0];
+                oldest.style.animation = 'toastOut 0.2s ease-in forwards';
+                setTimeout(() => oldest.remove(), 200);
+            }
+            const el = document.createElement('div');
+            el.className = 'toast toast-' + type;
+            el.textContent = message;
+            el.setAttribute('role', 'alert');
+            container.appendChild(el);
+            setTimeout(() => {
+                el.style.animation = 'toastOut 0.2s ease-in forwards';
+                setTimeout(() => el.remove(), 200);
+            }, duration);
+        }
+
         // Icons are inline SVGs — no external library needed
 
         // APP STATE
@@ -1307,34 +1564,58 @@
             handleHashRouting();
         });
 
-        // BANK SELECTION CHANGE EVENT
-        bankSelector.addEventListener('change', (e) => {
-            const val = e.target.value;
-            state.activeBank = val;
+        // BANK SELECTION via pills
+        function switchBank(bankName) {
+            if (state.activeBank === bankName) return;
             
-            // Save active bank to config
-            saveConfig('bank', val);
+            // Update pill active states
+            document.querySelectorAll('.bank-pill').forEach(p => p.classList.remove('active'));
+            const pillMap = { 'IDFC First Bank': 'bankPill-IDFC', 'Equitas Small Finance Bank': 'bankPill-EQUITAS', 'Arvog Bank': 'bankPill-ARVOG' };
+            const activePill = document.getElementById(pillMap[bankName]);
+            if (activePill) activePill.classList.add('active');
             
-            // Dynamic branding updates
-            updateThemeBranding();
+            state.activeBank = bankName;
+            saveConfig('bank', bankName);
             
-            // Render selection checklist for this newly active bank!
-            renderSelectedFilesList();
+            // Fade out current process tab, then update and fade in
+            const prefix = getActivePrefix();
+            const oldSection = document.getElementById(`tab-PROCESS-${prefix.toUpperCase()}`);
+            // Actually, the tab sections are fixed: IDFC, EQUITAS, ARVOG
+            ['IDFC','EQUITAS','ARVOG'].forEach(p => {
+                const sec = document.getElementById(`tab-PROCESS-${p}`);
+                if (sec) {
+                    sec.style.opacity = '0';
+                    sec.style.transition = 'opacity 0.12s ease';
+                }
+            });
             
-            // Trigger preview highlight for this bank if there are success files
-            const bankFiles = state.selectedFiles[val] || [];
-            const successIdx = bankFiles.findIndex(f => f.status === "success");
-            if (successIdx !== -1) {
-                selectPreviewFile(successIdx);
-            } else {
-                // Clear active preview input values
-                const prefix = getActivePrefix();
-                const targetInput = document.getElementById(`${prefix}InputFile`);
-                if (targetInput) targetInput.value = '';
-                const gridContainer = document.getElementById(`${prefix}GridContainer`);
-                if (gridContainer) gridContainer.classList.add('hidden');
-            }
-        });
+            setTimeout(() => {
+                updateThemeBranding();
+                renderSelectedFilesList();
+                
+                const bankFiles = state.selectedFiles[bankName] || [];
+                const successIdx = bankFiles.findIndex(f => f.status === "success");
+                if (successIdx !== -1) {
+                    selectPreviewFile(successIdx);
+                } else {
+                    const p = getActivePrefix();
+                    const ti = document.getElementById(`${p}InputFile`);
+                    if (ti) ti.value = '';
+                    const gc = document.getElementById(`${p}GridContainer`);
+                    if (gc) gc.classList.add('hidden');
+                }
+                
+                // Fade in the now-visible section
+                const currentPrefix = getActivePrefix();
+                const currentSection = document.getElementById(`tab-PROCESS-${currentPrefix.toUpperCase()}`);
+                if (currentSection) {
+                    currentSection.style.opacity = '0';
+                    // force reflow
+                    void currentSection.offsetWidth;
+                    currentSection.style.opacity = '1';
+                }
+            }, 130);
+        }
 
         // OUTPUT DIRECTORY SYNC & PERSIST LISTENERS
         ['idfcOutputDir', 'eqOutputDir', 'arvogOutputDir'].forEach(id => {
@@ -1404,13 +1685,10 @@
                 logoCopyright.textContent = '© 2026 Equitas Small Finance Bank';
             }
 
-            // 2. Adjust active sidebar navigation indicator border-color and icons
+            // 2. Adjust active sidebar navigation indicator
             const activeBtn = document.getElementById(`tabBtn-${state.activeTab}`);
             if (activeBtn) {
-                let borderCol = 'border-amber-500';
-                if (isIDFC) borderCol = 'border-blue-500';
-                else if (isArvog) borderCol = 'border-emerald-500';
-                activeBtn.className = `w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 ${borderCol} nav-btn`;
+                activeBtn.className = `w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-slate-800 text-white nav-btn`;
             }
 
             // 3. Inject CSS dynamically for classes marked as "dynamic-accent-*"
@@ -1459,19 +1737,20 @@
                 window.history.pushState(null, null, expectedHash);
             }
             
+            // Scroll content to top when switching tabs
+            const contentPanel = document.querySelector('.content-panel');
+            if (contentPanel) contentPanel.scrollTop = 0;
+            
             // Update navigation button active styles
             document.querySelectorAll('.nav-btn').forEach(btn => {
-                btn.className = 'w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 text-slate-400 hover:bg-slate-900 hover:text-white nav-btn';
+                btn.className = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 nav-btn';
             });
             
             const isIDFC = (state.activeBank === 'IDFC First Bank');
             const isArvog = (state.activeBank === 'Arvog Bank');
             const activeBtn = document.getElementById(`tabBtn-${tabId}`);
             if (activeBtn) {
-                let borderCol = 'border-amber-500';
-                if (isIDFC) borderCol = 'border-blue-500';
-                else if (isArvog) borderCol = 'border-emerald-500';
-                activeBtn.className = `w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 ${borderCol} nav-btn`;
+                activeBtn.className = `w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-slate-800 text-white nav-btn`;
             }
 
             // Hide all tab sections
@@ -1493,6 +1772,14 @@
                 }
             } else {
                 document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            }
+
+            // Re-trigger fade animation by re-adding class
+            const activeSection = document.getElementById(`tab-${tabId}`) || document.getElementById(`tab-PROCESS-${tabId === 'PROCESS' ? (isIDFC ? 'IDFC' : isArvog ? 'ARVOG' : 'EQUITAS') : tabId}`);
+            if (activeSection) {
+                activeSection.classList.remove('tab-content');
+                void activeSection.offsetWidth; // force reflow
+                activeSection.classList.add('tab-content');
             }
 
             if (tabId === 'STATS') refreshStats();
@@ -1627,7 +1914,7 @@
                 // Active bank
                 if (data.bank) {
                     state.activeBank = data.bank;
-                    bankSelector.value = data.bank;
+                    switchBank(data.bank);
                 }
                 
                 // IDFC Preferences
@@ -1683,10 +1970,16 @@
                     addSelectedFiles([data.last_file]);
                 }
                 
-                // Stats numbers
-                document.getElementById('idfcStat-sessions').textContent = data.total_sessions || 0;
-                document.getElementById('idfcStat-lastRun').textContent = data.last_run || 'No activity yet';
-                document.getElementById('idfcStat-pdfs').textContent = data.total_pdfs || 0;
+                // Stats numbers (shared across all bank profiles)
+                const stats = { sessions: data.total_sessions || 0, lastRun: data.last_run || 'No activity yet', pdfs: data.total_pdfs || 0 };
+                ['idfc', 'arvog', 'eq'].forEach(p => {
+                    const sEl = document.getElementById(`${p}Stat-sessions`);
+                    if (sEl) sEl.textContent = stats.sessions;
+                    const lEl = document.getElementById(`${p}Stat-lastRun`);
+                    if (lEl) lEl.textContent = stats.lastRun;
+                    const pEl = document.getElementById(`${p}Stat-pdfs`);
+                    if (pEl) pEl.textContent = stats.pdfs;
+                });
                 
                 // Load recent files cache
                 renderRecentFiles(data.recent_files || []);
@@ -1713,17 +2006,16 @@
             const arvogList = document.getElementById('arvogRecentList');
             
             if (!files || files.length === 0) {
-                const empty = '<span class="text-slate-600 italic">None saved</span>';
-                idfcList.innerHTML = empty;
-                eqList.innerHTML = empty;
-                if (arvogList) arvogList.innerHTML = empty;
+                idfcList.innerHTML = '<div class="empty-state flex items-center space-x-2 text-slate-600"><svg class="icon w-4 h-4 empty-state-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span class="italic text-xs">None saved</span></div>';
+                eqList.innerHTML = idfcList.innerHTML;
+                if (arvogList) arvogList.innerHTML = idfcList.innerHTML;
                 return;
             }
             
             let html = '';
             files.forEach(f => {
                 const filename = f.split('/').pop().split('\\\\').pop();
-                html += `<button onclick="selectRecentFile('${f.replace(/\\\\/g, '\\\\\\\\')}')" class="bg-slate-900 border border-brand-borderLine text-slate-400 hover:text-white hover:border-slate-500 rounded px-2.5 py-1 transition truncate max-w-[200px]" title="${f}">${filename}</button>`;
+                html += `<button onclick="selectRecentFile('${encodeURIComponent(f)}')" class="bg-slate-900 border border-brand-borderLine text-slate-400 hover:text-white hover:border-slate-500 rounded px-2.5 py-1 transition truncate max-w-[200px]" title="${escapeHtml(f)}">${escapeHtml(filename)}</button>`;
             });
             
             idfcList.innerHTML = html;
@@ -1732,6 +2024,7 @@
         }
 
         function selectRecentFile(path) {
+            path = decodeURIComponent(path);
             idfcInputFile.value = path;
             eqInputFile.value = path;
             if (arvogInputFile) arvogInputFile.value = path;
@@ -1755,7 +2048,7 @@
             // Build headers
             let hHtml = '';
             headers.forEach(h => {
-                hHtml += `<th class="py-2.5 px-4 border-b border-brand-borderLine">${h}</th>`;
+                hHtml += `<th class="py-2.5 px-4 border-b border-brand-borderLine">${escapeHtml(h)}</th>`;
             });
             headerRow.innerHTML = hHtml;
             
@@ -1764,7 +2057,7 @@
             preview.forEach(row => {
                 rHtml += `<tr class="hover:bg-slate-900/30 transition border-b border-brand-borderLine">`;
                 row.forEach(val => {
-                    rHtml += `<td class="py-2.5 px-4 font-mono">${val}</td>`;
+                    rHtml += `<td class="py-2.5 px-4 font-mono">${escapeHtml(val)}</td>`;
                 });
                 rHtml += `</tr>`;
             });
@@ -1797,10 +2090,10 @@
             let fields = [];
             if (prefix === 'idfc') {
                 fields = [
-                    { id: 'idfcMap-prospect', defaultFingerprints: ['prospectno', 'prospect_no', 'prospect number', 'prospect_number'] },
-                    { id: 'idfcMap-cuid', defaultFingerprints: ['cuid', 'customerid', 'customer_id', 'customer id'] },
-                    { id: 'idfcMap-tare', defaultFingerprints: ['tare weight', 'tareweight', 'tare_weight', 'tare_wt'] },
-                    { id: 'idfcMap-branch', defaultFingerprints: ['currentbranch', 'current_branch', 'branchname', 'branch_name', 'branch name'] }
+                    { id: 'idfcMap-prospect', exact: 'Prospectno', defaultFingerprints: ['prospectno', 'prospect_no', 'prospect number', 'prospect_number'] },
+                    { id: 'idfcMap-cuid', exact: 'CUID', defaultFingerprints: ['cuid', 'customerid', 'customer_id', 'customer id'] },
+                    { id: 'idfcMap-tare', exact: 'Tare Weight', defaultFingerprints: ['tare weight', 'tareweight', 'tare_weight', 'tare_wt'] },
+                    { id: 'idfcMap-branch', exact: 'CurrentBranchName', defaultFingerprints: ['currentbranchname', 'currentbranch', 'current_branch', 'branchname', 'branch_name', 'branch name'] }
                 ];
             } else {
                 fields = [
@@ -1818,18 +2111,28 @@
                 select.innerHTML = '';
                 
                 let selectedIdx = 0;
+                let foundExact = false;
                 headers.forEach((h, idx) => {
                     const option = document.createElement('option');
                     option.value = h;
                     option.textContent = h;
                     select.appendChild(option);
                     
-                    const lowerH = h.toLowerCase().trim();
-                    field.defaultFingerprints.forEach(fingerprint => {
-                        if (lowerH.includes(fingerprint) || fingerprint.includes(lowerH)) {
-                            selectedIdx = idx;
-                        }
-                    });
+                    // Exact match first
+                    if (field.exact && h.trim() === field.exact) {
+                        selectedIdx = idx;
+                        foundExact = true;
+                    }
+                    
+                    // Fall back to fuzzy match if no exact match yet
+                    if (!foundExact) {
+                        const lowerH = h.toLowerCase().trim();
+                        field.defaultFingerprints.forEach(fingerprint => {
+                            if (lowerH.includes(fingerprint) || fingerprint.includes(lowerH)) {
+                                selectedIdx = idx;
+                            }
+                        });
+                    }
                 });
                 
                 select.selectedIndex = selectedIdx;
@@ -1872,11 +2175,8 @@
                 if (data.success) {
                     // Update active bank if file auto-detects another bank!
                     if (data.detected_bank && data.detected_bank !== state.activeBank) {
-                        state.activeBank = data.detected_bank;
-                        bankSelector.value = data.detected_bank;
+                        switchBank(data.detected_bank);
                         saveConfig('bank', data.detected_bank);
-                        updateThemeBranding();
-                        
                         addSelectedFiles([filepath]);
                         return;
                     }
@@ -1887,7 +2187,7 @@
                         previewBox.className = "bg-emerald-950/20 border border-emerald-900/30 rounded-lg px-4 py-3 flex items-center space-x-2 text-emerald-400 text-xs";
                     }
                     if (previewText) {
-                        previewText.innerHTML = `<strong>✓ Excel Loaded:</strong> Found ${data.rows || 0} rows, representing ${data.branches || 0} branches to audit.`;
+                        previewText.textContent = `✓ Excel Loaded: Found ${data.rows || 0} rows, representing ${data.branches || 0} branches to audit.`;
                     }
                     
                     state.totalBranches = parseInt(data.branches) || 0;
@@ -1901,7 +2201,7 @@
                     if (validationBox) {
                         validationBox.classList.remove('hidden');
                         validationBox.className = "bg-rose-950/20 border border-rose-900/30 rounded-lg px-4 py-3 text-rose-400 text-xs";
-                        validationBox.innerHTML = `<strong>✗ Load Error:</strong> ${data.error || 'Invalid spreadsheet file format.'}`;
+                        validationBox.textContent = `✗ Load Error: ${data.error || 'Invalid spreadsheet file format.'}`;
                     }
                     
                     const prefix = isIDFC ? 'idfc' : (isArvog ? 'arvog' : 'eq');
@@ -1967,7 +2267,7 @@
                 if (paths.length > 0) {
                     addSelectedFiles(paths);
                 } else {
-                    alert("Due to sandbox restrictions, please click the drop zone directly to browse and select local files using the native file picker.");
+                    showToast("Due to sandbox restrictions, please click the drop zone directly to browse and select local files using the native file picker.", "warning");
                 }
             }
         }
@@ -2228,7 +2528,7 @@
                             <line x1="12" y1="8" x2="12" y2="12"/>
                             <line x1="12" y1="16" x2="12.01" y2="16"/>
                         </svg>`;
-                    statusHtml = `<span class="text-[10px] text-rose-400 font-semibold" title="${file.error.replace(/"/g, '&quot;')}">✗ Load Error: ${file.error.substring(0, 50)}${file.error.length > 50 ? '...' : ''}</span>`;
+                    statusHtml = `<span class="text-[10px] text-rose-400 font-semibold" title="${escapeHtml(file.error)}">✗ Load Error: ${escapeHtml(file.error.substring(0, 50))}${file.error.length > 50 ? '...' : ''}</span>`;
                 }
                 
                 html += `
@@ -2236,7 +2536,7 @@
                     <div class="flex items-center space-x-3 min-w-0 flex-1">
                         ${iconHtml}
                         <div class="min-w-0 flex-1">
-                            <span class="block text-xs font-bold text-slate-200 truncate" title="${file.path}">${file.name}</span>
+                            <span class="block text-xs font-bold text-slate-200 truncate" title="${escapeHtml(file.path)}">${escapeHtml(file.name)}</span>
                             ${statusHtml}
                         </div>
                     </div>
@@ -2301,10 +2601,15 @@
             
             const prefix = getActivePrefix();
             
+            // Clear previous field errors
+            document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error', 'shake'));
+            
             // Unified file extraction from selected files checklist for ALL banks
             const validFiles = (state.selectedFiles[state.activeBank] || []).filter(f => f.status === "success");
             if (validFiles.length === 0) {
-                alert('Please select and load at least one valid Excel master file first.');
+                const dropZone = document.getElementById(`${prefix}DropZone`);
+                if (dropZone) { dropZone.classList.add('field-error', 'shake'); setTimeout(() => dropZone.classList.remove('shake'), 400); }
+                showToast('Please select and load at least one valid Excel master file first.', 'warning');
                 return;
             }
             
@@ -2315,11 +2620,44 @@
                 file = validFiles.map(f => f.path);
             }
             
-            const output = document.getElementById(`${prefix}OutputDir`).value;
+            const outputEl = document.getElementById(`${prefix}OutputDir`);
+            const output = outputEl.value;
             
             if (!output) {
-                alert('Please select an output directory.');
+                outputEl.classList.add('field-error', 'shake');
+                setTimeout(() => outputEl.classList.remove('shake'), 400);
+                showToast('Please select an output directory.', 'warning');
                 return;
+            }
+            outputEl.classList.add('field-valid');
+            setTimeout(() => outputEl.classList.remove('field-valid'), 2000);
+            
+            // Bank-specific validation
+            if (isIDFC) {
+                if (!state.idfc.auditType || !['POA', 'TAF'].includes(state.idfc.auditType)) {
+                    ['idfcOpt-POA', 'idfcOpt-TAF'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) { el.classList.add('field-error', 'shake'); setTimeout(() => el.classList.remove('shake'), 400); }
+                    });
+                    showToast('Please select an Audit Type (POA or TAF).', 'warning');
+                    return;
+                }
+            } else if (!isArvog) {
+                // Equitas: validate stage and format
+                if (!state.equitas.stage || !['STAGE 1', 'STAGE 2'].includes(state.equitas.stage)) {
+                    showToast('Please select a Stage (Stage 1 or Stage 2).', 'warning');
+                    return;
+                }
+                if (state.equitas.stage === 'STAGE 1') {
+                    if (!state.equitas.outputFormat || !['PDF ONLY', 'EXCEL ONLY', 'BOTH'].includes(state.equitas.outputFormat)) {
+                        ['eqFormat-PDFONLY', 'eqFormat-EXCELONLY', 'eqFormat-BOTH'].forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el) { el.classList.add('field-error', 'shake'); setTimeout(() => el.classList.remove('shake'), 400); }
+                        });
+                        showToast('Please select an Output Format.', 'warning');
+                        return;
+                    }
+                }
             }
             
             state.isGenerating = true;
@@ -2381,7 +2719,7 @@
                 const data = await resp.json();
                 
                 if (!data.success) {
-                    alert('Failed to start report generation thread: ' + data.error);
+                    showToast('Failed to start report generation thread: ' + data.error, 'error');
                     state.isGenerating = false;
                     setUiGeneratingState(false);
                     return;
@@ -2550,7 +2888,7 @@
             if (level === 'ERROR') color = 'text-rose-500 font-bold';
             if (level === 'DEBUG') color = 'text-slate-500';
             
-            const row = `<div class="font-mono text-[11px]"><span class="text-slate-600">[${time}]</span> <span class="${color}">[${level}]</span> <span class="text-slate-200">${message}</span></div>`;
+            const row = `<div class="font-mono text-[11px] log-entry"><span class="text-slate-600">[${escapeHtml(time)}]</span> <span class="${color}">[${escapeHtml(level)}]</span> <span class="text-slate-200">${escapeHtml(message)}</span></div>`;
             consoleBox.insertAdjacentHTML('beforeend', row);
             consoleBox.scrollTop = consoleBox.scrollHeight;
         }
@@ -2574,38 +2912,38 @@
             const footerStatus = document.getElementById('footerStatusText');
             
             if (busy) {
-                idfcBtnRun.textContent = 'Generating... Please wait';
+                idfcBtnRun.innerHTML = '<span class="btn-spinner"></span>Generating...';
                 idfcBtnRun.disabled = true;
                 idfcBtnCancel.disabled = false;
                 idfcProgressContainer.classList.remove('hidden');
                 
-                arvogBtnRun.textContent = 'Generating... Please wait';
+                arvogBtnRun.innerHTML = '<span class="btn-spinner"></span>Generating...';
                 arvogBtnRun.disabled = true;
                 arvogBtnCancel.disabled = false;
                 arvogProgressContainer.classList.remove('hidden');
                 
-                eqBtnRun.textContent = 'Processing Stage...';
+                eqBtnRun.innerHTML = '<span class="btn-spinner"></span>Processing...';
                 eqBtnRun.disabled = true;
                 eqBtnCancel.disabled = false;
                 eqProgressContainer.classList.remove('hidden');
                 
-                footerStatus.textContent = 'STATUS: Active Report Generation Thread Running';
+                footerStatus.innerHTML = '<span class="inline-block w-2 h-2 rounded-full bg-amber-500 mr-1.5 shadow-[0_0_6px_rgba(245,158,11,0.6)]" style="vertical-align:middle;"></span>STATUS: Generating Reports...';
                 footerStatus.className = 'text-[10px] font-bold text-amber-500 uppercase tracking-wider animate-pulse';
             } else {
-                idfcBtnRun.textContent = 'Generate Reports';
+                idfcBtnRun.innerHTML = 'Generate Reports';
                 idfcBtnRun.disabled = false;
                 idfcBtnCancel.disabled = true;
                 
-                arvogBtnRun.textContent = 'Generate Reports';
+                arvogBtnRun.innerHTML = 'Generate Reports';
                 arvogBtnRun.disabled = false;
                 arvogBtnCancel.disabled = true;
                 
                 const stageText = (state.equitas.stage === 'STAGE 1') ? 'Generate (Stage 1)' : 'Consolidate (Stage 2)';
-                eqBtnRun.textContent = stageText;
+                eqBtnRun.innerHTML = stageText;
                 eqBtnRun.disabled = false;
                 eqBtnCancel.disabled = true;
                 
-                footerStatus.textContent = 'STATUS: Headless Worker Pool Idle';
+                footerStatus.innerHTML = '<span class="status-dot"></span>STATUS: Idle. Ready.';
                 footerStatus.className = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider';
             }
         }
@@ -2621,7 +2959,7 @@
             let html = '';
             if (summaryData.items && summaryData.items.length > 0) {
                 summaryData.items.forEach(item => {
-                    html += `<div class="py-1 border-b border-brand-borderLine flex justify-between"><span class="text-slate-400">${item.label}</span><strong class="text-emerald-400 font-mono">${item.value}</strong></div>`;
+                    html += `<div class="py-1 border-b border-brand-borderLine flex justify-between"><span class="text-slate-400">${escapeHtml(item.label)}</span><strong class="text-emerald-400 font-mono">${escapeHtml(item.value)}</strong></div>`;
                 });
             } else {
                 html = `<div class="text-slate-400 italic">${summaryData.message || 'Workflow finished successfully.'}</div>`;
@@ -2633,6 +2971,23 @@
 
         function closeSummaryModal() {
             document.getElementById('summaryModal').classList.add('hidden');
+        }
+
+        // Close summary modal on Escape key or outside click
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('summaryModal');
+                if (modal && !modal.classList.contains('hidden')) closeSummaryModal();
+            }
+        });
+        document.getElementById('summaryModal')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeSummaryModal();
+        });
+
+        // Clear search input
+        function clearSearch() {
+            const input = document.getElementById('historySearch');
+            if (input) { input.value = ''; refreshHistory(); }
         }
 
         // DYNAMIC SVG ANCHORS AND CHARTS RENDERING ENGINES
@@ -2804,21 +3159,25 @@
                 
                 const body = document.getElementById('historyTableBody');
                 if (!data || data.length === 0) {
-                    body.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-500 italic">No historical audit logs found</td></tr>`;
+                    const msg = query.trim() ? 'No audit logs match your search query.' : 'No historical audit logs found yet.';
+                    body.innerHTML = `<tr><td colspan="5" class="py-12 text-center"><div class="empty-state flex flex-col items-center space-y-2"><svg class="icon w-8 h-8 empty-state-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span class="text-xs text-slate-500 italic">${escapeHtml(msg)}</span></div></td></tr>`;
                     return;
                 }
                 
                 let html = '';
                 data.forEach(row => {
-                    const escPath = (row.full_path || row.output_path || '').replace(/\\\\/g, '\\\\\\\\');
+                    const escTimestamp = escapeHtml(row.timestamp);
+                    const escExcelName = escapeHtml(row.excel_name);
+                    const escAuditType = escapeHtml(row.audit_type);
+                    const rawPath = row.full_path || row.output_path || '';
                     html += `
                         <tr class="hover:bg-slate-900/30 transition text-xs border-b border-brand-borderLine">
-                            <td class="py-3.5 px-6 font-mono text-slate-400">${row.timestamp}</td>
-                            <td class="py-3.5 px-6 font-semibold text-slate-200 truncate max-w-[250px]" title="${row.excel_name}">${row.excel_name}</td>
+                            <td class="py-3.5 px-6 font-mono text-slate-400">${escTimestamp}</td>
+                            <td class="py-3.5 px-6 font-semibold text-slate-200 truncate max-w-[250px]" title="${escExcelName}">${escExcelName}</td>
                             <td class="py-3.5 px-6 text-center font-bold text-sky-400">${row.pdf_count}</td>
-                            <td class="py-3.5 px-6 text-center"><span class="px-2 py-0.5 rounded-full font-bold bg-slate-900 border border-brand-borderLine text-slate-400">${row.audit_type}</span></td>
+                            <td class="py-3.5 px-6 text-center"><span class="px-2 py-0.5 rounded-full font-bold bg-slate-900 border border-brand-borderLine text-slate-400">${escAuditType}</span></td>
                             <td class="py-3.5 px-6 text-center">
-                                <button onclick="openSystemPath('${escPath}')" class="text-blue-500 hover:text-white bg-blue-500/10 hover:bg-blue-500 border border-blue-500/20 px-3 py-1.5 rounded transition font-semibold dynamic-accent-fg">Open Files</button>
+                                <button onclick="openSystemPath('${encodeURIComponent(rawPath)}')" class="text-blue-500 hover:text-white bg-blue-500/10 hover:bg-blue-500 border border-blue-500/20 px-3 py-1.5 rounded transition font-semibold dynamic-accent-fg">Open Files</button>
                             </td>
                         </tr>`;
                 });
@@ -2831,6 +3190,7 @@
 
         async function openSystemPath(path) {
             if (!path) return;
+            path = decodeURIComponent(path);
             try {
                 await fetch('/api/open', {
                     method: 'POST',
@@ -2855,42 +3215,74 @@
             preview.textContent = `e.g. ${replaced}.pdf`;
         }
 
+        function updateNamingPreview() {
+            const el = document.getElementById('settingsNamingPattern');
+            const preview = document.getElementById('namingPreview');
+            const raw = el.value.trim() || '{branch}_{type}';
+            preview.textContent = raw.replace('{branch}', 'BRANCH_A').replace('{type}', 'POA') + '.pdf';
+        }
+
         async function saveNamingPattern() {
             const pattern = document.getElementById('settingsNamingPattern').value || '{branch}_{type}';
             try {
                 await saveConfig('naming_pattern', pattern);
-                alert('Output naming convention pattern saved successfully!');
+                showToast('Output naming convention pattern saved successfully!', 'success');
             } catch (err) {
                 console.error('Failed to save pattern:', err);
             }
         }
 
+        // Custom confirmation dialog (replaces confirm())
+        function showConfirm(message, okLabel, onConfirm) {
+            const modal = document.getElementById('confirmModal');
+            const title = document.getElementById('confirmModalTitle');
+            const msg = document.getElementById('confirmModalMessage');
+            const okBtn = document.getElementById('confirmModalOk');
+            const cancelBtn = document.getElementById('confirmModalCancel');
+            if (!modal) { if (onConfirm) onConfirm(); return; }
+            title.textContent = 'Confirm Action';
+            msg.textContent = message;
+            okBtn.textContent = okLabel || 'Confirm';
+            modal.classList.remove('hidden');
+            const cleanup = () => {
+                modal.classList.add('hidden');
+                okBtn.removeEventListener('click', handleOk);
+                cancelBtn.removeEventListener('click', handleCancel);
+            };
+            const handleOk = () => { cleanup(); if (onConfirm) onConfirm(); };
+            const handleCancel = () => { cleanup(); };
+            okBtn.addEventListener('click', handleOk);
+            cancelBtn.addEventListener('click', handleCancel);
+        }
+
         async function clearRecentFiles() {
-            if (!confirm('Are you sure you want to clear the cached recent master Excel paths?')) return;
-            try {
-                const resp = await fetch('/api/recent/clear', { method: 'POST' });
-                const data = await resp.json();
-                if (data.success) {
-                    alert('Recent file cache links cleared.');
-                    loadDashboardData();
+            showConfirm('Are you sure you want to clear the cached recent master Excel paths?', 'Clear', async () => {
+                try {
+                    const resp = await fetch('/api/recent/clear', { method: 'POST' });
+                    const data = await resp.json();
+                    if (data.success) {
+                        showToast('Recent file cache links cleared.', 'success');
+                        loadDashboardData();
+                    }
+                } catch (err) {
+                    console.error(err);
                 }
-            } catch (err) {
-                console.error(err);
-            }
+            });
         }
 
         async function clearDatabaseHistory() {
-            if (!confirm('CAUTION: This will delete ALL historical audit logs and analytics statistics permanently! Are you absolutely sure?')) return;
-            try {
-                const resp = await fetch('/api/history/clear', { method: 'POST' });
-                const data = await resp.json();
-                if (data.success) {
-                    alert('Database audit logs history purged completely.');
-                    loadDashboardData();
+            showConfirm('CAUTION: This will delete ALL historical audit logs and analytics statistics permanently! Are you absolutely sure?', 'Delete Everything', async () => {
+                try {
+                    const resp = await fetch('/api/history/clear', { method: 'POST' });
+                    const data = await resp.json();
+                    if (data.success) {
+                        showToast('Database audit logs history purged completely.', 'success');
+                        loadDashboardData();
+                    }
+                } catch (err) {
+                    console.error(err);
                 }
-            } catch (err) {
-                console.error(err);
-            }
+            });
         }
 
         // AUTO-UPDATER TRIGGERS
@@ -2917,6 +3309,7 @@
             const progressBar = document.getElementById('updateProgressBar');
             
             btn.disabled = true;
+            btn.innerHTML = '<span class="btn-spinner"></span>Checking...';
             statusText.textContent = 'Checking GitHub repo for latest release...';
             statusText.className = 'text-xs text-sky-400 font-semibold';
             
@@ -2928,6 +3321,7 @@
                     statusText.textContent = `✓ Audit Engine Elite is fully up-to-date (${data.current || '{{VERSION}}'}).`;
                     statusText.className = 'text-xs text-emerald-400 font-semibold';
                     btn.disabled = false;
+                    btn.textContent = 'Check for Updates';
                     return;
                 }
                 
@@ -2943,6 +3337,7 @@
                     statusText.textContent = '✗ Update download failed: ' + startData.error;
                     statusText.className = 'text-xs text-rose-500 font-semibold';
                     btn.disabled = false;
+                    btn.textContent = 'Check for Updates';
                     return;
                 }
                 
@@ -2958,6 +3353,7 @@
                     if (!progData.is_downloading) {
                         clearInterval(updateCheckInterval);
                         btn.disabled = false;
+                        btn.textContent = 'Check for Updates';
                         
                         if (progData.success) {
                             statusText.textContent = '✓ Update staged successfully! Application needs a restart to apply changes.';
@@ -2976,6 +3372,7 @@
                 console.error(err);
                 statusText.textContent = 'Error querying update servers.';
                 btn.disabled = false;
+                btn.textContent = 'Check for Updates';
             }
         }
 

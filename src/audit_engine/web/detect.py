@@ -52,7 +52,7 @@ def detect_bank_from_file(filepath: str) -> str | None:
 
 
 def peek_excel_data(filepath: str) -> tuple[list[str], list[list[str]]]:
-    """Return headers and first 5 data rows for preview."""
+    """Return headers and first 5 data rows for preview — scans ALL sheets."""
     try:
         wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
     except Exception as e:
@@ -60,29 +60,35 @@ def peek_excel_data(filepath: str) -> tuple[list[str], list[list[str]]]:
         return [], []
 
     try:
-        sheet = wb.active
         headers: list[str] = []
         rows: list[list[str]] = []
-        header_row_idx = 0
 
-        all_rows = list(sheet.iter_rows(values_only=True, max_row=30))
-        for i, row_cells in enumerate(all_rows):
-            non_empty = sum(1 for c in row_cells if c is not None and str(c).strip())
-            if non_empty >= _MIN_NON_EMPTY_FOR_HEADER:
-                header_row_idx = i
-                headers = [str(c).strip() if c is not None else f"Column {idx}" for idx, c in enumerate(row_cells)]
-                break
+        for sname in wb.sheetnames:
+            sheet = wb[sname]
+            header_row_idx = 0
+            all_rows = list(sheet.iter_rows(values_only=True, max_row=30))
 
-        if not headers and all_rows:
+            for i, row_cells in enumerate(all_rows):
+                non_empty = sum(1 for c in row_cells if c is not None and str(c).strip())
+                if non_empty >= _MIN_NON_EMPTY_FOR_HEADER:
+                    header_row_idx = i
+                    headers = [str(c).strip() if c is not None else f"Column {idx}" for idx, c in enumerate(row_cells)]
+                    break
+
+            if headers:
+                for row_cells in sheet.iter_rows(values_only=True, min_row=header_row_idx + 2, max_row=header_row_idx + 6):
+                    row_data = [str(c) if c is not None else "" for c in row_cells]
+                    if len(row_data) < len(headers):
+                        row_data.extend([""] * (len(headers) - len(row_data)))
+                    rows.append(row_data[:len(headers)])
+                return headers, rows
+
+        # Fallback: use first row of first sheet
+        first_sheet = wb[wb.sheetnames[0]]
+        all_rows = list(first_sheet.iter_rows(values_only=True, max_row=30))
+        if all_rows:
             headers = [str(c).strip() if c is not None else f"Column {idx}" for idx, c in enumerate(all_rows[0])]
-
-        for row_cells in sheet.iter_rows(values_only=True, min_row=header_row_idx + 2, max_row=header_row_idx + 6):
-            row_data = [str(c) if c is not None else "" for c in row_cells]
-            if len(row_data) < len(headers):
-                row_data.extend([""] * (len(headers) - len(row_data)))
-            rows.append(row_data[:len(headers)])
-
-        return headers, rows
+        return headers, []
     except Exception as e:
         _logger.warning("Failed to peek Excel data %s: %s", filepath, e)
         return [], []
