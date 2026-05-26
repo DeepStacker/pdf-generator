@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""Pre-commit hook: auto-bump patch version on every commit."""
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+VERSION_FILE = Path("src/audit_engine/_version.py")
+
+if not VERSION_FILE.exists():
+    sys.exit(0)
+
+# If user already staged version changes, don't double-bump
+result = subprocess.run(
+    ["git", "diff", "--cached", "--name-only"],
+    capture_output=True, text=True, check=False,
+)
+if VERSION_FILE.name in result.stdout:
+    sys.exit(0)
+
+content = VERSION_FILE.read_text()
+
+match = re.search(r'__version__ = "(\d+)\.(\d+)\.(\d+)"', content)
+if not match:
+    sys.exit(0)
+
+major, minor, patch = match.group(1), match.group(2), int(match.group(3))
+new_version = f"{major}.{minor}.{patch + 1}"
+
+new_content = re.sub(
+    r'__version__ = "\d+\.\d+\.\d+"',
+    f'__version__ = "{new_version}"',
+    content,
+)
+
+VERSION_FILE.write_text(new_content)
+subprocess.run(["git", "add", str(VERSION_FILE)], check=True)
+
+print(f"Auto-bumped version to {new_version}")
