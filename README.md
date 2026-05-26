@@ -1,17 +1,6 @@
-# IDFC Audit Engine Elite
+# Audit Engine Elite
 
-Professional-grade PDF report generator for **IDFC FIRST Bank** gold-loan audits.
-
-Reads Excel master files containing loan records (prospect numbers, CUIDs, tare weights, branch assignments), groups them by bank branch, and produces one **landscape A4 PDF** per branch — formatted as an audit worksheet ready for field auditors.
-
-## Requirements
-
-- **Python 3.9+**
-- Dependencies (install via `pip install -r requirements.txt`):
-  - `openpyxl` — Excel file parsing
-  - `pandas` — Data handling
-  - `reportlab` — PDF generation
-  - `pyinstaller` — Standalone executable builds
+Multi-bank gold-loan audit report generator. Reads Excel master files, detects the bank (IDFC / Equitas / Arvog), groups by branch, and produces landscape A4 PDF audit worksheets — plus optional colour-coded Excel templates for field auditors.
 
 ## Quick Start
 
@@ -21,77 +10,60 @@ python3 -m venv .venv
 source .venv/bin/activate   # macOS/Linux
 # .venv\Scripts\activate    # Windows
 
-# 2. Install dependencies
-pip install -r requirements.txt
+# 2. Install
+pip install -e ".[all]"
 
-# 3. Launch the GUI
-python pdf_generator_ui.py
+# 3. Launch GUI
+audit-engine
 ```
-
-## Usage
-
-1. **Select Excel File** — Click "SELECT FILE" and choose your audit master `.xlsx`
-2. **Configure** — Set audit type (POA/TAF), output mode (Folder/ZIP/Both)
-3. **Choose Output** — Set destination directory
-4. **Generate** — Click "START GENERATION ENGINE"
-5. **Review** — PDFs are organized in a timestamped subfolder
-
-### Excel File Requirements
-
-Your Excel file must contain a sheet with **all** of these columns (case-insensitive):
-
-| Column | Description |
-|--------|-------------|
-| `Prospectno` | Prospect/loan number |
-| `CUID` | Customer unique identifier |
-| `Tare Weight` | Gold tare weight as per bank records |
-| `State` | State/region |
-| `CurrentBranch` | Branch code |
-| `CurrentBranchName` | Branch name |
-
-## Building Standalone Executable
-
-### macOS / Linux
-```bash
-chmod +x BUILD_FOR_MAC_LINUX.sh
-./BUILD_FOR_MAC_LINUX.sh
-```
-
-### Windows
-```cmd
-BUILD_FOR_WINDOWS.bat
-```
-
-The standalone executable will be created at `dist/IDFC_Audit_Engine_Elite`.
 
 ## Project Structure
 
 ```
 pdf_generator/
-├── pdf_generator_ui.py    # GUI application (Tkinter)
-├── pdf_logic.py           # Core logic: Excel parsing, PDF generation
-├── pdf_generator.spec     # PyInstaller build configuration
-├── requirements.txt       # Python dependencies
+├── src/audit_engine/
+│   ├── __main__.py        # Entry point
+│   ├── app.py             # WSGI app factory
+│   ├── services/          # Bank-specific PDF logic
+│   │   ├── idfc.py        # IDFC First Bank
+│   │   ├── equitas.py     # Equitas SFB (Stage 1 + Stage 2)
+│   │   └── arvog.py       # Arvog Bank
+│   ├── web/               # Bottle routes & handlers
+│   ├── tasks/             # Background thread workers
+│   ├── database/          # SQLite repos
+│   ├── utils/             # Config, platform, dialogs
+│   ├── updater/           # Auto-update client
+│   ├── domain/            # Enums & models
+│   └── lib/bottle.py      # Vendored Bottle WSGI
+├── tests/                 # Test suite (73 tests)
 ├── fonts/                 # Bundled fonts (Carlito, Arimo)
-├── tests/                 # Unit tests
-├── BUILD_FOR_MAC_LINUX.sh # macOS/Linux build script
-└── BUILD_FOR_WINDOWS.bat  # Windows build script
+├── scripts/               # Build & release scripts
+├── pyproject.toml         # Project config & deps
+└── pdf_generator.spec     # PyInstaller spec
 ```
+
+## Building Standalone
+
+```bash
+# macOS / Linux
+bash scripts/BUILD_FOR_MAC_LINUX.sh
+
+# Windows
+scripts\BUILD_FOR_WINDOWS.bat
+```
+
+Output is at `dist/Audit_Engine_Elite` (or `Audit_Engine_Elite.app` on macOS).
 
 ## Running Tests
 
 ```bash
-pip install pytest
-python -m pytest tests/ -v
+pip install -e ".[dev]"
+pytest tests/ -v
 ```
 
-## Features
+## Linting
 
-- **Data Preview** — Validates Excel and shows row/branch counts before generation
-- **Cancel Support** — Stop a long-running batch mid-process
-- **ZIP Packaging** — Output as folder, ZIP archive, or both
-- **Analytics Dashboard** — Track audit type distribution and daily activity
-- **Generation History** — Searchable log with export-to-Excel support
-- **Persistent Settings** — Remembers output path, audit type, and preferences
-- **File Logging** — Diagnostic logs saved to `~/.idfc_audit_engine.log`
-- **Cross-Platform** — Works on Windows, macOS, and Linux
+```bash
+ruff check src/ tests/
+ruff format src/ tests/
+```

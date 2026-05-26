@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "audit-engine"
+version = "5.2.217"
+description = "PDF generation and audit automation toolkit for IDFC, Equitas, and Arvog banks"
+authors = [{name = "Audit Engine Team"}]
+license = {text = "Proprietary"}
+requires-python = ">=3.11"
+dependencies = [
+    "bottle>=0.13",
+    "openpyxl>=3.1",
+    "reportlab>=4.0",
+    "pandas>=2.0",
+    "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "mypy>=1.10",
+    "ruff>=0.4",
+    "types-python-dateutil",
+    "types-setuptools",
+    "certifi",
+]
+gui = ["pywebview>=5.0"]
+all = ["audit-engine[dev,gui]"]
+
+[project.scripts]
+audit-engine = "audit_engine.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["src"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["bottle.py", "lib/bottle.py"]
+
+[tool.ruff]
+line-length = 160
+target-version = "py311"
+exclude = ["bottle.py", "src/audit_engine/ui/static/app.js"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "SIM", "PL"]
+ignore = ["PLR0913", "PLR0915", "PLR0912", "PLR0911", "PLC0415", "PLR2004", "PLW0129"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.coverage.run]
+source = ["audit_engine"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "def __repr__", "raise NotImplementedError"]

@@ -5,32 +5,58 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, coll
 
 block_cipher = None
 
-# We collect dynamic library files for NumPy safely.
 numpy_dlls = collect_dynamic_libs('numpy')
 
-# Pack certifi certificates, local font assets, and pywebview static files
-datas = [('fonts', 'fonts')] + collect_data_files('certifi') + collect_data_files('webview')
+# Static assets (UI)
+ui_static = os.path.join('src', 'audit_engine', 'ui', 'static')
+datas = [
+    ('fonts', 'fonts'),
+    (ui_static, 'audit_engine/ui/static'),
+] + collect_data_files('certifi') + collect_data_files('webview')
 
-# Collect numpy.random submodules
 np_extra = [m for m in collect_submodules('numpy.random') if isinstance(m, str)]
 
 a = Analysis(
-    ['pdf_generator_ui.py'],
-    pathex=[],
+    ['src/audit_engine/__main__.py'],
+    pathex=['src'],
     binaries=numpy_dlls,
     datas=datas,
     hiddenimports=[
-        # --- Local Web Server framework ---
-        'bottle',
-        'web_assets',
-        # --- PyWebView native desktop rendering (proxy bypass) ---
+        # --- Vendored WSGI ---
+        'audit_engine.lib',
+        'audit_engine.lib.bottle',
+        # --- Core package ---
+        'audit_engine',
+        'audit_engine._version',
+        'audit_engine.database',
+        'audit_engine.database.legacy',
+        'audit_engine.exceptions',
+        'audit_engine.tasks.workers',
+        'audit_engine.tasks.tracker',
+        # --- Web layer ---
+        'audit_engine.web',
+        'audit_engine.web.routes',
+        # --- Services ---
+        'audit_engine.services',
+        'audit_engine.services.idfc',
+        'audit_engine.services.equitas',
+        'audit_engine.services.arvog',
+        # --- Updater ---
+        'audit_engine.updater',
+        'audit_engine.updater.client',
+        # --- Utils ---
+        'audit_engine.utils',
+        'audit_engine.utils.config',
+        'audit_engine.utils.platform',
+        'audit_engine.utils.dialogs',
+        # --- PyWebView ---
         'webview',
         'webview.platforms',
         'webview.platforms.cocoa',
         'webview.platforms.edgechromium',
         'webview.platforms.gtk',
         'webview.platforms.qt',
-        # --- Standard Tkinter (headless file dialgos) ---
+        # --- Tkinter (file dialogs) ---
         '_tkinter',
         'tkinter',
         'tkinter.filedialog',
@@ -52,10 +78,7 @@ a = Analysis(
         'reportlab.pdfbase.pdfmetrics',
         'reportlab.pdfbase.ttfonts',
         'reportlab.lib.colors',
-        # --- App modules ---
-        'pdf_logic',
-        'equitas_logic',
-        # --- Required by pyi_rth_multiprocessing runtime hook ---
+        # --- multiprocessing ---
         'select',
         'selectors',
         '_multiprocessing',
@@ -96,7 +119,7 @@ exe = EXE(
     disable_windowed_traceback=True,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity='-',
-    entitlements_file='entitlements.plist',
+    codesign_identity=None,
+    entitlements_file=None,
     icon=None,
 )

@@ -11,6 +11,9 @@ while read local_ref local_sha remote_ref remote_sha; do
     continue
   fi
 
+  echo "==> [pre-push] Running lint checks..."
+  ruff check src/ tests/ || { echo "!!> Lint failed. Aborting push."; exit 1; }
+
   echo "==> [pre-push] Main branch push detected. Auto-releasing..."
 
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -18,17 +21,15 @@ while read local_ref local_sha remote_ref remote_sha; do
 
   OLD_VER=$(python3 -c "
 import re
-with open('pdf_generator_ui.py') as f:
-    for line in f:
-        if 'VERSION' in line:
-            m = re.search(r'[\x27\"](.+)[\x27\"]', line)
-            if m:
-                print(m.group(1))
-                break
+with open('src/audit_engine/_version.py') as f:
+    content = f.read()
+    m = re.search(r'__version__ = [\\'\\\"]([^\\'\\\"]+)[\\'\\\"]', content)
+    if m:
+        print(m.group(1))
 ")
 
   if [ -z "$OLD_VER" ]; then
-    echo "!!> [pre-push] Could not read VERSION from pdf_generator_ui.py"
+    echo "!!> [pre-push] Could not read VERSION from src/audit_engine/_version.py"
     exit 1
   fi
 
@@ -40,9 +41,9 @@ with open('pdf_generator_ui.py') as f:
 
   echo "==> [pre-push] Bumping to: $NEW_VER"
 
-  sed -i '' "s/VERSION = \"$OLD_VER\"/VERSION = \"$NEW_VER\"/" pdf_generator_ui.py
+  sed -i '' "s/__version__ = \"$OLD_VER\"/__version__ = \"$NEW_VER\"/" src/audit_engine/_version.py
 
-  git add pdf_generator_ui.py
+  git add src/audit_engine/_version.py
   git commit -m "chore: auto-bump to v$NEW_VER"
   echo "==> [pre-push] Committed v$NEW_VER"
 
@@ -50,7 +51,7 @@ with open('pdf_generator_ui.py') as f:
   SRC_ZIP="Audit_Engine_${TAG}.zip"
 
   # --- Build source distribution ---
-  python3 create_distribution_zip.py
+  python3 scripts/create_distribution_zip.py
   if [ ! -f "$SRC_ZIP" ]; then
     echo "!!> [pre-push] Failed to create $SRC_ZIP"
     exit 1
@@ -90,4 +91,3 @@ Auto-generated release.
 done
 
 exit 0
-

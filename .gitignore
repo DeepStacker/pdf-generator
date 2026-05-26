@@ -1,24 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
 .venv*
 .venv_fix
-build
-dist
+
+# Build
+build/
+dist/
+*.spec
+
+# Output data
 *.xlsx
 *.pdf
-__pycache__
-*.pyc
-scratch/
 *.zip
-.idfc_*.db
-*.log
-*.egg-info
-.DS_Store
-
-# Data and Output Directories
-new_bank/raw_excel/
-new_bank/manual_converted/
-new_bank/auto_converted/
-new_bank/generated_pdfs/
 raw_excel/
 manual_converted/
-auto_converted/
 generated_pdfs/
+
+# Logs & db
+.idfc_*.db
+*.log
+
+# OS
+.DS_Store
+*.bak
+
+# IDE
+.vscode/
+.idea/
+
+# Legacy directories (removed in refactor)
+app/
+logic/
+new_bank/
+new_files/
+
+# Moved to scripts/
+create_distribution_zip.py
+BUILD_FOR_MAC_LINUX.sh
+BUILD_FOR_WINDOWS.bat
+entitlements.plist
+requirements.txt
