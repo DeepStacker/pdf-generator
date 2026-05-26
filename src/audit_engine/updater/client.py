@@ -9,8 +9,10 @@ import ssl
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile as _tempfile
 import threading
+import time
 import urllib.error as _urlerror
 import urllib.request as _urllib
 import zipfile
@@ -35,6 +37,11 @@ class UpdateState:
         self._is_downloading: bool = False
         self._success: bool = False
         self._error: str = ""
+        self._preflight_pass: bool = False
+        self._preflight_result: dict = {}
+        self._release_body: str = ""
+        self._last_check_time: float = 0.0
+        self._current_check_result: dict = {}
 
     @property
     def expected_sha256(self) -> str:
@@ -86,6 +93,56 @@ class UpdateState:
         with self._lock:
             self._error = value
 
+    @property
+    def preflight_pass(self) -> bool:
+        with self._lock:
+            return self._preflight_pass
+
+    @preflight_pass.setter
+    def preflight_pass(self, value: bool) -> None:
+        with self._lock:
+            self._preflight_pass = value
+
+    @property
+    def preflight_result(self) -> dict:
+        with self._lock:
+            return self._preflight_result
+
+    @preflight_result.setter
+    def preflight_result(self, value: dict) -> None:
+        with self._lock:
+            self._preflight_result = value
+
+    @property
+    def release_body(self) -> str:
+        with self._lock:
+            return self._release_body
+
+    @release_body.setter
+    def release_body(self, value: str) -> None:
+        with self._lock:
+            self._release_body = value
+
+    @property
+    def last_check_time(self) -> float:
+        with self._lock:
+            return self._last_check_time
+
+    @last_check_time.setter
+    def last_check_time(self, value: float) -> None:
+        with self._lock:
+            self._last_check_time = value
+
+    @property
+    def current_check_result(self) -> dict:
+        with self._lock:
+            return self._current_check_result
+
+    @current_check_result.setter
+    def current_check_result(self, value: dict) -> None:
+        with self._lock:
+            self._current_check_result = value
+
 
 update_state: UpdateState = UpdateState()
 
@@ -121,6 +178,131 @@ def _get_platform_suffix() -> str:
     elif sys.platform == "win32":
         return "windows"
     return "linux"
+
+
+def _extract_archive(archive_path: str, extract_to: str) -> None:
+    if archive_path.endswith((".tar.gz", ".tgz")):
+        with tarfile.open(archive_path, "r:gz") as tar:
+            for member in tar.getmembers():
+                member_path = os.path.normpath(os.path.join(extract_to, member.name))
+                if not member_path.startswith(os.path.normpath(extract_to)):
+                    raise RuntimeError(f"Path traversal detected in update archive: {member.name}")
+            tar.extractall(extract_to, filter="data")
+    else:
+        with zipfile.ZipFile(archive_path, "r") as zf:
+            for member in zf.infolist():
+                member_path = os.path.normpath(os.path.join(extract_to, member.filename))
+                if not member_path.startswith(os.path.normpath(extract_to)):
+                    raise RuntimeError(f"Path traversal detected in update archive: {member.filename}")
+            zf.extractall(extract_to)
+
+
+def _is_macos_app_bundle() -> bool:
+    if sys.platform != "darwin" or not getattr(sys, "frozen", False):
+        return False
+    return ".app/Contents/MacOS/" in (os.path.normpath(sys.executable or ""))
+
+
+def _macos_codesign(path: str) -> None:
+    if sys.platform != "darwin":
+        return
+    try:
+        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", path], capture_output=True, timeout=30)
+    except Exception as exc:
+        file_logger.warning("macOS ad-hoc code signing failed (non-fatal): %s", exc)
+
+
+def _get_current_app_bundle_path() -> str | None:
+    if not _is_macos_app_bundle():
+        return None
+    parts = os.path.normpath(sys.executable or "").split(os.sep)
+    for i, part in enumerate(parts):
+        if part.endswith(".app"):
+            return os.sep.join(parts[: i + 1])
+    return None
+
+
+_MIN_DISK_MB = 200
+
+
+def _preflight_check(install_dir: str = "", binary_url: str = "") -> dict:
+    result: dict = {"pass": True, "checks": {}}
+
+    frozen = getattr(sys, "frozen", False)
+    result["checks"]["frozen"] = frozen
+    if not frozen:
+        result["pass"] = False
+
+    exe = sys.executable or ""
+    exe_ok = bool(exe) and os.path.isfile(exe)
+    result["checks"]["current_executable"] = exe_ok
+    if not exe_ok:
+        result["pass"] = False
+
+    if not install_dir:
+        install_dir = _get_install_dir()
+    dir_exists = os.path.isdir(install_dir) if install_dir else False
+    dir_writable = os.access(install_dir, os.W_OK) if dir_exists else False
+    result["checks"]["install_dir"] = install_dir
+    result["checks"]["install_dir_exists"] = dir_exists
+    result["checks"]["install_dir_writable"] = dir_writable
+    if not dir_exists or not dir_writable:
+        result["pass"] = False
+
+    for label, path in [("install", install_dir), ("temp", _tempfile.gettempdir())]:
+        try:
+            usage = _shutil.disk_usage(path)
+            free_mb = usage.free // (1024 * 1024)
+            result["checks"][f"{label}_free_mb"] = free_mb
+            if free_mb < _MIN_DISK_MB:
+                result["pass"] = False
+        except Exception:
+            result["checks"][f"{label}_free_mb"] = -1
+            result["pass"] = False
+
+    if binary_url:
+        suffix = _get_platform_suffix()
+        url_lower = binary_url.lower()
+        _keywords = {
+            "macos": ["macos", "mac-os", "darwin", "osx", "mac"],
+            "windows": ["windows", "win32", "win64", "win"],
+            "linux": ["linux", "ubuntu", "debian"],
+        }
+        expected = _keywords.get(suffix, [])
+        platform_ok = any(kw in url_lower for kw in expected) if expected else True
+        result["checks"]["platform_match"] = platform_ok
+        if not platform_ok:
+            result["pass"] = False
+
+        try:
+            req = _urllib.Request(binary_url, method="HEAD", headers={"User-Agent": f"AuditEngine/{VERSION}"})
+            with _urlopen_with_fallback(req, timeout=5) as resp:
+                result["checks"]["network_reachable"] = True
+                result["checks"]["remote_size_mb"] = (int(resp.headers.get("Content-Length", 0)) or 0) // (1024 * 1024)
+        except Exception:
+            result["checks"]["network_reachable"] = False
+            result["pass"] = False
+
+    result["checks"]["min_disk_mb"] = _MIN_DISK_MB
+    return result
+
+
+_CHECK_INTERVAL = 3600
+_BACKGROUND_DELAY = 15
+
+
+def _background_check_worker() -> None:
+    threading.Event().wait(_BACKGROUND_DELAY)
+    while True:
+        try:
+            file_logger.info("Background update check starting...")
+            result = check_latest_release()
+            file_logger.info("Background update check complete (ready=%s, preflight=%s)",
+                            result.get("update_ready"),
+                            update_state.preflight_pass)
+        except Exception as exc:
+            file_logger.warning("Background update check failed: %s", exc)
+        threading.Event().wait(_CHECK_INTERVAL)
 
 
 def _check_latest_release() -> tuple[str, str, str, str, str]:
@@ -209,65 +391,91 @@ def _download_update(url: str, dest_path: str, progress_callback: Callable[[floa
     return dest_path
 
 
-def _install_binary_update(zip_path: str, install_dir: str, log_callback: Callable[[str], None] = print) -> str | None:
-    import shutil
+def _install_binary_update(archive_path: str, install_dir: str, log_callback: Callable[[str], None] = print) -> str | None:
     extract_to = _tempfile.mkdtemp(prefix="audit_bin_")
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        for member in zf.infolist():
-            member_path = os.path.normpath(os.path.join(extract_to, member.filename))
-            if not member_path.startswith(os.path.normpath(extract_to)):
-                raise RuntimeError(f"Path traversal detected in update ZIP: {member.filename}")
-        zf.extractall(extract_to)
-    for root, dirs, files in os.walk(extract_to):
-        for f in files:
-            fp = os.path.join(root, f)
-            st = os.stat(fp)
-            os.chmod(fp, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    src = None
-    for root, dirs, files in os.walk(extract_to):
-        for f in files:
-            fp = os.path.join(root, f)
-            if os.access(fp, os.X_OK):
-                src = fp
-                break
-        if src:
-            break
-    if not src:
-        raise RuntimeError("No executable found in update ZIP")
-    old_exe = sys.executable
-    log_callback(f"Replacing {old_exe} with {src}")
-    if sys.platform == "win32":
-        backup = old_exe + ".bak"
-        if os.path.exists(backup):
-            with contextlib.suppress(OSError):
-                os.remove(backup)
-        os.rename(old_exe, backup)
-        shutil.copy2(src, old_exe)
-        startup = subprocess.STARTUPINFO()
-        startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startup.wShowWindow = 0
-        subprocess.Popen(
-            [old_exe],
-            close_fds=True,
-            startupinfo=startup,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-        )
-        log_callback("Update staged in-place. Launching new binary and cleanly exiting.")
-        return "IN_PLACE_UPDATE"
+    try:
+        _extract_archive(archive_path, extract_to)
 
-    backup = old_exe + ".bak"
-    if os.path.exists(old_exe):
-        os.rename(old_exe, backup)
-    os.makedirs(os.path.dirname(old_exe), exist_ok=True)
-    shutil.copy2(src, old_exe)
-    os.chmod(old_exe, 0o755)
-    if sys.platform == "darwin":
-        subprocess.run(["xattr", "-dr", "com.apple.quarantine", old_exe], check=False)
-    if os.path.exists(backup):
-        os.remove(backup)
-    shutil.rmtree(extract_to, ignore_errors=True)
-    log_callback(f"Binary updated at {old_exe}")
-    return None
+        for root, dirs, files in os.walk(extract_to):
+            for f in files:
+                fp = os.path.join(root, f)
+                st = os.stat(fp)
+                os.chmod(fp, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+        # macOS .app bundle replacement
+        if _is_macos_app_bundle():
+            app_bundles = []
+            for root, dirs, files in os.walk(extract_to):
+                for d in dirs:
+                    if d.endswith(".app"):
+                        app_bundles.append(os.path.join(root, d))
+                if app_bundles:
+                    break
+            if app_bundles:
+                current_app = _get_current_app_bundle_path()
+                if current_app and os.path.isdir(current_app):
+                    backup = current_app + ".bak"
+                    if os.path.exists(backup):
+                        _shutil.rmtree(backup, ignore_errors=True)
+                    os.rename(current_app, backup)
+                    _shutil.copytree(app_bundles[0], current_app, symlinks=True)
+                    _macos_codesign(current_app)
+                    _shutil.rmtree(backup, ignore_errors=True)
+                    log_callback(f"App bundle updated at {current_app}")
+                    return None
+
+        src = None
+        for root, dirs, files in os.walk(extract_to):
+            for f in files:
+                fp = os.path.join(root, f)
+                if os.access(fp, os.X_OK):
+                    src = fp
+                    break
+            if src:
+                break
+        if not src:
+            raise RuntimeError("No executable found in update archive")
+
+        old_exe = sys.executable
+        log_callback(f"Replacing {old_exe} with {src}")
+
+        if sys.platform == "win32":
+            backup = old_exe + ".bak"
+            if os.path.exists(backup):
+                with contextlib.suppress(OSError):
+                    os.remove(backup)
+            os.rename(old_exe, backup)
+            _shutil.copy2(src, old_exe)
+            startup = subprocess.STARTUPINFO()
+            startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startup.wShowWindow = 0
+            subprocess.Popen(
+                [old_exe],
+                close_fds=True,
+                startupinfo=startup,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+            log_callback("Update staged in-place. Launching new binary and cleanly exiting.")
+            return "IN_PLACE_UPDATE"
+
+        backup = old_exe + ".bak"
+        if os.path.exists(old_exe):
+            os.rename(old_exe, backup)
+        os.makedirs(os.path.dirname(old_exe), exist_ok=True)
+        _shutil.copy2(src, old_exe)
+        os.chmod(old_exe, 0o755)
+
+        if sys.platform == "darwin":
+            subprocess.run(["xattr", "-dr", "com.apple.quarantine", old_exe], check=False)
+            _macos_codesign(old_exe)
+
+        if os.path.exists(backup):
+            os.remove(backup)
+
+        log_callback(f"Binary updated at {old_exe}")
+        return None
+    finally:
+        _shutil.rmtree(extract_to, ignore_errors=True)
 
 
 def _get_install_dir() -> str:
@@ -307,34 +515,72 @@ def _restart_app() -> None:
         os.execl(sys.executable, sys.executable, *sys.argv)
 
 
-def check_latest_release() -> dict:
+def check_latest_release(force: bool = False) -> dict:
+    cached = update_state.current_check_result
+    last = update_state.last_check_time
+    if not force and cached and last > 0 and (time.monotonic() - last) < _CHECK_INTERVAL:
+        return cached
+
+    result: dict = {"update_ready": False, "current": VERSION}
     try:
         tag, source_url, body, binary_url, expected_sha256 = _check_latest_release()
         current_v = _parse_version(VERSION)
         latest_v = _parse_version(tag)
-        if latest_v > current_v:
-            if binary_url:
-                if not expected_sha256:
-                    file_logger.warning("Update %s has no checksum asset — rejecting for safety", tag)
-                else:
-                    update_state.update_ready = True
-                    update_state.latest_version = tag
-                    update_state.binary_url = binary_url
-                    update_state.expected_sha256 = expected_sha256
-                    return {
-                        "update_ready": True,
-                        "current": VERSION,
-                        "latest": tag,
-                        "body": body
-                    }
+        frozen = getattr(sys, "frozen", False)
+        if latest_v > current_v and binary_url and expected_sha256:
+            preflight = _preflight_check(binary_url=binary_url)
+            result["preflight"] = preflight
+            if frozen:
+                update_state.update_ready = True
+                update_state.latest_version = tag
+                update_state.binary_url = binary_url
+                update_state.expected_sha256 = expected_sha256
+                result.update({
+                    "update_ready": True,
+                    "latest": tag,
+                    "body": body,
+                    "frozen": True,
+                    "source_url": source_url,
+                    "preflight_pass": preflight["pass"],
+                })
             else:
-                file_logger.info("Update tag %s exists, but binary for OS is missing/building. Deferring.", tag)
+                file_logger.info("Update %s available (binary) — dev mode, skipping auto-install", tag)
+                result.update({
+                    "update_ready": True,
+                    "latest": tag,
+                    "body": body,
+                    "frozen": False,
+                    "source_url": source_url,
+                    "hint": "Development mode: run 'git pull' or download source from the release page.",
+                })
+        else:
+            file_logger.info("Update tag %s exists, but binary for OS is missing/building. Deferring.", tag)
     except Exception as e:
         file_logger.warning(f"Background updates repo search query failed: {e}")
-    return {"update_ready": False, "current": VERSION}
+
+    update_state.last_check_time = time.monotonic()
+    update_state.current_check_result = result
+    update_state.preflight_pass = result.get("preflight", {}).get("pass", False)
+    update_state.preflight_result = result.get("preflight", {})
+    update_state.release_body = result.get("body", "")
+    return result
 
 
 def download_update_worker(expected_sha256: str = "") -> None:
+    if not getattr(sys, "frozen", False):
+        update_state.error = "Binary updates are not supported in development mode. Use 'git pull' to update."
+        update_state.success = False
+        update_state.is_downloading = False
+        return
+
+    preflight = _preflight_check(binary_url=update_state.binary_url)
+    if not preflight["pass"]:
+        failed = [k for k, v in preflight["checks"].items() if v is False]
+        update_state.error = f"Pre-flight checks failed: {', '.join(failed)}"
+        update_state.success = False
+        update_state.is_downloading = False
+        return
+
     dest_dir = _tempfile.mkdtemp(prefix="audit_update_")
     try:
         update_state.is_downloading = True
@@ -342,21 +588,21 @@ def download_update_worker(expected_sha256: str = "") -> None:
         update_state.success = False
         update_state.error = ""
 
-        dest_zip = os.path.join(dest_dir, "update.zip")
-        update_state.dest_zip_path = dest_zip
+        dest_archive = os.path.join(dest_dir, "update.pkg")
+        update_state.dest_zip_path = dest_archive
 
         def progress_cb(pct: float) -> None:
             update_state.progress_pct = pct
 
-        _download_update(update_state.binary_url, dest_zip, progress_cb)
+        _download_update(update_state.binary_url, dest_archive, progress_cb)
 
         if expected_sha256:
-            actual = _sha256_file(dest_zip)
+            actual = _sha256_file(dest_archive)
             if actual != expected_sha256:
                 raise RuntimeError(f"SHA256 mismatch: expected {expected_sha256}, got {actual}")
 
         install_dir = _get_install_dir()
-        bat = _install_binary_update(dest_zip, install_dir, log_callback=file_logger.info)
+        bat = _install_binary_update(dest_archive, install_dir, log_callback=file_logger.info)
         if bat:
             update_state.staged_bat = bat
 
@@ -373,3 +619,5 @@ def download_update_worker(expected_sha256: str = "") -> None:
 
 if getattr(sys, "frozen", False):
     threading.Thread(target=_cleanup_stale_mei, daemon=True).start()
+
+threading.Thread(target=_background_check_worker, daemon=True, name="update-bg-checker").start()

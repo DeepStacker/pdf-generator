@@ -5,6 +5,7 @@ Handlers return plain dicts (JSON-serializable) that Bottle can return directly.
 """
 
 import os
+import sys
 import time
 
 from audit_engine.database.repos import config_repo, history_repo
@@ -244,8 +245,11 @@ def handle_stats() -> dict:
     types, trend = history_repo.analytics()
     total_sessions, total_pdfs = history_repo.stats()
     return {
-        "distribution": types, "trend": trend, "total_sessions": total_sessions,
-        "total_pdfs": total_pdfs, "total_excels": history_repo.total_unique_excels(),
+        "distribution": types,
+        "trend": [list(row) for row in trend],
+        "total_sessions": total_sessions,
+        "total_pdfs": total_pdfs,
+        "total_excels": history_repo.total_unique_excels(),
     }
 
 
@@ -289,6 +293,8 @@ def handle_update_check() -> dict:
 
 
 def handle_update_install() -> dict:
+    if not getattr(sys, "frozen", False):
+        return {"success": False, "error": "Binary updates are not supported in development mode. Use 'git pull' to update."}
     if not update_state.binary_url:
         return {"success": False, "error": "No update staged."}
     if not update_state.is_downloading:
@@ -302,6 +308,8 @@ def handle_update_progress() -> dict:
 
 
 def handle_update_apply() -> dict:
+    if not getattr(sys, "frozen", False):
+        return {"success": False, "error": "Cannot apply update in development mode."}
     import threading
     def _apply():
         time.sleep(1)
