@@ -21,7 +21,7 @@ import queue
 import pdf_logic
 import equitas_logic
 
-VERSION = "5.2.205"
+VERSION = "5.2.206"
 
 MONO_FONT = "SF Mono" if platform.system() == "Darwin" else "Consolas"
 
