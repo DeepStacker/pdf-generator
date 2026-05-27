@@ -164,7 +164,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config gir1.2-gtk-3.0 gir1.2-webkit2-4.1
-      - run: pip install pyinstaller pywebview pygobject reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
+      - run: PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}" pip install pyinstaller pywebview pygobject reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - name: Package and checksum
         run: |
