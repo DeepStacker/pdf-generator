@@ -124,9 +124,9 @@ jobs:
           TAG="${{ needs.setup.outputs.tag }}"
           cd dist
           if [ -d "Audit_Engine_Elite.app" ]; then
-            zip -r "../Audit_Engine_${TAG}_binary_macos.zip" "Audit_Engine_Elite.app"
+            zip -ry "../Audit_Engine_${TAG}_binary_macos.zip" "Audit_Engine_Elite.app"
           else
-            zip -r "../Audit_Engine_${TAG}_binary_macos.zip" .
+            zip -ry "../Audit_Engine_${TAG}_binary_macos.zip" .
           fi
           cd ..
           shasum -a 256 "Audit_Engine_${TAG}_binary_macos.zip" \
