@@ -235,7 +235,7 @@ def worker_equitas_thread(inp: str | list[str], out_base: str, stage: str, equit
         global_tracker.is_running = False
 
 
-def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool) -> None:
+def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool, output_format: str = "BOTH", output_mode: str = "FOLDER") -> None:
     try:
         inp_list = inp if isinstance(inp, list) else [inp]
         total_files = len(inp_list)
@@ -264,26 +264,49 @@ def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool) ->
             out = os.path.join(curr_out_base, f"{excel_name}_ARVOG_{timestamp}")
             out = os.path.abspath(os.path.normpath(out))
             os.makedirs(out, exist_ok=True)
+
             arvog_bank.process_excel(
                 input_excel=curr_inp,
                 output_dir=out,
-                log_func=lambda msg: global_tracker.log("INFO", msg)
+                log_func=lambda msg: global_tracker.log("INFO", msg),
+                output_format=output_format,
             )
 
+            # Count generated items (PDFs and/or tall Excel sheet)
             curr_pdf_count = len([f for f in os.listdir(out) if f.endswith(".pdf")])
             pdf_count += curr_pdf_count
 
-            for root_dir, _, files in os.walk(out):
-                for f in files:
-                    total_size += os.path.getsize(os.path.join(root_dir, f))
+            # Packaging control: FOLDER, ZIP ONLY, or BOTH
+            needs_zip = output_mode in ("ZIP ONLY", "BOTH")
 
-            if auto_open and total_files == 1 and os.path.exists(out):
-                open_path(out)
+            if needs_zip and not cancel_event.is_set():
+                global_tracker.log("INFO", "Compressing Arvog bundle...")
+                zip_path = os.path.join(curr_out_base, f"{excel_name}_ARVOG_{timestamp}.zip")
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root_dir, _, files in os.walk(out):
+                        for file in files:
+                            full_path = os.path.join(root_dir, file)
+                            rel_path = os.path.relpath(full_path, out)
+                            zipf.write(full_path, rel_path)
+                global_tracker.log("INFO", f"Saved ZIP archive to: {os.path.basename(zip_path)}")
+                if output_mode == "ZIP ONLY":
+                    shutil.rmtree(out, ignore_errors=True)
+
+            # Calculate total size of generated outputs
+            for root_dir, _, files in os.walk(curr_out_base):
+                for f in files:
+                    if f.startswith(f"{excel_name}_ARVOG_{timestamp}"):
+                        total_size += os.path.getsize(os.path.join(root_dir, f))
+
+            if auto_open and total_files == 1:
+                target_open = curr_out_base if output_mode == "ZIP ONLY" else out
+                if os.path.exists(target_open):
+                    open_path(target_open)
 
         _elapsed = time.time() - _start_time
 
-        log_generation(", ".join([os.path.basename(f) for f in inp_list]), pdf_count, out_base, "Arvog Bank Bulk", full_path="; ".join(inp_list))
-        global_tracker.log("OK", f"SUCCESS: Completed {total_files} files, {pdf_count} Reports Created in {_elapsed:.1f}s.")
+        log_generation(", ".join([os.path.basename(f) for f in inp_list]), pdf_count, out_base, f"Arvog Bulk {output_format}", full_path="; ".join(inp_list))
+        global_tracker.log("OK", f"SUCCESS: Completed {total_files} files, {pdf_count} Reports/Items Created in {_elapsed:.1f}s.")
         global_tracker.update_pct(100.0)
 
         if auto_open and total_files > 1 and os.path.exists(out_base):
@@ -291,9 +314,10 @@ def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool) ->
 
         global_tracker.summary = _make_summary("Bulk Generation Complete", [
             {"label": "Status", "value": "✓ Success"},
-            {"label": "Audit Type", "value": "Arvog Bulk Audit"},
+            {"label": "Audit Type", "value": f"Arvog Bulk ({output_format})"},
             {"label": "Files Processed", "value": f"{total_files} Excel sheets"},
-            {"label": "Total Reports", "value": str(pdf_count)},
+            {"label": "Total Reports/Items", "value": str(pdf_count)},
+            {"label": "Packaging Mode", "value": output_mode},
             {"label": "Total Time", "value": f"{_elapsed:.1f}s"},
             {"label": "Total Output Size", "value": _format_size(total_size) if total_size > 0 else "0 KB"},
             {"label": "Output Directory", "value": out_base}

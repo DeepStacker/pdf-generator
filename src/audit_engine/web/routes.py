@@ -125,7 +125,9 @@ def api_heartbeat() -> dict:
 # ---- Auto-update ----
 @route("/api/update/check")
 def update_check() -> dict:
-    return handle_update_check()
+    from audit_engine.lib.bottle import request
+    force = request.query.get("force", "").lower() == "true"
+    return handle_update_check(force=force)
 
 
 @route("/api/update/install", method="POST")

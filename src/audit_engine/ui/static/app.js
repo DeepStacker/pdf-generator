@@ -88,6 +88,10 @@
                 stage: 'STAGE 1',
                 outputFormat: 'BOTH'
             },
+            arvog: {
+                outputFormat: 'BOTH',
+                outputMode: 'BOTH'
+            },
             selectedFiles: {
                 'IDFC First Bank': [],
                 'Equitas Small Finance Bank': [],
@@ -445,6 +449,54 @@
             updateThemeBranding();
         }
 
+        function setArvogFormat(fmt) {
+            state.arvog.outputFormat = fmt;
+            saveConfig('arvog_format', fmt);
+            
+            const btnPdf = document.getElementById('arvogFormat-PDFONLY');
+            const btnExcel = document.getElementById('arvogFormat-EXCELONLY');
+            const btnBoth = document.getElementById('arvogFormat-BOTH');
+            
+            const colorClass = 'bg-emerald-500';
+            
+            [btnPdf, btnExcel, btnBoth].forEach(btn => {
+                if (btn) btn.className = 'flex-1 py-1.5 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition';
+            });
+            
+            if (fmt === 'PDF ONLY') {
+                if (btnPdf) btnPdf.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
+            } else if (fmt === 'EXCEL ONLY') {
+                if (btnExcel) btnExcel.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
+            } else {
+                if (btnBoth) btnBoth.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
+            }
+            updateThemeBranding();
+        }
+
+        function setArvogMode(mode) {
+            state.arvog.outputMode = mode;
+            saveConfig('arvog_mode', mode);
+            
+            const btnFolder = document.getElementById('arvogMode-FOLDER');
+            const btnZip = document.getElementById('arvogMode-ZIPONLY');
+            const btnBoth = document.getElementById('arvogMode-BOTH');
+            
+            const colorClass = 'bg-emerald-500';
+            
+            [btnFolder, btnZip, btnBoth].forEach(btn => {
+                if (btn) btn.className = 'flex-1 py-1.5 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition';
+            });
+            
+            if (mode === 'FOLDER') {
+                if (btnFolder) btnFolder.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
+            } else if (mode === 'ZIP ONLY') {
+                if (btnZip) btnZip.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
+            } else {
+                if (btnBoth) btnBoth.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
+            }
+            updateThemeBranding();
+        }
+
         // LOADING STATE INDICATORS
         function setLoadingState(elements, loading) {
             const text = loading ? 'Loading...' : '0';
@@ -498,6 +550,10 @@
                 if (data.eq_auto_open !== undefined) {
                     document.getElementById('eqAutoOpen').checked = data.eq_auto_open;
                 }
+
+                // Arvog Preferences
+                if (data.arvog_format) setArvogFormat(data.arvog_format);
+                if (data.arvog_mode) setArvogMode(data.arvog_mode);
                 
                 // Set output path across all tabs
                 if (data.out_path) {
@@ -1220,7 +1276,11 @@
                 // Equitas specific
                 equitas_stage: state.equitas.stage,
                 equitas_format: state.equitas.outputFormat,
-                equitas_pack: document.getElementById('eqPackagingSelector') ? document.getElementById('eqPackagingSelector').value : 'FOLDER'
+                equitas_pack: document.getElementById('eqPackagingSelector') ? document.getElementById('eqPackagingSelector').value : 'FOLDER',
+                
+                // Arvog specific
+                arvog_format: state.arvog.outputFormat,
+                arvog_mode: state.arvog.outputMode
             };
             
             try {
@@ -1804,8 +1864,15 @@
             statusText.className = 'text-xs text-sky-400 font-semibold';
             
             try {
-                const resp = await fetch('/api/update/check');
+                const resp = await fetch('/api/update/check?force=true');
                 const data = await resp.json();
+                
+                if (data.error) {
+                    statusText.textContent = '✗ Update check failed: ' + data.error;
+                    statusText.className = 'text-xs text-rose-500 font-semibold';
+                    btn.disabled = false;
+                    return;
+                }
                 
                 if (!data.update_ready) {
                     statusText.textContent = `✓ Audit Engine Elite is fully up-to-date (${data.current || '{{VERSION}}'}).`;

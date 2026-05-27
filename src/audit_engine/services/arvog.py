@@ -107,7 +107,7 @@ class ArvogService:
                 df = pd.read_excel(excel_path, sheet_name=sheet_name)
                 cols = self.normalize_columns(df.columns)
                 if all(col in cols for col in required_normalized):
-                    return sheet_name
+                    return str(sheet_name)
             except Exception:
                 continue
 
@@ -244,7 +244,20 @@ class ArvogService:
         wb = openpyxl.load_workbook(excel_path)
         ws = wb.active
 
-        headers = [cell.value for cell in ws[1]]
+        if ws is None:
+            # No active sheet – try the first sheet, or bail out
+            if wb.sheetnames:
+                ws = wb[wb.sheetnames[0]]
+            else:
+                logger.warning("Workbook %s has no sheets – skipping formatting", excel_path)
+                return
+
+        first_row = ws[1]
+        if first_row is None:
+            logger.warning("Sheet has no rows – skipping formatting")
+            return
+
+        headers = [cell.value for cell in first_row]
 
         for col_idx, h in enumerate(headers):
             if h == "Date":
@@ -389,10 +402,14 @@ class ArvogService:
         cluster_manager: str | None = None,
         convert_only: bool = False,
         log_func: Callable = logger.info,
+        output_format: str = "BOTH",
     ) -> None:
         os.makedirs(output_dir, exist_ok=True)
 
         log_func(f"Reading Excel: {input_excel}")
+
+        if convert_only:
+            output_format = "EXCEL ONLY"
 
         sheet_name, header_row = self.detect_raw_excel(input_excel)
         if sheet_name is not None:
@@ -401,35 +418,33 @@ class ArvogService:
                 input_excel, sheet_name, header_row,
                 cluster_manager=cluster_manager, log_func=log_func,
             )
-            base_name = os.path.basename(input_excel)
-            converted_excel_path = os.path.join(output_dir, base_name)
-            log_func(f"Saving converted Excel to: {converted_excel_path}")
-            df.to_excel(converted_excel_path, index=False)
-            self.apply_excel_formatting(converted_excel_path)
-
-            if convert_only:
-                log_func("Conversion completed successfully. Exiting.")
-                return
+            if output_format in ("EXCEL ONLY", "BOTH"):
+                base_name = os.path.basename(input_excel)
+                converted_excel_path = os.path.join(output_dir, base_name)
+                log_func(f"Saving converted Excel to: {converted_excel_path}")
+                df.to_excel(converted_excel_path, index=False)
+                self.apply_excel_formatting(converted_excel_path)
         else:
             sheet_name = self.detect_valid_sheet(input_excel)
             log_func(f"Detected Converted Tall-Format Excel Sheet: {sheet_name}")
             df = pd.read_excel(input_excel, sheet_name=sheet_name)
 
-        df = self.clean_dataframe(df)
-        df["Branch"] = df["Branch"].ffill()
-        grouped = df.groupby("Branch", sort=False)
+        if output_format in ("PDF ONLY", "BOTH"):
+            df = self.clean_dataframe(df)
+            df["Branch"] = df["Branch"].ffill()
+            grouped = df.groupby("Branch", sort=False)
 
-        total = 0
-        for branch, grp_df in grouped:
-            branch_df = grp_df.reset_index(drop=True)
-            branch_name = self.format_value(branch)
-            safe_branch = branch_name.replace("/", "_")
-            output_file = os.path.join(output_dir, f"{safe_branch}.pdf")
-            log_func(f"Generating -> {output_file}")
-            self.generate_pdf(branch_name=branch_name, df=branch_df, output_path=output_file)
-            total += 1
+            total = 0
+            for branch, grp_df in grouped:
+                branch_df = grp_df.reset_index(drop=True)
+                branch_name = self.format_value(branch)
+                safe_branch = branch_name.replace("/", "_")
+                output_file = os.path.join(output_dir, f"{safe_branch}.pdf")
+                log_func(f"Generating -> {output_file}")
+                self.generate_pdf(branch_name=branch_name, df=branch_df, output_path=output_file)
+                total += 1
 
-        log_func(f"Done. Generated {total} PDFs.")
+            log_func(f"Done. Generated {total} PDFs.")
         log_func(f"Output Folder: {output_dir}")
 
 
@@ -479,10 +494,11 @@ def generate_pdf(branch_name, df, output_path):
     return _default_service.generate_pdf(branch_name, df, output_path)
 
 
-def process_excel(input_excel, output_dir, cluster_manager=None, convert_only=False, log_func=print):
+def process_excel(input_excel, output_dir, cluster_manager=None, convert_only=False, log_func=print, output_format="BOTH"):
     return _default_service.process_excel(
         input_excel, output_dir,
         cluster_manager=cluster_manager, convert_only=convert_only, log_func=log_func,
+        output_format=output_format,
     )
 
 

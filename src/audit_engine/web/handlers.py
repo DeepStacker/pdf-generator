@@ -29,6 +29,8 @@ def handle_dashboard() -> dict:
         "output_mode": config_repo.get("pkg_mode", "BOTH"),
         "equitas_format": config_repo.get("equitas_format", "BOTH"),
         "equitas_pack": config_repo.get("equitas_pack", "FOLDER"),
+        "arvog_format": config_repo.get("arvog_format", "BOTH"),
+        "arvog_mode": config_repo.get("arvog_mode", "BOTH"),
         "auto_open": config_repo.get_bool("auto_open", True),
         "eq_auto_open": config_repo.get_bool("auto_open", True),
         "db_path": paths.db,
@@ -155,34 +157,46 @@ def handle_run(data: dict) -> dict:
         err = _validate_enum(str(data.get("equitas_format", "BOTH")), _VALID_EQUITAS_FORMATS, "equitas_format")
         if err:
             return {"success": False, "error": err}
+    elif bank == BankType.ARVOG.value:
+        err = _validate_enum(str(data.get("arvog_format", "BOTH")), _VALID_EQUITAS_FORMATS, "arvog_format")
+        if err:
+            return {"success": False, "error": err}
+        err = _validate_enum(str(data.get("arvog_mode", "BOTH")), _VALID_OUTPUT_MODES, "arvog_mode")
+        if err:
+            return {"success": False, "error": err}
 
     if isinstance(filepath_raw, str):
         if not filepath_raw or not os.path.exists(filepath_raw):
             return {"success": False, "error": f"File missing: {filepath_raw}"}
-        actual_filepath: str = filepath_raw
+        actual_filepath: str | list[str] = filepath_raw
+        config_repo.set("last_file", filepath_raw)
+        config_repo.add_recent_file(filepath_raw)
     elif isinstance(filepath_raw, list):
         if not filepath_raw:
             return {"success": False, "error": "No files provided."}
         for f in filepath_raw:
             if not f or not os.path.exists(f):
                 return {"success": False, "error": f"File missing: {f}"}
-        actual_filepath = filepath_raw[0]
+        actual_filepath = list(filepath_raw)
+        config_repo.set("last_file", filepath_raw[0])
+        config_repo.add_recent_file(filepath_raw[0])
     else:
         return {"success": False, "error": "Invalid filepath format."}
     if not out_path or not os.path.exists(out_path):
         return {"success": False, "error": "Output directory invalid."}
 
     config_repo.set("bank", bank)
-    config_repo.set("last_file", actual_filepath)
     config_repo.set("out_path", out_path)
-    config_repo.add_recent_file(actual_filepath)
 
     cancel_event.clear()
     global_tracker.reset()
 
     column_mappings = data.get("column_mappings")
     if column_mappings:
-        actual_filepath = preprocess_mapped_excel(actual_filepath, column_mappings, bank)
+        if isinstance(actual_filepath, list):
+            actual_filepath = [preprocess_mapped_excel(f, column_mappings, bank) for f in actual_filepath]
+        else:
+            actual_filepath = preprocess_mapped_excel(actual_filepath, column_mappings, bank)
 
     import threading
 
@@ -196,7 +210,14 @@ def handle_run(data: dict) -> dict:
             daemon=True,
         )
     elif bank == BankType.ARVOG.value:
-        t = threading.Thread(target=worker_arvog_thread, args=(actual_filepath, out_path, auto_open), daemon=True)
+        config_repo.set("arvog_format", str(data.get("arvog_format", "BOTH")))
+        config_repo.set("arvog_mode", str(data.get("arvog_mode", "BOTH")))
+        t = threading.Thread(
+            target=worker_arvog_thread,
+            args=(actual_filepath, out_path, auto_open,
+                  str(data.get("arvog_format", "BOTH")), str(data.get("arvog_mode", "BOTH"))),
+            daemon=True,
+        )
     else:
         config_repo.set("equitas_format", str(data.get("equitas_format", "BOTH")))
         config_repo.set("equitas_pack", str(data.get("equitas_pack", "FOLDER")))
@@ -288,8 +309,8 @@ def handle_open(data: dict) -> dict:
     return {"success": True}
 
 
-def handle_update_check() -> dict:
-    return check_latest_release()
+def handle_update_check(force: bool = False) -> dict:
+    return check_latest_release(force=force)
 
 
 def handle_update_install() -> dict:

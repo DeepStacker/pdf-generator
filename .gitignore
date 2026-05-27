@@ -51,3 +51,9 @@ requirements.txt
 
 # Pyodide web app (on web-app-pyodide branch only)
 web/
+
+# Track build scripts and spec file
+!pdf_generator.spec
+!scripts/BUILD_FOR_MAC_LINUX.sh
+!scripts/BUILD_FOR_WINDOWS.bat
+!scripts/create_distribution_zip.py

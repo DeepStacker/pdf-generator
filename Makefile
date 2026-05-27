@@ -18,8 +18,11 @@ typecheck:
 run:
 	PYTHONPATH=src $(PYTHON) -m $(PACKAGE)
 
+build:
+	bash scripts/BUILD_FOR_MAC_LINUX.sh
+
 clean:
-	rm -rf build/ dist/ *.spec
+	rm -rf build/ dist/
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name '*.pyc' -delete
 	find . -type f -name '*.pyo' -delete

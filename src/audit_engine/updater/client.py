@@ -397,13 +397,15 @@ def _check_latest_release() -> tuple[str, str, str, str, str]:
 
 
 def _parse_version(tag: str) -> tuple[int, ...]:
+    import re
     parts = tag.lstrip("vV").split(".")
     result: list[int] = []
     for p in parts:
-        try:
-            result.append(int(p))
-        except ValueError:
-            return (0,)
+        match = re.match(r"^(\d+)", p)
+        if match:
+            result.append(int(match.group(1)))
+        else:
+            result.append(0)
     return tuple(result)
 
 
@@ -472,7 +474,11 @@ def _install_binary_update(archive_path: str, install_dir: str, log_callback: Ca
         for root, dirs, files in os.walk(extract_to):
             for f in files:
                 fp = os.path.join(root, f)
-                if os.access(fp, os.X_OK):
+                if sys.platform == "win32":
+                    if f.lower().endswith(".exe"):
+                        src = fp
+                        break
+                elif os.access(fp, os.X_OK):
                     src = fp
                     break
             if src:
@@ -571,7 +577,7 @@ def check_latest_release(force: bool = False) -> dict:
         current_v = _parse_version(VERSION)
         latest_v = _parse_version(tag)
         frozen = getattr(sys, "frozen", False)
-        if latest_v > current_v and binary_url and expected_sha256:
+        if latest_v > current_v and binary_url:
             preflight = _preflight_check(binary_url=binary_url)
             result["preflight"] = preflight
             if frozen:
@@ -601,6 +607,7 @@ def check_latest_release(force: bool = False) -> dict:
             file_logger.info("Update tag %s exists, but binary for OS is missing/building. Deferring.", tag)
     except Exception as e:
         file_logger.warning(f"Background updates repo search query failed: {e}")
+        result["error"] = str(e)
 
     update_state.last_check_time = time.monotonic()
     update_state.current_check_result = result
