@@ -157,8 +157,14 @@ fi
 echo -e "[*] Upgrading pip..."
 $PIP_INSTALL --upgrade pip --quiet 2>/dev/null || echo -e "${YELLOW}[!] Non-critical: Pip upgrade skipped.${NC}"
 
-echo -e "[*] Installing required libraries (openpyxl, pandas, reportlab, pyinstaller, pywebview)..."
-if $PIP_INSTALL openpyxl pandas reportlab pyinstaller pywebview --quiet; then
+# Determine dependencies list (Linux needs pygobject for PyWebView GTK3/WebKit2 support)
+DEPS="openpyxl pandas reportlab pyinstaller pywebview"
+if [ "$OS_TYPE" != "Darwin" ]; then
+    DEPS="$DEPS pygobject"
+fi
+
+echo -e "[*] Installing required libraries ($DEPS)..."
+if $PIP_INSTALL $DEPS --quiet; then
     echo -e "[*] Libraries installation: ${GREEN}SUCCESS${NC}"
 else
     echo -e "${RED}[!!!] ERROR: Failed to install dependencies. Please check network connection and try again.${NC}"

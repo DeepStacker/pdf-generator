@@ -64,6 +64,7 @@ a = Analysis(
         'webview.platforms.edgechromium',
         'webview.platforms.gtk',
         'webview.platforms.qt',
+        'gi',
         # --- Tkinter (file dialogs) ---
         '_tkinter',
         'tkinter',
