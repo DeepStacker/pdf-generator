@@ -91,6 +91,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $TAG = "${{ needs.setup.outputs.tag }}"
+          gh release create $TAG --title $TAG --notes "" 2>/dev/null || true
           $zip = "Audit_Engine_${TAG}_binary_windows.zip"
           $sha = "$zip.sha256"
           gh release upload $TAG $zip $sha --clobber
@@ -136,6 +137,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ needs.setup.outputs.tag }}"
+          gh release create "$TAG" --title "$TAG" --notes "" 2>/dev/null || true
           ZIP="Audit_Engine_${TAG}_binary_macos.zip"
           SHA="${ZIP}.sha256"
           gh release upload "$TAG" "$ZIP" "$SHA" --clobber
@@ -161,7 +163,7 @@ jobs:
       - name: Install system dependencies (Linux GTK/WebKit2)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config gir1.2-gtk-3.0 gir1.2-webkit2-4.0
+          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config gir1.2-gtk-3.0 gir1.2-webkit2-4.1
       - run: pip install pyinstaller pywebview pygobject reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - name: Package and checksum
@@ -177,6 +179,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ needs.setup.outputs.tag }}"
+          gh release create "$TAG" --title "$TAG" --notes "" 2>/dev/null || true
           TAR="Audit_Engine_${TAG}_binary_linux.tar.gz"
           SHA="${TAR}.sha256"
           gh release upload "$TAG" "$TAR" "$SHA" --clobber
