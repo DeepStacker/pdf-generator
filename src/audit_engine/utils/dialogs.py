@@ -28,19 +28,19 @@ def ask_file_dialog() -> str:
     try:
         import webview
         active_win = webview.active_window()
+        if not active_win and hasattr(webview, "windows") and webview.windows:
+            active_win = webview.windows[0]
         if active_win:
             file_types = (
-                'Excel Files (*.xlsx;*.xls;*.XLSX;*.XLS;*.xlsm;*.XLSM)',
-                '*.xlsx;*.xls;*.XLSX;*.XLS;*.xlsm;*.XLSM',
-                'All files (*.*)',
-                '*.*'
+                'Excel Files (*.xlsx;*.xls;*.xlsm;*.XLSX;*.XLS;*.XLSM)',
+                'All files (*.*)'
             )
             result = active_win.create_file_dialog(
                 dialog_type=webview.OPEN_DIALOG,
                 file_types=file_types
             )
             if result:
-                return result[0] if isinstance(result, (list, tuple)) else result
+                return str(result[0]) if isinstance(result, (list, tuple)) else str(result)
             return ""
     except Exception as e:
         file_logger.info(f"PyWebView native file dialog not active or not available: {e}")
@@ -63,12 +63,12 @@ def ask_files_dialog() -> list[str]:
     try:
         import webview
         active_win = webview.active_window()
+        if not active_win and hasattr(webview, "windows") and webview.windows:
+            active_win = webview.windows[0]
         if active_win:
             file_types = (
-                'Excel Files (*.xlsx;*.xls;*.XLSX;*.XLS;*.xlsm;*.XLSM)',
-                '*.xlsx;*.xls;*.XLSX;*.XLS;*.xlsm;*.XLSM',
-                'All files (*.*)',
-                '*.*'
+                'Excel Files (*.xlsx;*.xls;*.xlsm;*.XLSX;*.XLS;*.XLSM)',
+                'All files (*.*)'
             )
             result = active_win.create_file_dialog(
                 dialog_type=webview.OPEN_DIALOG,
@@ -76,7 +76,9 @@ def ask_files_dialog() -> list[str]:
                 allow_multiple=True
             )
             if result:
-                return list(result) if isinstance(result, (list, tuple)) else [result]
+                if isinstance(result, (list, tuple)):
+                    return [str(x) for x in result]
+                return [str(result)]
             return []
     except Exception as e:
         file_logger.info(f"PyWebView native multiple files dialog not active or not available: {e}")
@@ -102,12 +104,14 @@ def ask_directory_dialog() -> str:
     try:
         import webview
         active_win = webview.active_window()
+        if not active_win and hasattr(webview, "windows") and webview.windows:
+            active_win = webview.windows[0]
         if active_win:
             result = active_win.create_file_dialog(
                 dialog_type=webview.FOLDER_DIALOG
             )
             if result:
-                return result[0] if isinstance(result, (list, tuple)) else result
+                return str(result[0]) if isinstance(result, (list, tuple)) else str(result)
             return ""
     except Exception as e:
         file_logger.info(f"PyWebView native directory dialog not active or not available: {e}")
