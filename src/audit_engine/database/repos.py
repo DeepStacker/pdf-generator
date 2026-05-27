@@ -25,10 +25,13 @@ class ConfigRepository:
 
     def get(self, key: str, default: str | None = None) -> str | None:
         if key not in self._cache:
-            val = _db.get_config(key)
-            self._cache[key] = val if val is not None else self._NOT_FOUND
-        val = self._cache[key]
-        return val if val is not self._NOT_FOUND else default
+            db_val = _db.get_config(key)
+            self._cache[key] = db_val if db_val is not None else self._NOT_FOUND
+        cached_val = self._cache[key]
+        if cached_val is self._NOT_FOUND:
+            return default
+        assert isinstance(cached_val, str)
+        return cached_val
 
     def set(self, key: str, value: str) -> None:
         self._cache[key] = value

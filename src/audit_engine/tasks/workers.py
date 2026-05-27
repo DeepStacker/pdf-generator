@@ -61,6 +61,8 @@ def worker_idfc_thread(inp: str | list[str], out_base: str, typ: str, output_mod
 
             curr_inp = os.path.abspath(os.path.normpath(current_file))
             curr_out_base = os.path.abspath(os.path.normpath(out_base))
+            curr_out_base = os.path.join(curr_out_base, "IDFC_First_Bank")
+            os.makedirs(curr_out_base, exist_ok=True)
 
             excel_name = os.path.splitext(os.path.basename(curr_inp))[0]
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -172,6 +174,8 @@ def worker_equitas_thread(inp: str | list[str], out_base: str, stage: str, equit
 
             curr_inp = os.path.abspath(os.path.normpath(current_file))
             curr_out_base = os.path.abspath(os.path.normpath(out_base))
+            curr_out_base = os.path.join(curr_out_base, "Equitas")
+            os.makedirs(curr_out_base, exist_ok=True)
 
             excel_name = os.path.splitext(os.path.basename(curr_inp))[0]
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -257,6 +261,8 @@ def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool, ou
 
             curr_inp = os.path.abspath(os.path.normpath(current_file))
             curr_out_base = os.path.abspath(os.path.normpath(out_base))
+            curr_out_base = os.path.join(curr_out_base, "Arvog_Bank")
+            os.makedirs(curr_out_base, exist_ok=True)
 
             excel_name = os.path.splitext(os.path.basename(curr_inp))[0]
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

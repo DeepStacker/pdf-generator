@@ -223,10 +223,10 @@ def _extract_archive(archive_path: str, extract_to: str) -> None:
             tar.extractall(extract_to, filter="data")
     else:
         with zipfile.ZipFile(archive_path, "r") as zf:
-            for member in zf.infolist():
-                member_path = os.path.normpath(os.path.join(extract_to, member.filename))
+            for zip_member in zf.infolist():
+                member_path = os.path.normpath(os.path.join(extract_to, zip_member.filename))
                 if not member_path.startswith(os.path.normpath(extract_to)):
-                    raise RuntimeError(f"Path traversal detected in update archive: {member.filename}")
+                    raise RuntimeError(f"Path traversal detected in update archive: {zip_member.filename}")
             zf.extractall(extract_to)
 
 

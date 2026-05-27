@@ -35,8 +35,9 @@ def ask_file_dialog() -> str:
                 'Excel Files (*.xlsx;*.xls;*.xlsm;*.XLSX;*.XLS;*.XLSM)',
                 'All files (*.*)'
             )
+            open_type = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else getattr(webview, "OPEN_DIALOG", 10)
             result = active_win.create_file_dialog(
-                dialog_type=webview.OPEN_DIALOG,
+                dialog_type=open_type,
                 file_types=file_types
             )
             if result:
@@ -70,8 +71,9 @@ def ask_files_dialog() -> list[str]:
                 'Excel Files (*.xlsx;*.xls;*.xlsm;*.XLSX;*.XLS;*.XLSM)',
                 'All files (*.*)'
             )
+            open_type = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else getattr(webview, "OPEN_DIALOG", 10)
             result = active_win.create_file_dialog(
-                dialog_type=webview.OPEN_DIALOG,
+                dialog_type=open_type,
                 file_types=file_types,
                 allow_multiple=True
             )
@@ -107,8 +109,9 @@ def ask_directory_dialog() -> str:
         if not active_win and hasattr(webview, "windows") and webview.windows:
             active_win = webview.windows[0]
         if active_win:
+            folder_type = webview.FileDialog.FOLDER if hasattr(webview, "FileDialog") else getattr(webview, "FOLDER_DIALOG", 20)
             result = active_win.create_file_dialog(
-                dialog_type=webview.FOLDER_DIALOG
+                dialog_type=folder_type
             )
             if result:
                 return str(result[0]) if isinstance(result, (list, tuple)) else str(result)

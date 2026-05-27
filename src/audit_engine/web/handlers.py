@@ -102,6 +102,7 @@ def handle_validate(data: dict) -> dict:
         import audit_engine.services.arvog as arvog_bank
         sheet_name, header_row = arvog_bank.detect_raw_excel(filepath)
         if sheet_name is not None:
+            # Wide-format (raw) file with jewellery1/jewellery2
             import pandas as pd
             df = pd.read_excel(filepath, sheet_name=sheet_name, header=header_row)
             branch_cols = [c for c in df.columns if str(c).strip().lower() == "branch"]
@@ -110,6 +111,19 @@ def handle_validate(data: dict) -> dict:
                 "success": True, "detected_bank": detected_bank, "rows": len(df),
                 "branches": bc, "headers": headers, "preview": preview_rows,
             }
+        # Fallback: try tall-format file (already converted / standard layout)
+        try:
+            valid_sheet = arvog_bank.detect_valid_sheet(filepath)
+            import pandas as pd
+            df = pd.read_excel(filepath, sheet_name=valid_sheet)
+            branch_cols = [c for c in df.columns if str(c).strip().lower() == "branch"]
+            bc = df[branch_cols[0]].nunique() if branch_cols else 1
+            return {
+                "success": True, "detected_bank": detected_bank, "rows": len(df),
+                "branches": bc, "headers": headers, "preview": preview_rows,
+            }
+        except Exception:
+            pass
         return {
             "success": False, "error": "Arvog file missing required columns.",
             "detected_bank": detected_bank, "headers": headers, "preview": preview_rows,
@@ -278,7 +292,7 @@ _ALLOWED_CONFIG_KEYS = frozenset({
     "bank", "last_file", "out_path", "audit_type", "pkg_mode", "output_mode",
     "equitas_format", "equitas_pack", "auto_open", "naming_pattern",
     "selected_files_IDFC First Bank", "selected_files_Equitas Small Finance Bank",
-    "selected_files_Arvog Bank",
+    "selected_files_Arvog Bank", "arvog_format", "arvog_mode",
 })
 
 
