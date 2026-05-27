@@ -161,6 +161,29 @@ $PIP_INSTALL --upgrade pip --quiet 2>/dev/null || echo -e "${YELLOW}[!] Non-crit
 DEPS="openpyxl pandas reportlab pyinstaller pywebview"
 if [ "$OS_TYPE" != "Darwin" ]; then
     DEPS="$DEPS pygobject"
+    # Check and suggest system dependencies for Linux
+    if command -v apt-get &>/dev/null; then
+        MISSING_SYS=""
+        for pkg in libgirepository-2.0-dev libcairo2-dev pkg-config gobject-introspection libgtk-3-dev libwebkit2gtk-4.1-dev gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-girepository-2.0; do
+            if ! dpkg -s "$pkg" &>/dev/null; then
+                MISSING_SYS="$MISSING_SYS $pkg"
+            fi
+        done
+        if [ -n "$MISSING_SYS" ]; then
+            echo -e "${YELLOW}[!] Missing system packages:$MISSING_SYS${NC}"
+            echo -e "[*] Install them with: ${BLUE}sudo apt-get install$MISSING_SYS${NC}"
+            if [ -t 0 ] && [ "$FORCE_BUILD" = "false" ]; then
+                read -p "Attempt to install with sudo? (y/n) " -n 1 -r
+                echo ""
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    sudo apt-get update && sudo apt-get install -y $MISSING_SYS || {
+                        echo -e "${RED}[!] Failed to install system packages${NC}"
+                        exit 1
+                    }
+                fi
+            fi
+        fi
+    fi
 fi
 
 echo -e "[*] Installing required libraries ($DEPS)..."
@@ -182,6 +205,9 @@ rm -rf dist build
 
 # Run PyInstaller via the python module interface for maximum platform compatibility
 echo -e "[*] Invoking PyInstaller spec..."
+if [ "$OS_TYPE" != "Darwin" ]; then
+    export GI_TYPELIB_PATH="/usr/lib/x86_64-linux-gnu/girepository-1.0"
+fi
 if python -m PyInstaller --noconfirm --clean pdf_generator.spec; then
     echo ""
     echo -e "${BLUE}========================================================${NC}"
