@@ -21,11 +21,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb python3-tk
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-test-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            pip-test-${{ matrix.python-version }}-
 
       - name: Install dependencies
         run: |
@@ -36,9 +38,4 @@ jobs:
         run: python -m ruff check src/ tests/
 
       - name: Test with pytest
-        run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            xvfb-run python -m pytest tests/ -v --tb=short
-          else
-            python -m pytest tests/ -v --tb=short
-          fi
+        run: python -m pytest tests/ -v --tb=short
