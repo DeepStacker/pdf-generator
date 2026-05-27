@@ -1,4 +1,4 @@
-.PHONY: test lint typecheck clean
+.PHONY: test lint typecheck clean build format
 
 PYTHON := python3
 PACKAGE := audit_engine

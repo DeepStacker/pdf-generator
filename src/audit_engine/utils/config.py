@@ -116,7 +116,7 @@ class Paths:
 class BankFingerprints:
     idfc: frozenset[str] = frozenset({"prospectno", "cuid", "tare weight", "currentbranch"})
     equitas: frozenset[str] = frozenset({"svs_loan_no", "sole_id", "branch_name", "loan no"})
-    arvog: frozenset[str] = frozenset({"jewellery1", "jewellery2"})
+    arvog: frozenset[str] = frozenset({"jewellery1", "jewellery2", "jewellery no.", "packets number"})
 
 
 @dataclass(frozen=True)

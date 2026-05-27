@@ -227,7 +227,28 @@ def _extract_archive(archive_path: str, extract_to: str) -> None:
                 member_path = os.path.normpath(os.path.join(extract_to, zip_member.filename))
                 if not member_path.startswith(os.path.normpath(extract_to)):
                     raise RuntimeError(f"Path traversal detected in update archive: {zip_member.filename}")
-            zf.extractall(extract_to)
+
+                # Create parent directory
+                os.makedirs(os.path.dirname(member_path), exist_ok=True)
+
+                # Check for symlink attribute (0xA000 in high-order word of external_attr)
+                is_symlink = (zip_member.external_attr >> 16) & 0o170000 == 0o120000
+                if is_symlink:
+                    link_target = zf.read(zip_member).decode("utf-8").strip()
+                    if os.path.lexists(member_path):
+                        with contextlib.suppress(OSError):
+                            os.remove(member_path)
+                    os.symlink(link_target, member_path)
+                else:
+                    if zip_member.is_dir():
+                        os.makedirs(member_path, exist_ok=True)
+                    else:
+                        with zf.open(zip_member) as source, open(member_path, "wb") as target:
+                            _shutil.copyfileobj(source, target)
+                        # Restore file permissions
+                        attr = zip_member.external_attr >> 16
+                        if attr:
+                            os.chmod(member_path, attr)
 
 
 def _is_macos_app_bundle() -> bool:

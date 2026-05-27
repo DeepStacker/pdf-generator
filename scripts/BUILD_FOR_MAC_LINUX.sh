@@ -186,7 +186,7 @@ if python -m PyInstaller --noconfirm --clean pdf_generator.spec; then
     OUT_FILE=""
     if [ -f "dist/Audit_Engine_Elite" ]; then
         OUT_FILE="dist/Audit_Engine_Elite"
-    elif [ -f "dist/Audit_Engine_Elite.app" ]; then
+    elif [ -d "dist/Audit_Engine_Elite.app" ]; then
         OUT_FILE="dist/Audit_Engine_Elite.app"
     fi
     
