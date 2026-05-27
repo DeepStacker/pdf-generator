@@ -239,16 +239,15 @@ def _extract_archive(archive_path: str, extract_to: str) -> None:
                         with contextlib.suppress(OSError):
                             os.remove(member_path)
                     os.symlink(link_target, member_path)
+                elif zip_member.is_dir():
+                    os.makedirs(member_path, exist_ok=True)
                 else:
-                    if zip_member.is_dir():
-                        os.makedirs(member_path, exist_ok=True)
-                    else:
-                        with zf.open(zip_member) as source, open(member_path, "wb") as target:
-                            _shutil.copyfileobj(source, target)
-                        # Restore file permissions
-                        attr = zip_member.external_attr >> 16
-                        if attr:
-                            os.chmod(member_path, attr)
+                    with zf.open(zip_member) as source, open(member_path, "wb") as target:
+                        _shutil.copyfileobj(source, target)
+                    # Restore file permissions
+                    attr = zip_member.external_attr >> 16
+                    if attr:
+                        os.chmod(member_path, attr)
 
 
 def _is_macos_app_bundle() -> bool:
