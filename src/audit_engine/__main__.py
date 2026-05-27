@@ -29,11 +29,7 @@ def _is_unsafe_vm_or_net_path(path: str) -> bool:
     Windows WebViews block script execution from UNC paths.
     """
     path_lower = path.lower()
-    if path.startswith(("\\\\", "//")):
-        return True
-    if "/media/psf" in path_lower or "/mnt/psf" in path_lower or "prl_fs" in path_lower:
-        return True
-    return False
+    return path.startswith(("\\\\", "//")) or "/media/psf" in path_lower or "/mnt/psf" in path_lower or "prl_fs" in path_lower
 
 
 def _get_writable_temp_dir() -> str:

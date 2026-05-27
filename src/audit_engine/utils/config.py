@@ -7,6 +7,7 @@ Path resolution order for database and log files:
 4. System temp directory (last resort, always writable)
 """
 
+import contextlib
 import os
 import sys
 import tempfile
@@ -21,16 +22,7 @@ def _is_unsafe_vm_or_net_path(path: str) -> bool:
     Windows WebViews block script execution from UNC paths.
     """
     path_lower = path.lower()
-
-    # 1. Windows UNC / network shares (starts with \\ or //)
-    if path.startswith(("\\\\", "//")):
-        return True
-
-    # 2. Parallels VM shared folders on Linux / macOS
-    if "/media/psf" in path_lower or "/mnt/psf" in path_lower or "prl_fs" in path_lower:
-        return True
-
-    return False
+    return path.startswith(("\\\\", "//")) or "/media/psf" in path_lower or "/mnt/psf" in path_lower or "prl_fs" in path_lower
 
 
 def _get_platform_local_dir() -> str | None:
@@ -109,10 +101,8 @@ def _resolve_writable_path(filename: str, env_var: str) -> str:
 
     # 5. System temp directory (always writable for standard users)
     temp_dir = tempfile.gettempdir()
-    try:
+    with contextlib.suppress(Exception):
         os.makedirs(temp_dir, exist_ok=True)
-    except Exception:
-        pass
     return os.path.join(temp_dir, filename)
 
 
