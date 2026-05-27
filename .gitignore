@@ -45,3 +45,9 @@ BUILD_FOR_MAC_LINUX.sh
 BUILD_FOR_WINDOWS.bat
 entitlements.plist
 requirements.txt
+
+# Coverage
+.coverage
+
+# Pyodide web app (on web-app-pyodide branch only)
+web/

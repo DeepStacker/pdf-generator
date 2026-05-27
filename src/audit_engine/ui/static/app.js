@@ -115,9 +115,13 @@
         const arvogOutputDir = document.getElementById('arvogOutputDir');
 
         // HEARTBEAT self-termination loop (keeps server alive while window is open)
+        // In pywebview IPC mode, heartbeats are unnecessary — window close = app exit.
+        // Only send heartbeats in browser fallback mode (non-corporate environments).
         setInterval(() => {
-            fetch('/api/heartbeat')
-                .catch(() => console.warn('Heartbeat server unreachable.'));
+            if (!window.pywebview) {
+                fetch('/api/heartbeat')
+                    .catch(() => console.warn('Heartbeat server unreachable.'));
+            }
         }, 15000);
 
         // INITIALIZATION

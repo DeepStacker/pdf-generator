@@ -148,27 +148,60 @@ update_state: UpdateState = UpdateState()
 
 
 def _make_ssl_context() -> ssl.SSLContext:
+    """Create an SSL context suitable for corporate environments.
+
+    Priority order:
+    1. System certificate store (includes corporate CA certs from Sophos/MITM proxies)
+    2. Bundled certifi CA bundle (fallback for environments without system certs)
+    3. Default Python SSL context (last resort)
+    """
+    # Try system cert store first — corporate environments inject their CA here
+    try:
+        ctx = ssl.create_default_context()
+        # On Windows, ssl.create_default_context() automatically loads the Windows cert store.
+        # On macOS, it loads the Keychain. On Linux, it uses /etc/ssl/certs.
+        return ctx
+    except Exception as exc:
+        file_logger.warning("System cert store unavailable: %s", exc)
+
+    # Fallback to bundled certifi
     try:
         import certifi
         cafile = certifi.where()
         if os.path.exists(cafile):
             return ssl.create_default_context(cafile=cafile)
     except Exception as exc:
-        file_logger.warning("SSL context init: %s", exc)
+        file_logger.warning("Certifi fallback failed: %s", exc)
+
     return ssl.create_default_context()
 
 
-def _urlopen_with_fallback(req: _urllib.Request, timeout: int = 10) -> HTTPResponse:
+def _urlopen_with_fallback(req: _urllib.Request, timeout: int = 15) -> HTTPResponse:
+    """Open a URL with SSL fallback and proxy awareness.
+
+    Corporate environments may:
+    - Use MITM SSL inspection (Sophos, Zscaler) — handled by system cert store
+    - Route through HTTP/HTTPS proxies — handled by ProxyHandler
+    - Have slow networks — handled by increased timeouts
+    """
     ctx = _make_ssl_context()
+
+    # Build an opener that respects system proxy settings (HTTP_PROXY, HTTPS_PROXY, etc.)
+    proxy_handler = _urllib.ProxyHandler()  # Auto-detects system proxy
+    https_handler = _urllib.HTTPSHandler(context=ctx)
+    opener = _urllib.build_opener(proxy_handler, https_handler)
+
     try:
-        return _urllib.urlopen(req, context=ctx, timeout=timeout)
+        return opener.open(req, timeout=timeout)
     except _urlerror.URLError as e:
         if "CERTIFICATE_VERIFY_FAILED" in str(e):
-            file_logger.warning("SSL cert verification failed, attempting without verification")
+            file_logger.warning("SSL cert verification failed — retrying without verification (corporate MITM likely)")
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-            return _urllib.urlopen(req, context=ctx, timeout=timeout)
+            https_handler = _urllib.HTTPSHandler(context=ctx)
+            opener = _urllib.build_opener(proxy_handler, https_handler)
+            return opener.open(req, timeout=timeout)
         raise
 
 

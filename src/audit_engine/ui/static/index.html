@@ -542,19 +542,19 @@
 
             <!-- Navigation Links -->
             <nav class="nav-links flex-1 px-2 py-3 space-y-0.5">
-                <button onclick="switchTab('PROCESS')" id="tabBtn-PROCESS" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-slate-800 text-white nav-btn">
+                <button onclick="switchTab('PROCESS')" id="tabBtn-PROCESS" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 nav-btn active">
                     <svg class="icon w-4 h-4 shrink-0" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     <span>New Batch</span>
                 </button>
-                <button onclick="switchTab('STATS')" id="tabBtn-STATS" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 nav-btn">
+                <button onclick="switchTab('STATS')" id="tabBtn-STATS" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 nav-btn">
                     <svg class="icon w-4 h-4 shrink-0" viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
                     <span>Analytics</span>
                 </button>
-                <button onclick="switchTab('HISTORY')" id="tabBtn-HISTORY" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 nav-btn">
+                <button onclick="switchTab('HISTORY')" id="tabBtn-HISTORY" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 nav-btn">
                     <svg class="icon w-4 h-4 shrink-0" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
                     <span>History</span>
                 </button>
-                <button onclick="switchTab('SETTINGS')" id="tabBtn-SETTINGS" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 nav-btn">
+                <button onclick="switchTab('SETTINGS')" id="tabBtn-SETTINGS" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 nav-btn">
                     <svg class="icon w-4 h-4 shrink-0" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
                     <span>Settings</span>
                 </button>
@@ -1685,10 +1685,11 @@
                 logoCopyright.textContent = '© 2026 Equitas Small Finance Bank';
             }
 
-            // 2. Adjust active sidebar navigation indicator
+            // 2. Ensure active sidebar navigation indicator is correct
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
             const activeBtn = document.getElementById(`tabBtn-${state.activeTab}`);
             if (activeBtn) {
-                activeBtn.className = `w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-slate-800 text-white nav-btn`;
+                activeBtn.classList.add('active');
             }
 
             // 3. Inject CSS dynamically for classes marked as "dynamic-accent-*"
@@ -1743,14 +1744,14 @@
             
             // Update navigation button active styles
             document.querySelectorAll('.nav-btn').forEach(btn => {
-                btn.className = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 nav-btn';
+                btn.classList.remove('active');
             });
             
             const isIDFC = (state.activeBank === 'IDFC First Bank');
             const isArvog = (state.activeBank === 'Arvog Bank');
             const activeBtn = document.getElementById(`tabBtn-${tabId}`);
             if (activeBtn) {
-                activeBtn.className = `w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-slate-800 text-white nav-btn`;
+                activeBtn.classList.add('active');
             }
 
             // Hide all tab sections
