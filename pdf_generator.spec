@@ -66,7 +66,6 @@ a = Analysis(
         'webview.platforms.qt',
         'gi',
         'gi._enum',
-        'gi._option',
         'gi.repository.GIRepository',
         # --- Tkinter (file dialogs) ---
         '_tkinter',
