@@ -377,7 +377,18 @@ def _check_latest_release() -> tuple[str, str, str, str, str]:
                 try:
                     req_hash = _urllib.Request(asset["browser_download_url"], headers={"User-Agent": f"AuditEngine/{VERSION}"})
                     with _urlopen_with_fallback(req_hash, timeout=10) as resp_hash:
-                        expected_sha256 = resp_hash.read().decode().strip().split()[0]
+                        raw_data = resp_hash.read()
+                        # Try decoding with multiple encodings (including UTF-16 with BOM for Windows certutil logs)
+                        for encoding in ("utf-8", "utf-16", "ascii", "latin-1"):
+                            try:
+                                text = raw_data.decode(encoding)
+                                import re
+                                match = re.search(r"\b([a-fA-F0-9]{64})\b", text)
+                                if match:
+                                    expected_sha256 = match.group(1).lower()
+                                    break
+                            except Exception:
+                                continue
                 except Exception as exc:
                     file_logger.warning("Could not fetch checksum asset: %s", exc)
                 break

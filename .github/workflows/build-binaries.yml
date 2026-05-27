@@ -83,8 +83,8 @@ jobs:
         run: |
           $TAG = "${{ needs.setup.outputs.tag }}"
           Compress-Archive -Path dist\* -DestinationPath "Audit_Engine_${TAG}_binary_windows.zip"
-          certutil -hashfile "Audit_Engine_${TAG}_binary_windows.zip" SHA256 ^
-            | findstr /v "hash" > "Audit_Engine_${TAG}_binary_windows.zip.sha256"
+          $hash = (Get-FileHash "Audit_Engine_${TAG}_binary_windows.zip" -Algorithm SHA256).Hash.ToLower()
+          [System.IO.File]::WriteAllText("Audit_Engine_${TAG}_binary_windows.zip.sha256", $hash)
       - name: Upload to release
         shell: pwsh
         env:
