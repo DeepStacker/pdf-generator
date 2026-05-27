@@ -14,7 +14,15 @@ datas = [
     (ui_static, 'audit_engine/ui/static'),
 ] + collect_data_files('certifi') + collect_data_files('webview')
 
-np_extra = [m for m in collect_submodules('numpy.random') if isinstance(m, str)]
+def safe_collect_submodules(package_name):
+    try:
+        return [m for m in collect_submodules(package_name) if isinstance(m, str)]
+    except Exception:
+        return []
+
+np_extra = safe_collect_submodules('numpy.random')
+webview_extra = safe_collect_submodules('webview')
+comtypes_extra = safe_collect_submodules('comtypes')
 
 a = Analysis(
     ['src/audit_engine/__main__.py'],
@@ -89,7 +97,7 @@ a = Analysis(
         '_multiprocessing',
         'multiprocessing',
         'multiprocessing.reduction',
-    ] + np_extra,
+    ] + np_extra + webview_extra + comtypes_extra,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

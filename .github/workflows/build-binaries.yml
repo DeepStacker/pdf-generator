@@ -60,7 +60,7 @@ jobs:
           path: ~\AppData\Local\pyinstaller
           key: pyi-win-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-win-
-      - run: pip install pyinstaller pywebview reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
+      - run: pip install pyinstaller pywebview comtypes reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
       - name: Verify Tcl/Tk environment
         run: |
           python -c "import sys; print('Python:', sys.executable)"
