@@ -262,6 +262,13 @@ print('GI modules OK')
         glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || true
 fi
 
+# Strip DT_RUNPATH from libraries for StaticX compatibility (must be done before PyInstaller)
+if [ "$OS_TYPE" != "Darwin" ] && command -v patchelf &>/dev/null; then
+    echo -e "[*] Stripping DT_RUNPATH from shared libraries for StaticX compatibility..."
+    find /usr/lib /usr/local/lib -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>/dev/null || true
+    echo -e "[*] RUNPATH stripping: ${GREEN}DONE${NC}"
+fi
+
 # Run PyInstaller via the python module interface for maximum platform compatibility
 echo -e "[*] Invoking PyInstaller spec..."
 if python -m PyInstaller --noconfirm --clean pdf_generator.spec; then
