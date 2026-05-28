@@ -27,7 +27,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.page import PageMargins
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import (
@@ -70,12 +70,8 @@ _header_style = ParagraphStyle(
     alignment=TA_CENTER, leading=8, wordWrap="CJK",
 )
 _body_style = ParagraphStyle(
-    "eq_body", fontName="Helvetica", fontSize=6.2,
-    alignment=TA_CENTER, leading=7, wordWrap="CJK",
-)
-_left_body_style = ParagraphStyle(
-    "eq_left_body", fontName="Helvetica", fontSize=6.2,
-    alignment=TA_LEFT, leading=7, wordWrap="CJK",
+    "eq_body", fontName="Helvetica", fontSize=7.0,
+    alignment=TA_CENTER, leading=8, wordWrap="CJK",
 )
 
 
@@ -400,8 +396,7 @@ class EquitasService:
             Paragraph("<b>BRANCH SOL ID</b>", _header_style), "",
             Paragraph(self.safe_value(branch_sole_id), _header_style),
             Paragraph("<b>BRANCH In Time</b>", _header_style), "", "",
-            Paragraph(f"<b>PAGE</b><br/>{page_no}/{total_pages}", _header_style),
-            Paragraph(f"<b>TOTAL</b><br/>{total_accounts}", _header_style),
+            "", "",
             Paragraph("<b>Audit Start Time</b>", _header_style), "",
             "", "",
             Paragraph("<b>Audit Completed Time</b>", _header_style), "",
@@ -426,11 +421,11 @@ class EquitasService:
             Paragraph("DATE OF LOAN", _header_style),
             Paragraph("QTY", _header_style),
             Paragraph("GROSS WEIGHT", _header_style),
-            Paragraph("TARE WEIGHT", _header_style),
-            Paragraph("NEW PACKET", _header_style),
+            Paragraph("TARE<br/>WEIGHT", _header_style),
+            Paragraph("NEW PACKET NO", _header_style),
             Paragraph("CARRAT", _header_style),
             Paragraph("ACTUAL QTY", _header_style),
-            Paragraph("ACTUAL GROSS", _header_style),
+            Paragraph("ACTUAL<br/>GROSS WT", _header_style),
             Paragraph("STONE WT", _header_style),
             Paragraph("IMPURITY", _header_style),
             Paragraph("ACTUAL NET WT", _header_style),
@@ -444,8 +439,8 @@ class EquitasService:
             data.append([
                 Paragraph(self.safe_value(row["SR_NO"]), _body_style),
                 Paragraph(self.safe_value(row.get(self.NORMAL_COLUMNS["loan_no"], "")), _body_style),
-                Paragraph(customer_name, _left_body_style),
-                Paragraph(ornament, _left_body_style),
+                Paragraph(customer_name, _body_style),
+                Paragraph(ornament, _body_style),
                 Paragraph(self.safe_float(row.get(self.JSR_COLUMNS["sanctioned_amount"], "")), _body_style),
                 Paragraph(self.safe_value(row.get(self.JSR_COLUMNS["old_packet_no"], "")), _body_style),
                 Paragraph(self.format_date(row.get(self.JSR_COLUMNS["loan_date"], "")), _body_style),
@@ -500,7 +495,7 @@ class EquitasService:
                 branch_sole_id, page_no, total_pages, total_rows,
             )
 
-            row_heights = [25, 16, 35] + [36] * len(page_rows)
+            row_heights = [25, 16, 35] + [38] * len(page_rows)
 
             table = Table(
                 table_data, colWidths=col_widths,
