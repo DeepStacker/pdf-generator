@@ -275,21 +275,7 @@ fi
 # Patch numpy to disable source-tree detection (PyInstaller bundles include/ dirs)
 if [ "$OS_TYPE" != "Darwin" ]; then
     echo -e "[*] Patching numpy _check_local to avoid source-tree false positive..."
-    python3 -c "
-import numpy
-f = numpy.__file__
-with open(f) as fp:
-    c = fp.read()
-old = 'def _check_local():'
-new = 'def _check_local():\n    return False\n    '
-if old in c:
-    c = c.replace(old, new, 1)
-    with open(f, 'w') as fp:
-        fp.write(c)
-    print('OK - patched')
-else:
-    print('WARNING: _check_local not found')
-" 2>&1 || true
+    python3 hooks/patch_numpy.py 2>&1 || true
     echo -e "[*] Numpy patching: ${GREEN}DONE${NC}"
 fi
 
