@@ -148,19 +148,12 @@ a = Analysis(
     ] + np_extra + webview_extra + comtypes_extra,
     hookspath=['hooks'],
     hooksconfig={},
-    runtime_hooks=['hooks/runtime_hook_linux.py', 'hooks/runtime_hook_numpy.py'],
+    runtime_hooks=['hooks/runtime_hook_linux.py'],
     excludes=[
-        # --- numpy source tree detection prevention ---
-        'numpy.core.src',
-        'numpy.distutils',
-        'numpy.f2py',
-        'numpy.random.tests',
-        'numpy.core.tests',
-        'numpy.tests',
-        # --- Unused heavy packages ---
         'torch', 'tensorflow', 'keras', 'scipy', 'transformers', 'cv2',
         'sklearn', 'seaborn', 'matplotlib', 'sqlalchemy', 'botocore',
         'boto3', 'aiohttp', 'httpx', 'jinja2', 'sympy',
+        'numpy.distutils', 'numpy.f2py',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
