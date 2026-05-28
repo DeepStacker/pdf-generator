@@ -45,11 +45,12 @@ if sys.platform == 'linux':
     _schema_dir = '/usr/share/glib-2.0/schemas'
     if os.path.isdir(_schema_dir):
         datas.append((_schema_dir, 'share/glib-2.0/schemas'))
-    # Cache files generated in CI
-    _pixbuf_cache = os.path.join(os.path.dirname(__file__), 'gdk-pixbuf-loaders.cache')
+    # Cache files generated in CI (SPEC is the spec file path set by PyInstaller)
+    _spec_dir = os.path.dirname(SPEC)
+    _pixbuf_cache = os.path.join(_spec_dir, 'gdk-pixbuf-loaders.cache')
     if os.path.isfile(_pixbuf_cache):
         datas.append((_pixbuf_cache, 'gdk-pixbuf-loaders.cache'))
-    _gtk_im_cache = os.path.join(os.path.dirname(__file__), 'gtk-immodules.cache')
+    _gtk_im_cache = os.path.join(_spec_dir, 'gtk-immodules.cache')
     if os.path.isfile(_gtk_im_cache):
         datas.append((_gtk_im_cache, 'gtk-immodules.cache'))
 
