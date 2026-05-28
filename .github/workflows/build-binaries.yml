@@ -231,6 +231,24 @@ jobs:
           find /opt/hostedtoolcache/Python -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
           sudo find /usr/lib /usr/local/lib -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
           echo "Done stripping RUNPATH"
+      - name: Patch numpy to disable source-tree detection at build time
+        run: |
+          python3 -c "
+import numpy
+f = numpy.__file__
+with open(f) as fp:
+    c = fp.read()
+old = 'def _check_local():'
+new = 'def _check_local():\n    return False\n    '
+if old in c:
+    c = c.replace(old, new, 1)
+    with open(f, 'w') as fp:
+        fp.write(c)
+    print(f'Patched {f}')
+else:
+    print(f'WARNING: could not find _check_local in {f}')
+"
+          python3 -c "import numpy; print('numpy import OK after patch')"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - name: Bundle all shared libraries with StaticX
         run: |

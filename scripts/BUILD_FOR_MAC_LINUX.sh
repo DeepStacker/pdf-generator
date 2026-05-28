@@ -272,6 +272,27 @@ if [ "$OS_TYPE" != "Darwin" ] && command -v patchelf &>/dev/null; then
     echo -e "[*] RUNPATH stripping: ${GREEN}DONE${NC}"
 fi
 
+# Patch numpy to disable source-tree detection (PyInstaller bundles include/ dirs)
+if [ "$OS_TYPE" != "Darwin" ]; then
+    echo -e "[*] Patching numpy _check_local to avoid source-tree false positive..."
+    python3 -c "
+import numpy
+f = numpy.__file__
+with open(f) as fp:
+    c = fp.read()
+old = 'def _check_local():'
+new = 'def _check_local():\n    return False\n    '
+if old in c:
+    c = c.replace(old, new, 1)
+    with open(f, 'w') as fp:
+        fp.write(c)
+    print('OK - patched')
+else:
+    print('WARNING: _check_local not found')
+" 2>&1 || true
+    echo -e "[*] Numpy patching: ${GREEN}DONE${NC}"
+fi
+
 # Run PyInstaller via the python module interface for maximum platform compatibility
 echo -e "[*] Invoking PyInstaller spec..."
 if python -m PyInstaller --noconfirm --clean pdf_generator.spec; then
