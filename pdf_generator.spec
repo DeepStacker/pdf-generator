@@ -43,6 +43,17 @@ if sys.platform == 'linux':
     _schema_dir = '/usr/share/glib-2.0/schemas'
     if os.path.isdir(_schema_dir):
         datas.append((_schema_dir, 'share/glib-2.0/schemas'))
+    # WebKit2GTK helper subprocess binaries (WebKitWebProcess, WebKitNetworkProcess, WebKitGPUProcess)
+    _webkit_helper_dir = '/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1'
+    if os.path.isdir(_webkit_helper_dir):
+        for _f in _glob.glob(os.path.join(_webkit_helper_dir, 'WebKit*')):
+            datas.append((_f, 'webkit2gtk-4.1'))
+        for _f in _glob.glob(os.path.join(_webkit_helper_dir, 'MiniBrowser')):
+            datas.append((_f, 'webkit2gtk-4.1'))
+        _inj_dir = os.path.join(_webkit_helper_dir, 'injected-bundle')
+        if os.path.isdir(_inj_dir):
+            for _f in _glob.glob(os.path.join(_inj_dir, '*.so')):
+                datas.append((_f, 'webkit2gtk-4.1/injected-bundle'))
     # Cache files generated in CI (SPEC is the spec file path set by PyInstaller)
     _spec_dir = os.path.dirname(SPEC)
     _pixbuf_cache = os.path.join(_spec_dir, 'gdk-pixbuf-loaders.cache')

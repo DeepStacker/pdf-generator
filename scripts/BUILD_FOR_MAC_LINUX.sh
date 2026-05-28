@@ -262,13 +262,33 @@ print('GI modules OK')
         glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || true
 fi
 
-# Strip DT_RUNPATH from libraries for StaticX compatibility (must be done before PyInstaller)
+# Patch WebKit library for relocatable helper binaries (StaticX)
+if [ "$OS_TYPE" != "Darwin" ]; then
+    echo -e "[*] Patching libwebkit2gtk-4.1.so: /usr -> /tmp (StaticX relocatability)..."
+    sudo python3 -c "
+import os
+for lib_path in ['/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0']:
+    if os.path.exists(lib_path):
+        with open(lib_path, 'rb') as f:
+            data = f.read()
+        count = data.count(b'/usr')
+        data = data.replace(b'/usr', b'/tmp')
+        with open(lib_path, 'wb') as f:
+            f.write(data)
+        print(f'  Patched {lib_path}: {count} replacements')
+    else:
+        print(f'  SKIP {lib_path}: not found')
+"
+fi
+
+# Strip DT_RUNPATH from libraries for StaticX compatibility
 if [ "$OS_TYPE" != "Darwin" ] && command -v patchelf &>/dev/null; then
     echo -e "[*] Stripping DT_RUNPATH from shared libraries for StaticX compatibility..."
-    # User-owned libraries (Python, pip-installed packages, etc.)
-    find /opt/homebrew /usr/local /opt -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>/dev/null || true
-    # System libraries (root-owned, needs sudo)
-    sudo find /usr/lib -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>/dev/null || true
+    # Only strip libproxy and Python toolcache files (not numpy which needs OpenBLAS)
+    find /opt/homebrew /usr/local /opt -path '*/lib-dynload/*.so*' -type f -exec patchelf --remove-rpath {} \; 2>/dev/null || true
+    find /opt/homebrew /usr/local /opt -name 'libpython3*.so*' -type f -exec patchelf --remove-rpath {} \; 2>/dev/null || true
+    sudo find /usr/lib -name 'libproxy*' -type f -exec patchelf --remove-rpath {} \; 2>/dev/null || true
+    sudo find /usr/lib -name 'libpxbackend*' -type f -exec patchelf --remove-rpath {} \; 2>/dev/null || true
     echo -e "[*] RUNPATH stripping: ${GREEN}DONE${NC}"
 fi
 

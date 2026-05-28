@@ -49,5 +49,19 @@ pango_mod_dir = os.path.join(base_path, 'pango', 'modules')
 if os.path.isdir(pango_mod_dir):
     os.environ['PANGO_LIBDIR'] = pango_mod_dir
 
+# WebKit2GTK helper subprocess binaries — patched libwebkit2gtk-4.1.so expects
+# them at /tmp/lib/x86_64-linux-gnu/webkit2gtk-4.1/ (was /usr/... before patching).
+# Create a symlink from the patched location to the bundle's webkit2gtk-4.1/ dir.
+webkit_src = os.path.join(base_path, 'webkit2gtk-4.1')
+webkit_dst = '/tmp/lib/x86_64-linux-gnu/webkit2gtk-4.1'
+if os.path.isdir(webkit_src):
+    try:
+        os.makedirs(os.path.dirname(webkit_dst), exist_ok=True)
+        if os.path.islink(webkit_dst) or os.path.isdir(webkit_dst):
+            os.unlink(webkit_dst)
+        os.symlink(webkit_src, webkit_dst)
+    except OSError:
+        pass
+
 # Prevent GTK from loading system modules we didn't bundle
 os.environ['GTK_MODULES'] = ''
