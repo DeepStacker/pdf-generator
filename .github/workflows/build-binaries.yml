@@ -228,8 +228,11 @@ jobs:
       - name: Strip DT_RUNPATH from libraries (required for StaticX compatibility)
         run: |
           echo "Stripping DT_RUNPATH from all bundled .so files..."
-          find /opt/hostedtoolcache/Python -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
-          sudo find /usr/lib /usr/local/lib -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
+          # Only strip libproxy and Python toolcache files (not numpy which needs OpenBLAS)
+          find /opt/hostedtoolcache/Python -path '*/python3.12/lib-dynload/*.so*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
+          patchelf --remove-rpath /opt/hostedtoolcache/Python/3.12.13/x64/lib/libpython3.12.so.1.0 2>&1 || true
+          sudo find /usr/lib -name 'libproxy*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
+          sudo find /usr/lib -name 'libpxbackend*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
           echo "Done stripping RUNPATH"
       - name: Patch numpy to disable source-tree detection at build time
         run: |
