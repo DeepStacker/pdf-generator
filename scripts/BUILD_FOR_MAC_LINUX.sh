@@ -217,14 +217,46 @@ print('GI modules OK')
 " || echo -e "${YELLOW}[!] GI pre-query had warnings (non-fatal)${NC}"
     # Generate GTK runtime caches
     echo -e "[*] Generating GdkPixbuf loaders cache..."
-    gdk-pixbuf-query-loaders /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/*.so \
-        > gdk-pixbuf-loaders.cache 2>/dev/null
-    sed -i 's|/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/|@MEIPASS@/gdk-pixbuf-loaders/|g' \
-        gdk-pixbuf-loaders.cache 2>/dev/null
+    GDK_QUERY=$(pkg-config --variable=gdk_pixbuf_query_loaders gdk-pixbuf-2.0 2>/dev/null)
+    if [ -z "$GDK_QUERY" ] || [ ! -x "$GDK_QUERY" ]; then
+      GDK_QUERY=$(find /usr/lib /usr/bin -name 'gdk-pixbuf-query-loaders' -type f 2>/dev/null | head -1)
+    fi
+    if [ -n "$GDK_QUERY" ] && [ -x "$GDK_QUERY" ]; then
+      LOADERS_DIR=$(pkg-config --variable=gdk_pixbuf_moduledir gdk-pixbuf-2.0 2>/dev/null)
+      if [ -z "$LOADERS_DIR" ]; then
+        LOADERS_DIR=$(find /usr/lib -path '*/gdk-pixbuf-2.0/*/loaders' -type d 2>/dev/null | head -1)
+      fi
+      if [ -n "$LOADERS_DIR" ] && [ -d "$LOADERS_DIR" ]; then
+        "$GDK_QUERY" "$LOADERS_DIR"/*.so > gdk-pixbuf-loaders.cache 2>/dev/null
+      else
+        "$GDK_QUERY" > gdk-pixbuf-loaders.cache 2>/dev/null
+      fi
+      MODULE_DIR=$(dirname "$LOADERS_DIR" 2>/dev/null || echo "/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders")
+      sed -i "s|$MODULE_DIR/|@MEIPASS@/gdk-pixbuf-loaders/|g" gdk-pixbuf-loaders.cache 2>/dev/null
+      echo -e "[*] GdkPixbuf cache: ${GREEN}OK${NC}"
+    else
+      echo -e "${YELLOW}[!] gdk-pixbuf-query-loaders not found, skipping pixbuf cache${NC}"
+    fi
+
     echo -e "[*] Generating GTK immodules cache..."
-    gtk-query-immodules-3.0 > gtk-immodules.cache 2>/dev/null
-    sed -i 's|/usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules/|@MEIPASS@/gtk-immodules/|g' \
-        gtk-immodules.cache 2>/dev/null
+    GTK_QUERY=$(pkg-config --variable=gtk_query_immodules gtk+-3.0 2>/dev/null || true)
+    if [ -z "$GTK_QUERY" ] || [ ! -x "$GTK_QUERY" ]; then
+      GTK_QUERY=$(find /usr/lib /usr/bin -name 'gtk-query-immodules-3.0' -type f 2>/dev/null | head -1)
+    fi
+    if [ -n "$GTK_QUERY" ] && [ -x "$GTK_QUERY" ]; then
+      "$GTK_QUERY" > gtk-immodules.cache 2>/dev/null
+      GTK_IMMODULE_DIR=$(sed -n 's|"\(.*\)/im-.*\.so"|\1|p' gtk-immodules.cache 2>/dev/null | head -1)
+      if [ -z "$GTK_IMMODULE_DIR" ]; then
+        GTK_IMMODULE_DIR=$(find /usr/lib -path '*/gtk-3.0/*/immodules' -type d 2>/dev/null | head -1)
+      fi
+      if [ -n "$GTK_IMMODULE_DIR" ]; then
+        sed -i "s|$GTK_IMMODULE_DIR/|@MEIPASS@/gtk-immodules/|g" gtk-immodules.cache 2>/dev/null
+      fi
+      echo -e "[*] GTK immodules cache: ${GREEN}OK${NC}"
+    else
+      echo -e "${YELLOW}[!] gtk-query-immodules-3.0 not found, skipping immodules cache${NC}"
+    fi
+
     echo -e "[*] Compiling GLib schemas..."
     sudo glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || \
         glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || true
