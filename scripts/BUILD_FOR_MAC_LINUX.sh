@@ -160,11 +160,11 @@ $PIP_INSTALL --upgrade pip --quiet 2>/dev/null || echo -e "${YELLOW}[!] Non-crit
 # Determine dependencies list (Linux needs pygobject for PyWebView GTK3/WebKit2 support)
 DEPS="openpyxl pandas reportlab pyinstaller pywebview"
 if [ "$OS_TYPE" != "Darwin" ]; then
-    DEPS="$DEPS pygobject"
+    DEPS="$DEPS pygobject staticx"
     # Check and suggest system dependencies for Linux
     if command -v apt-get &>/dev/null; then
         MISSING_SYS=""
-        for pkg in libgirepository-2.0-dev libcairo2-dev pkg-config gobject-introspection libgtk-3-dev libwebkit2gtk-4.1-dev gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-girepository-2.0; do
+        for pkg in patchelf libgirepository-2.0-dev libcairo2-dev pkg-config gobject-introspection libgtk-3-dev libwebkit2gtk-4.1-dev gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-girepository-3.0 gir1.2-soup-3.0; do
             if ! dpkg -s "$pkg" &>/dev/null; then
                 MISSING_SYS="$MISSING_SYS $pkg"
             fi
@@ -203,16 +203,52 @@ echo -e "${BLUE}========================================================${NC}"
 echo -e "[*] Cleaning old build files..."
 rm -rf dist build
 
+# Pre-query GI modules so PyInstaller's GI hooks find the typelibs
+if [ "$OS_TYPE" != "Darwin" ]; then
+    echo -e "[*] Pre-querying GI modules for PyInstaller cache..."
+    export GI_TYPELIB_PATH="/usr/lib/x86_64-linux-gnu/girepository-1.0"
+    python3 -c "
+import gi
+gi.require_version('GIRepository', '3.0'); from gi.repository import GIRepository
+gi.require_version('Gtk', '3.0'); from gi.repository import Gtk, Gdk, GLib, Gio
+gi.require_version('WebKit2', '4.1'); from gi.repository import WebKit2
+gi.require_version('Soup', '3.0'); from gi.repository import Soup
+print('GI modules OK')
+" || echo -e "${YELLOW}[!] GI pre-query had warnings (non-fatal)${NC}"
+    # Generate GTK runtime caches
+    echo -e "[*] Generating GdkPixbuf loaders cache..."
+    gdk-pixbuf-query-loaders /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/*.so \
+        > gdk-pixbuf-loaders.cache 2>/dev/null
+    sed -i 's|/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/|@MEIPASS@/gdk-pixbuf-loaders/|g' \
+        gdk-pixbuf-loaders.cache 2>/dev/null
+    echo -e "[*] Generating GTK immodules cache..."
+    gtk-query-immodules-3.0 > gtk-immodules.cache 2>/dev/null
+    sed -i 's|/usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules/|@MEIPASS@/gtk-immodules/|g' \
+        gtk-immodules.cache 2>/dev/null
+    echo -e "[*] Compiling GLib schemas..."
+    sudo glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || \
+        glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || true
+fi
+
 # Run PyInstaller via the python module interface for maximum platform compatibility
 echo -e "[*] Invoking PyInstaller spec..."
-if [ "$OS_TYPE" != "Darwin" ]; then
-    export GI_TYPELIB_PATH="/usr/lib/x86_64-linux-gnu/girepository-1.0"
-fi
 if python -m PyInstaller --noconfirm --clean pdf_generator.spec; then
     echo ""
     echo -e "${BLUE}========================================================${NC}"
-    echo -e "${GREEN}[+++] SUCCESS: BUILD COMPLETED SUCCESSFULLY! [+++]${NC}"
+    echo -e "${GREEN}[+++] BUILD COMPLETED SUCCESSFULLY! [+++]${NC}"
     echo -e "${BLUE}========================================================${NC}"
+    
+    # Post-process with StaticX on Linux to bundle all shared library dependencies
+    if [ "$OS_TYPE" != "Darwin" ] && [ -f "dist/Audit_Engine_Elite" ]; then
+        echo -e "[*] Bundling all shared library dependencies with StaticX..."
+        if command -v staticx &>/dev/null; then
+            staticx dist/Audit_Engine_Elite dist/Audit_Engine_Elite
+            echo -e "[+] StaticX: ${GREEN}DONE${NC}"
+        else
+            echo -e "${YELLOW}[!] staticx not found, skipping shared library bundling.${NC}"
+            echo -e "${YELLOW}[!] The binary may not run on systems without GTK/WebKit2 installed.${NC}"
+        fi
+    fi
     
     # Locate output
     OUT_FILE=""

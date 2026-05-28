@@ -14,6 +14,45 @@ datas = [
     (ui_static, 'audit_engine/ui/static'),
 ] + collect_data_files('certifi') + collect_data_files('webview')
 
+# --- Linux runtime module collection (GIO, GdkPixbuf, GTK theme, GLib schemas) ---
+if sys.platform == 'linux':
+    import glob as _glob
+    # GIO modules (TLS, proxy, etc.)
+    _gio_dir = '/usr/lib/x86_64-linux-gnu/gio/modules'
+    if os.path.isdir(_gio_dir):
+        for _f in _glob.glob(os.path.join(_gio_dir, '*.so')):
+            datas.append((_f, 'gio/modules'))
+    # GdkPixbuf loader modules (png, svg, etc.)
+    _pixbuf_dir = '/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders'
+    if os.path.isdir(_pixbuf_dir):
+        for _f in _glob.glob(os.path.join(_pixbuf_dir, '*.so')):
+            datas.append((_f, 'gdk-pixbuf-loaders'))
+    # GTK immodules (input methods)
+    _gtk_im_dir = '/usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules'
+    if os.path.isdir(_gtk_im_dir):
+        for _f in _glob.glob(os.path.join(_gtk_im_dir, '*.so')):
+            datas.append((_f, 'gtk-immodules'))
+    # Pango modules
+    _pango_mod_dir = '/usr/lib/x86_64-linux-gnu/pango/1.8.0/modules'
+    if os.path.isdir(_pango_mod_dir):
+        for _f in _glob.glob(os.path.join(_pango_mod_dir, '*.so')):
+            datas.append((_f, 'pango/modules'))
+    # GTK theme (Adwaita — default GTK theme)
+    _theme_dir = '/usr/share/themes/Adwaita'
+    if os.path.isdir(_theme_dir):
+        datas.append((_theme_dir, 'share/themes/Adwaita'))
+    # GLib schemas (GSettings)
+    _schema_dir = '/usr/share/glib-2.0/schemas'
+    if os.path.isdir(_schema_dir):
+        datas.append((_schema_dir, 'share/glib-2.0/schemas'))
+    # Cache files generated in CI
+    _pixbuf_cache = os.path.join(os.path.dirname(__file__), 'gdk-pixbuf-loaders.cache')
+    if os.path.isfile(_pixbuf_cache):
+        datas.append((_pixbuf_cache, 'gdk-pixbuf-loaders.cache'))
+    _gtk_im_cache = os.path.join(os.path.dirname(__file__), 'gtk-immodules.cache')
+    if os.path.isfile(_gtk_im_cache):
+        datas.append((_gtk_im_cache, 'gtk-immodules.cache'))
+
 def safe_collect_submodules(package_name):
     try:
         return [m for m in collect_submodules(package_name) if isinstance(m, str)]
@@ -67,6 +106,8 @@ a = Analysis(
         'gi',
         'gi._enum',
         'gi.repository.GIRepository',
+        'gi.repository.WebKit2',
+        'gi.repository.Soup',
         # --- Tkinter (file dialogs) ---
         '_tkinter',
         'tkinter',
@@ -101,9 +142,9 @@ a = Analysis(
         'multiprocessing',
         'multiprocessing.reduction',
     ] + np_extra + webview_extra + comtypes_extra,
-    hookspath=[],
+    hookspath=['hooks'],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['hooks/runtime_hook_linux.py'],
     excludes=[
         'torch', 'tensorflow', 'keras', 'scipy', 'transformers', 'cv2',
         'sklearn', 'seaborn', 'matplotlib', 'sqlalchemy', 'botocore',
