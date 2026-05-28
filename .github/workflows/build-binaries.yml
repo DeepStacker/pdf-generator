@@ -227,11 +227,9 @@ jobs:
           fi
       - name: Strip DT_RUNPATH from libraries (required for StaticX compatibility)
         run: |
-          echo "Stripping DT_RUNPATH from Python libraries..."
-          find /opt/hostedtoolcache/Python -name '*.so*' -type f -exec patchelf --set-rpath '$ORIGIN' {} \; 2>/dev/null || true
-          echo "Stripping DT_RUNPATH from libproxy..."
-          sudo find /usr/lib -name 'libproxy*' -type f -exec patchelf --set-rpath '$ORIGIN' {} \; 2>/dev/null || true
-          sudo find /usr/lib -name 'libpxbackend*' -type f -exec patchelf --set-rpath '$ORIGIN' {} \; 2>/dev/null || true
+          echo "Stripping DT_RUNPATH from all bundled .so files..."
+          find /opt/hostedtoolcache/Python -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
+          sudo find /usr/lib /usr/local/lib -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
           echo "Done stripping RUNPATH"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - name: Bundle all shared libraries with StaticX

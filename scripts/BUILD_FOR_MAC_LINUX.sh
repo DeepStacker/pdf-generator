@@ -265,11 +265,10 @@ fi
 # Strip DT_RUNPATH from libraries for StaticX compatibility (must be done before PyInstaller)
 if [ "$OS_TYPE" != "Darwin" ] && command -v patchelf &>/dev/null; then
     echo -e "[*] Stripping DT_RUNPATH from shared libraries for StaticX compatibility..."
-    # Python libraries (user-owned, no sudo needed)
-    find /opt/homebrew /usr/local -name '*.so*' -type f -exec patchelf --set-rpath '$ORIGIN' {} \; 2>/dev/null || true
+    # User-owned libraries (Python, pip-installed packages, etc.)
+    find /opt/homebrew /usr/local /opt -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>/dev/null || true
     # System libraries (root-owned, needs sudo)
-    sudo find /usr/lib -name 'libproxy*' -type f -exec patchelf --set-rpath '$ORIGIN' {} \; 2>/dev/null || true
-    sudo find /usr/lib -name 'libpxbackend*' -type f -exec patchelf --set-rpath '$ORIGIN' {} \; 2>/dev/null || true
+    sudo find /usr/lib -name '*.so*' -type f -exec patchelf --remove-rpath {} \; 2>/dev/null || true
     echo -e "[*] RUNPATH stripping: ${GREEN}DONE${NC}"
 fi
 
