@@ -164,7 +164,7 @@ if [ "$OS_TYPE" != "Darwin" ]; then
     # Check and suggest system dependencies for Linux
     if command -v apt-get &>/dev/null; then
         MISSING_SYS=""
-        for pkg in patchelf libgirepository-2.0-dev libcairo2-dev pkg-config gobject-introspection libgtk-3-dev libwebkit2gtk-4.1-dev gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-girepository-3.0 gir1.2-soup-3.0; do
+        for pkg in patchelf libgirepository-2.0-dev libcairo2-dev pkg-config gobject-introspection libgtk-3-dev libgdk-pixbuf-2.0-dev libwebkit2gtk-4.1-dev gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-girepository-3.0 gir1.2-soup-3.0; do
             if ! dpkg -s "$pkg" &>/dev/null; then
                 MISSING_SYS="$MISSING_SYS $pkg"
             fi
