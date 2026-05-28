@@ -1,11 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
-
-numpy_dlls = collect_dynamic_libs('numpy')
 
 # Static assets (UI)
 ui_static = os.path.join('src', 'audit_engine', 'ui', 'static')
@@ -67,7 +65,7 @@ comtypes_extra = safe_collect_submodules('comtypes')
 a = Analysis(
     ['src/audit_engine/__main__.py'],
     pathex=['src'],
-    binaries=numpy_dlls,
+    binaries=[],
     datas=datas,
     hiddenimports=[
         # --- Vendored WSGI ---
@@ -118,6 +116,11 @@ a = Analysis(
         'openpyxl',
         'openpyxl.styles',
         'pandas',
+        'numpy',
+        'numpy.core',
+        'numpy.core._multiarray_umath',
+        'numpy.core._multiarray_tests',
+        'numpy.core.multiarray',
         'certifi',
         'pyexpat',
         '_elementtree',
@@ -147,6 +150,14 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=['hooks/runtime_hook_linux.py'],
     excludes=[
+        # --- numpy source tree detection prevention ---
+        'numpy.core.src',
+        'numpy.distutils',
+        'numpy.f2py',
+        'numpy.random.tests',
+        'numpy.core.tests',
+        'numpy.tests',
+        # --- Unused heavy packages ---
         'torch', 'tensorflow', 'keras', 'scipy', 'transformers', 'cv2',
         'sklearn', 'seaborn', 'matplotlib', 'sqlalchemy', 'botocore',
         'boto3', 'aiohttp', 'httpx', 'jinja2', 'sympy',
