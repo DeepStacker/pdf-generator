@@ -148,7 +148,7 @@ a = Analysis(
     ] + np_extra + webview_extra + comtypes_extra,
     hookspath=['hooks'],
     hooksconfig={},
-    runtime_hooks=['hooks/runtime_hook_linux.py'],
+    runtime_hooks=['hooks/runtime_hook_linux.py', 'hooks/runtime_hook_numpy.py'],
     excludes=[
         # --- numpy source tree detection prevention ---
         'numpy.core.src',
