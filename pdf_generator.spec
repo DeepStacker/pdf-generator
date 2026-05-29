@@ -10,6 +10,8 @@ ui_static = os.path.join('src', 'audit_engine', 'ui', 'static')
 datas = [
     ('fonts', 'fonts'),
     (ui_static, 'audit_engine/ui/static'),
+    ('settings', 'settings'),
+    ('templates', 'templates'),
 ] + collect_data_files('certifi') + collect_data_files('webview')
 
 # --- Linux runtime module collection (GIO, GdkPixbuf, GTK theme, GLib schemas) ---
@@ -98,6 +100,16 @@ a = Analysis(
         'audit_engine.services.idfc',
         'audit_engine.services.equitas',
         'audit_engine.services.arvog',
+        # --- Consolidation ---
+        'audit_engine.consolidator',
+        'audit_engine.consolidator.config',
+        'audit_engine.consolidator.mappings',
+        'audit_engine.consolidator.extractor',
+        'audit_engine.consolidator.mapper',
+        'audit_engine.consolidator.writer',
+        'audit_engine.consolidator.consolidate',
+        'audit_engine.consolidator.geography',
+        'audit_engine.consolidator.audit',
         # --- Updater ---
         'audit_engine.updater',
         'audit_engine.updater.client',
@@ -128,10 +140,6 @@ a = Analysis(
         'openpyxl.styles',
         'pandas',
         'numpy',
-        'numpy.core',
-        'numpy.core._multiarray_umath',
-        'numpy.core._multiarray_tests',
-        'numpy.core.multiarray',
         'certifi',
         'pyexpat',
         '_elementtree',
@@ -156,7 +164,7 @@ a = Analysis(
         '_multiprocessing',
         'multiprocessing',
         'multiprocessing.reduction',
-    ] + np_extra + webview_extra + comtypes_extra,
+    ] + webview_extra + comtypes_extra,
     hookspath=['hooks'],
     hooksconfig={},
     runtime_hooks=['hooks/runtime_hook_linux.py'],

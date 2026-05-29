@@ -131,7 +131,7 @@
         // INITIALIZATION
         function handleHashRouting() {
             let hash = window.location.hash.replace('#', '').toUpperCase();
-            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS'];
+            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS', 'CONSOLIDATE'];
             if (!validTabs.includes(hash)) hash = 'PROCESS';
             
             if (state.activeTab !== hash) {
@@ -149,6 +149,9 @@
             
             // Sync initial tab from URL hash
             handleHashRouting();
+            
+            // Poll once at startup to check for previous run statistics
+            pollConsolidationProgress(true);
         });
 
         // BANK SELECTION CHANGE EVENT
@@ -313,7 +316,8 @@
             const activeBtn = document.getElementById(`tabBtn-${tabId}`);
             if (activeBtn) {
                 let borderCol = 'border-amber-500';
-                if (isIDFC) borderCol = 'border-blue-500';
+                if (tabId === 'CONSOLIDATE') borderCol = 'border-indigo-500';
+                else if (isIDFC) borderCol = 'border-blue-500';
                 else if (isArvog) borderCol = 'border-emerald-500';
                 activeBtn.className = `w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 ${borderCol} nav-btn`;
             }
@@ -325,6 +329,7 @@
             document.getElementById('tab-STATS').classList.add('hidden');
             document.getElementById('tab-HISTORY').classList.add('hidden');
             document.getElementById('tab-SETTINGS').classList.add('hidden');
+            document.getElementById('tab-CONSOLIDATE').classList.add('hidden');
 
             // Show active section
             if (tabId === 'PROCESS') {
@@ -342,6 +347,7 @@
             if (tabId === 'STATS') refreshStats();
             if (tabId === 'HISTORY') refreshHistory();
             if (tabId === 'SETTINGS') refreshSettings();
+            if (tabId === 'CONSOLIDATE') pollConsolidationProgress();
         }
 
         // DYNAMIC WIDGET OPTION UPDATERS
@@ -1957,4 +1963,234 @@
 
         function dismissUpdateBanner() {
             document.getElementById('updateBanner').classList.add('hidden');
+        }
+
+        // CONSOLIDATION CONTROLLER LOGIC
+        state.consolSelectedFiles = [];
+        let consolPollTimer = null;
+
+        async function browseConsolidateFiles() {
+            try {
+                const res = await fetch('/api/browse/files');
+                const data = await res.json();
+                if (data.paths && data.paths.length > 0) {
+                    state.consolSelectedFiles = data.paths;
+                    renderConsolFilesList();
+                    showToast(`✓ Loaded ${data.paths.length} spreadsheets. Ready to consolidate.`, 'success');
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to select files', 'error');
+            }
+        }
+
+        function renderConsolFilesList() {
+            const container = document.getElementById('consolFilesContainer');
+            const list = document.getElementById('consolFilesList');
+            const count = document.getElementById('consolFilesCount');
+            const runBtn = document.getElementById('consolBtnRun');
+            
+            if (!container || !list || !count || !runBtn) return;
+            
+            if (state.consolSelectedFiles.length === 0) {
+                container.classList.add('hidden');
+                runBtn.disabled = true;
+                return;
+            }
+            
+            count.textContent = state.consolSelectedFiles.length;
+            let html = '';
+            state.consolSelectedFiles.forEach((f, idx) => {
+                const name = f.split('/').pop().split('\\').pop();
+                html += `<div class="arvog-file-tile flex items-center justify-between text-xs text-slate-300 px-3 py-1.5 rounded-lg bg-slate-900/50 border border-brand-borderLine/30">
+                    <span class="truncate pr-2 flex-1" title="${escapeHtml(f)}">${escapeHtml(name)}</span>
+                    <button onclick="removeConsolidateFile(${idx})" class="text-rose-400 hover:text-rose-300 transition bg-transparent border-0 cursor-pointer p-0.5 flex-shrink-0" title="Remove file" style="font-weight: 600;">&times;</button>
+                </div>`;
+            });
+            list.innerHTML = html;
+            container.classList.remove('hidden');
+            runBtn.disabled = false;
+        }
+
+        function removeConsolidateFile(index) {
+            state.consolSelectedFiles.splice(index, 1);
+            renderConsolFilesList();
+            if (state.consolSelectedFiles.length === 0) {
+                document.getElementById('consolResultsFrame').classList.add('hidden');
+            }
+        }
+
+        async function addConsolidateFile() {
+            try {
+                const res = await fetch('/api/browse/file');
+                const data = await res.json();
+                if (data.path) {
+                    if (!state.consolSelectedFiles.includes(data.path)) {
+                        state.consolSelectedFiles.push(data.path);
+                        renderConsolFilesList();
+                        showToast(`✓ Added ${data.path.split('/').pop().split('\\').pop()}`, 'success');
+                    } else {
+                        showToast('File already selected', 'info');
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to select file', 'error');
+            }
+        }
+
+        function clearConsolidateFiles() {
+            state.consolSelectedFiles = [];
+            renderConsolFilesList();
+            document.getElementById('consolResultsFrame').classList.add('hidden');
+            showToast('Files list cleared', 'info');
+        }
+
+        async function openMappingRulesExcel() {
+            try {
+                showToast('Launching mapping rules in Excel...', 'info');
+                const res = await fetch('/api/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: 'settings/mapping_rules.xlsx' })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('✓ Mapping rules opened in Excel', 'success');
+                } else {
+                    showToast(data.error || 'Failed to open mapping rules', 'error');
+                }
+            } catch (err) {
+                showToast('Failed to launch rules spreadsheet', 'error');
+            }
+        }
+
+        async function openConsolidatedExcel() {
+            try {
+                showToast('Opening consolidated workbook in Excel...', 'info');
+                await fetch('/api/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: 'output/consolidated_output.xlsx' })
+                });
+            } catch (err) {
+                showToast('Failed to open output workbook', 'error');
+            }
+        }
+
+        async function runConsolidation() {
+            if (state.consolSelectedFiles.length === 0) return;
+            
+            const month = document.getElementById('consolMonth').value;
+            const runBtn = document.getElementById('consolBtnRun');
+            const progress = document.getElementById('consolProgressContainer');
+            const status = document.getElementById('consolStatusText');
+            
+            runBtn.disabled = true;
+            progress.classList.remove('hidden');
+            status.textContent = "Executing mapping solvers...";
+            
+            try {
+                const res = await fetch('/api/consolidate/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        files: state.consolSelectedFiles,
+                        month: month
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Consolidation pipeline active on background threads...', 'info');
+                    pollConsolidationProgress();
+                } else {
+                    showToast(data.error || 'Failed to start consolidation', 'error');
+                    runBtn.disabled = false;
+                    progress.classList.add('hidden');
+                }
+            } catch (err) {
+                showToast('Network error starting pipeline', 'error');
+                runBtn.disabled = false;
+                progress.classList.add('hidden');
+            }
+        }
+
+        function pollConsolidationProgress(once = false) {
+            if (consolPollTimer) {
+                if (once) return;
+                clearInterval(consolPollTimer);
+            }
+            
+            const runBtn = document.getElementById('consolBtnRun');
+            const progress = document.getElementById('consolProgressContainer');
+            const status = document.getElementById('consolStatusText');
+            
+            const fn = async () => {
+                try {
+                    const res = await fetch('/api/consolidate/progress');
+                    const data = await res.json();
+                    
+                    if (data.is_running) {
+                        if (progress) progress.classList.remove('hidden');
+                        if (status) status.textContent = data.progress_text || "Processing...";
+                        if (runBtn) runBtn.disabled = true;
+                    } else {
+                        if (!once) {
+                            if (progress) progress.classList.add('hidden');
+                            if (runBtn) runBtn.disabled = (state.consolSelectedFiles.length === 0);
+                        }
+                        
+                        if (data.summary && Object.keys(data.summary).length > 0) {
+                            const resultsFrame = document.getElementById('consolResultsFrame');
+                            const statFiles = document.getElementById('consolStat-files');
+                            const statPt = document.getElementById('consolStat-pt');
+                            const statMd = document.getElementById('consolStat-md');
+                            const statAlerts = document.getElementById('consolStat-alerts');
+                            const warnFrame = document.getElementById('consolWarnFrame');
+                            const warnList = document.getElementById('consolWarnList');
+                            
+                            if (resultsFrame) resultsFrame.classList.remove('hidden');
+                            if (statFiles) statFiles.textContent = data.summary.sources_processed || '0';
+                            if (statPt) statPt.textContent = data.summary.total_pt_rows || '0';
+                            if (statMd) statMd.textContent = data.summary.total_md_rows || '0';
+                            
+                            const dups = data.summary.cross_duplicates || [];
+                            if (statAlerts) statAlerts.textContent = dups.length;
+                            
+                            if (dups.length > 0) {
+                                if (warnFrame) warnFrame.classList.remove('hidden');
+                                if (warnList) {
+                                    let html = '';
+                                    dups.forEach(d => {
+                                        html += `<div>• Assayer Code <b>${escapeHtml(d.assayer_code)}</b> (${escapeHtml(d.assayer_name)}) was double-paid in both '${escapeHtml(d.source_1_client)}' and '${escapeHtml(d.source_2_client)}'!</div>`;
+                                    });
+                                    warnList.innerHTML = html;
+                                }
+                            } else {
+                                if (warnFrame) warnFrame.classList.add('hidden');
+                            }
+                            
+                            if (!once && !data.error_msg) {
+                                showToast('✓ Consolidation Ingestion Completed Successfully!', 'success');
+                            }
+                        }
+                        
+                        if (data.error_msg && !once) {
+                            showToast(`Pipeline error: ${data.error_msg}`, 'error');
+                        }
+                        
+                        if (!once) {
+                            clearInterval(consolPollTimer);
+                            consolPollTimer = null;
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+            
+            fn();
+            if (!once) {
+                consolPollTimer = setInterval(fn, 1000);
+            }
         }

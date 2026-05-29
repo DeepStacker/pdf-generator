@@ -554,6 +554,7 @@
                     <svg class="icon w-4 h-4 shrink-0" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
                     <span>History</span>
                 </button>
+
                 <button onclick="switchTab('SETTINGS')" id="tabBtn-SETTINGS" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 nav-btn">
                     <svg class="icon w-4 h-4 shrink-0" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
                     <span>Settings</span>
@@ -601,6 +602,10 @@
                     <button onclick="switchBank('Arvog Bank')" class="bank-pill" data-bank="Arvog Bank" id="bankPill-ARVOG">
                         <span class="bank-dot" style="background:#10B981"></span>
                         Arvog
+                    </button>
+                    <button onclick="switchBank('CONSOLIDATION')" class="bank-pill" data-bank="CONSOLIDATION" id="bankPill-CONSOLIDATION">
+                        <span class="bank-dot" style="background:#8B5CF6"></span>
+                        Consolidation
                     </button>
                 </div>
                 
@@ -1394,6 +1399,153 @@
                         <button onclick="clearDatabaseHistory()" class="bg-slate-900 text-rose-500 hover:text-white hover:bg-rose-900 border border-brand-borderLine text-xs font-bold px-5 py-2.5 rounded-lg transition">Clear All Audit Logs History</button>
                     </div>
                 </section>
+
+                <!-- SECTION: CONSOLIDATE -->
+                <section id="tab-CONSOLIDATE" class="space-y-6 hidden tab-content">
+                    <div class="border-b border-brand-borderLine pb-4 flex justify-between items-center">
+                        <h2 class="text-3xl font-bold tracking-tight text-white font-sans">Spreadsheet Consolidation</h2>
+                        <span class="px-3 py-1.5 text-xs font-bold rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">Multi-Source Merger</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6">
+                        <!-- Left Panel: Source File Selection -->
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
+                            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Step 1: Select Source Spreadsheets</h3>
+                            <p class="text-[11px] text-slate-500">Select all source files at once. Supports 30+ spreadsheets.</p>
+                            
+                            <div class="space-y-2">
+                                <div onclick="browseConsolidateFiles()" class="arvog-drag-zone rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-violet-500/50 hover:bg-violet-500/5">
+                                    <div class="flex flex-col items-center space-y-2 pointer-events-none">
+                                        <svg class="icon w-8 h-8 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                            <polyline points="14 2 14 8 20 8"/>
+                                            <line x1="9" y1="15" x2="15" y2="15"/>
+                                            <line x1="12" y1="12" x2="12" y2="18"/>
+                                        </svg>
+                                        <span class="block text-sm font-medium text-slate-200">
+                                            Click to <span class="text-violet-400 font-semibold">browse local spreadsheets</span>
+                                        </span>
+                                        <span class="block text-[11px] text-slate-500">Supports multiple .xlsx, .xls files</span>
+                                    </div>
+                                </div>
+                                <button onclick="addConsolidateFile()" class="w-full bg-slate-800 text-slate-300 text-xs font-semibold py-2 rounded-lg border border-dashed border-brand-borderLine hover:bg-slate-700 hover:border-violet-500/50 transition">+ Add Single File</button>
+                            </div>
+
+                            <div id="consolFilesContainer" class="hidden space-y-2">
+                                <div class="flex justify-between items-center text-xs font-bold text-slate-400">
+                                    <span>SELECTED SOURCES (<span id="consolFilesCount">0</span>)</span>
+                                    <button onclick="clearConsolidateFiles()" class="text-rose-400 hover:text-rose-300 transition bg-transparent border-0 cursor-pointer" style="font-weight: 600;">Clear All</button>
+                                </div>
+                                <div id="consolFilesList" class="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Panel: Configurations & Execution -->
+                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-5 shadow-sm">
+                            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Step 2: Configuration & Exec</h3>
+
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Audit Processing Month</label>
+                                    <input id="consolMonth" type="text" value="Feb'26" list="monthSuggestions" placeholder="e.g. Mar'26" class="w-full bg-slate-900 border border-brand-borderLine rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-violet-500">
+                                    <datalist id="monthSuggestions">
+                                        <option value="Jan'26">
+                                        <option value="Feb'26">
+                                        <option value="Mar'26">
+                                        <option value="Apr'26">
+                                        <option value="May'26">
+                                        <option value="Jun'26">
+                                        <option value="Jul'26">
+                                        <option value="Aug'26">
+                                        <option value="Sep'26">
+                                        <option value="Oct'26">
+                                        <option value="Nov'26">
+                                        <option value="Dec'26">
+                                    </datalist>
+                                </div>
+
+                                <!-- Incremental update toggle -->
+                                <div class="flex items-center gap-3 bg-slate-900/50 border border-brand-borderLine/50 rounded-lg px-4 py-3">
+                                    <input type="checkbox" id="consolMergeMode" checked class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500">
+                                    <label for="consolMergeMode" class="text-xs text-slate-300 cursor-pointer">
+                                        <span class="font-semibold text-violet-400">Merge mode</span> — Append new sources to existing consolidated report instead of rebuilding from scratch
+                                    </label>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Output Directory</label>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="consolOutputDir" readonly class="flex-1 bg-slate-900 border border-brand-borderLine rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none" placeholder="No directory selected">
+                                        <button onclick="browseFolder('consolOutputDir')" class="bg-slate-800 text-slate-300 text-sm font-semibold px-4 py-2 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Browse...</button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">System Settings</label>
+                                    <button onclick="openMappingRulesExcel()" class="w-full bg-slate-800 text-slate-300 text-sm font-semibold py-2.5 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Edit Mapping Rules</button>
+                                </div>
+                            </div>
+
+                            <div class="pt-2 flex items-center space-x-3">
+                                <button id="consolBtnRun" onclick="runConsolidation()" disabled class="w-full bg-violet-600 text-white text-sm font-bold py-3.5 px-6 rounded-lg hover:bg-violet-500 transition shadow-md disabled:opacity-40 disabled:pointer-events-none">Execute Consolidation</button>
+                            </div>
+
+                            <div id="consolProgressContainer" class="hidden space-y-2">
+                                <div class="h-2 w-full bg-slate-900 border border-brand-borderLine rounded-full overflow-hidden">
+                                    <div class="h-full bg-violet-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+                                </div>
+                                <span id="consolStatusText" class="text-xs italic text-slate-500">Ready...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Per-Source Processing Status -->
+                    <div id="consolBankProgress" class="hidden bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-3 shadow-sm">
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Processing Sequence</h3>
+                        <div id="consolBankProgressList" class="space-y-1 max-h-48 overflow-y-auto">
+                        </div>
+                    </div>
+
+                    <!-- Results Summary Ledger Cards -->
+                    <div id="consolResultsFrame" class="hidden bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-5 shadow-md">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Consolidation Report Summary</h3>
+                            <span id="consolMergeBadge" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">Merged</span>
+                        </div>
+                        
+                        <div class="grid grid-cols-4 gap-4">
+                            <div class="bg-slate-900 border border-brand-borderLine rounded-lg p-4">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Ingested Files</span>
+                                <span id="consolStat-files" class="text-2xl font-bold mt-1 block text-white">0</span>
+                                <span id="consolStat-files-prev" class="text-[9px] text-slate-600 hidden">+ <span>0</span> new</span>
+                            </div>
+                            <div class="bg-slate-900 border border-brand-borderLine rounded-lg p-4">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Reconciled Rows (PT)</span>
+                                <span id="consolStat-pt" class="text-2xl font-bold mt-1 block text-white">0</span>
+                            </div>
+                            <div class="bg-slate-900 border border-brand-borderLine rounded-lg p-4">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Reconciled Rows (MD)</span>
+                                <span id="consolStat-md" class="text-2xl font-bold mt-1 block text-white">0</span>
+                            </div>
+                            <div class="bg-slate-900 border border-brand-borderLine rounded-lg p-4">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Control Alerts</span>
+                                <span id="consolStat-alerts" class="text-2xl font-bold mt-1 block text-amber-500">0</span>
+                            </div>
+                        </div>
+
+                        <div id="consolWarnFrame" class="hidden bg-rose-950/20 border border-rose-900/30 rounded-lg p-4 space-y-2">
+                            <span class="block text-xs font-bold text-rose-400">Audit Warnings / Double-Payment Alerts Flagged:</span>
+                            <div id="consolWarnList" class="text-xs text-rose-300 font-mono space-y-1.5">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="openConsolidatedExcel()" class="bg-violet-600 text-white text-sm font-bold py-3.5 rounded-lg hover:bg-violet-500 transition shadow-md">Open Consolidated Spreadsheet</button>
+                            <button onclick="openConsolidatedFolder()" class="bg-slate-800 text-slate-300 text-sm font-semibold py-3.5 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Open Output Folder</button>
+                        </div>
+                    </div>
+                </section>
             </div>
 
             <!-- Bottom status status bar -->
@@ -1550,8 +1702,10 @@
             logsCount: 0,
             genStartTime: null,
             totalBranches: 0,
-            totalRows: 0
+            totalRows: 0,
+            consolSelectedFiles: []
         };
+        let consolPollTimer = null;
 
         // DOM REFERENCES
         const bankSelector = document.getElementById('bankSelector');
@@ -1571,7 +1725,7 @@
         // INITIALIZATION
         function handleHashRouting() {
             let hash = window.location.hash.replace('#', '').toUpperCase();
-            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS'];
+            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS', 'CONSOLIDATE'];
             if (!validTabs.includes(hash)) hash = 'PROCESS';
             
             if (state.activeTab !== hash) {
@@ -1592,29 +1746,44 @@
         });
 
         // BANK SELECTION via pills
-        function switchBank(bankName) {
-            if (state.activeBank === bankName) return;
+        function switchBank(bankName, force = false) {
+            if (state.activeBank === bankName && !force) return;
             
             // Update pill active states
             document.querySelectorAll('.bank-pill').forEach(p => p.classList.remove('active'));
-            const pillMap = { 'IDFC First Bank': 'bankPill-IDFC', 'Equitas Small Finance Bank': 'bankPill-EQUITAS', 'Arvog Bank': 'bankPill-ARVOG' };
+            const pillMap = { 'IDFC First Bank': 'bankPill-IDFC', 'Equitas Small Finance Bank': 'bankPill-EQUITAS', 'Arvog Bank': 'bankPill-ARVOG', 'CONSOLIDATION': 'bankPill-CONSOLIDATION' };
             const activePill = document.getElementById(pillMap[bankName]);
             if (activePill) activePill.classList.add('active');
             
             state.activeBank = bankName;
             saveConfig('bank', bankName);
             
-            // Fade out current process tab, then update and fade in
-            const prefix = getActivePrefix();
-            const oldSection = document.getElementById(`tab-PROCESS-${prefix.toUpperCase()}`);
-            // Actually, the tab sections are fixed: IDFC, EQUITAS, ARVOG
-            ['IDFC','EQUITAS','ARVOG'].forEach(p => {
-                const sec = document.getElementById(`tab-PROCESS-${p}`);
-                if (sec) {
-                    sec.style.opacity = '0';
-                    sec.style.transition = 'opacity 0.12s ease';
-                }
-            });
+            if (bankName === 'CONSOLIDATION') {
+                // Show consolidation section, hide bank sections
+                document.getElementById('tab-CONSOLIDATE').classList.remove('hidden');
+                ['tab-PROCESS-IDFC','tab-PROCESS-EQUITAS','tab-PROCESS-ARVOG'].forEach(id => {
+                    const s = document.getElementById(id);
+                    if (s) s.classList.add('hidden');
+                });
+                loadConsolidationBanks();
+                pollConsolidationProgress();
+                return;
+            }
+            
+            // Hide consolidation section
+            document.getElementById('tab-CONSOLIDATE').classList.add('hidden');
+            
+            if (state.activeTab === 'PROCESS') {
+                // Fade out current process tab, then update and fade in
+                ['IDFC','EQUITAS','ARVOG'].forEach(p => {
+                    const sec = document.getElementById(`tab-PROCESS-${p}`);
+                    if (sec) {
+                        sec.style.opacity = '0';
+                        sec.style.transition = 'opacity 0.12s ease';
+                        sec.classList.remove('hidden');
+                    }
+                });
+            }
             
             setTimeout(() => {
                 updateThemeBranding();
@@ -1632,14 +1801,15 @@
                     if (gc) gc.classList.add('hidden');
                 }
                 
-                // Fade in the now-visible section
-                const currentPrefix = getActivePrefix();
-                const currentSection = document.getElementById(`tab-PROCESS-${currentPrefix.toUpperCase()}`);
-                if (currentSection) {
-                    currentSection.style.opacity = '0';
-                    // force reflow
-                    void currentSection.offsetWidth;
-                    currentSection.style.opacity = '1';
+                if (state.activeTab === 'PROCESS') {
+                    // Fade in the now-visible section
+                    const currentPrefix = getActivePrefix();
+                    const currentSection = document.getElementById(`tab-PROCESS-${currentPrefix.toUpperCase()}`);
+                    if (currentSection) {
+                        currentSection.style.opacity = '0';
+                        void currentSection.offsetWidth;
+                        currentSection.style.opacity = '1';
+                    }
                 }
             }, 130);
         }
@@ -1788,10 +1958,13 @@
             document.getElementById('tab-STATS').classList.add('hidden');
             document.getElementById('tab-HISTORY').classList.add('hidden');
             document.getElementById('tab-SETTINGS').classList.add('hidden');
+            document.getElementById('tab-CONSOLIDATE').classList.add('hidden');
 
             // Show active section
             if (tabId === 'PROCESS') {
-                if (isIDFC) {
+                if (state.activeBank === 'CONSOLIDATION') {
+                    document.getElementById('tab-CONSOLIDATE').classList.remove('hidden');
+                } else if (isIDFC) {
                     document.getElementById('tab-PROCESS-IDFC').classList.remove('hidden');
                 } else if (isArvog) {
                     document.getElementById('tab-PROCESS-ARVOG').classList.remove('hidden');
@@ -1813,6 +1986,369 @@
             if (tabId === 'STATS') refreshStats();
             if (tabId === 'HISTORY') refreshHistory();
             if (tabId === 'SETTINGS') refreshSettings();
+            if (tabId === 'CONSOLIDATE' || (tabId === 'PROCESS' && state.activeBank === 'CONSOLIDATION')) {
+                loadConsolidationBanks();
+                pollConsolidationProgress();
+            }
+        }
+
+        // ============================================================
+        // CONSOLIDATION CONTROLLER LOGIC
+        // ============================================================
+
+        state.consolSelectedFiles = [];
+
+        async function loadConsolidationBanks() {
+            const listEl = document.getElementById('consolBankList');
+            if (!listEl) return;
+            listEl.innerHTML = '<div class="text-center py-4 text-sm text-slate-500 italic">Loading configured banks...</div>';
+
+            try {
+                const res = await fetch('/api/consolidate/banks');
+                const data = await res.json();
+                if (!data.success || !data.banks || data.banks.length === 0) {
+                    listEl.innerHTML = '<div class="text-center py-4 text-sm text-rose-400 italic">No banks configured. Edit mapping rules first.</div>';
+                    return;
+                }
+
+                let html = '';
+                data.banks.forEach((bank, idx) => {
+                    html += '<div class="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-slate-900/30 border border-brand-borderLine/30">'
+                        + '<span class="w-2 h-2 rounded-full bg-slate-600"></span>'
+                        + '<span class="text-xs text-slate-300">' + escapeHtml(bank.client) + '</span>'
+                        + '<span class="text-[9px] text-slate-600">(' + escapeHtml(bank.pattern) + ')</span>'
+                        + '</div>';
+                });
+                listEl.innerHTML = html;
+                renderConsolidateFiles();
+                checkConsolRunReady();
+            } catch (err) {
+                console.error(err);
+                listEl.innerHTML = '<div class="text-center py-4 text-sm text-rose-400 italic">Failed to load banks.</div>';
+            }
+        }
+
+        function renderConsolidateFiles() {
+            const container = document.getElementById('consolFilesContainer');
+            const listEl = document.getElementById('consolFilesList');
+            const countEl = document.getElementById('consolFilesCount');
+            if (!listEl) return;
+
+            if (state.consolSelectedFiles.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+            if (countEl) countEl.textContent = state.consolSelectedFiles.length;
+
+            let html = '';
+            state.consolSelectedFiles.forEach((fp, idx) => {
+                const name = fp.split('/').pop().split('\\').pop();
+                html += '<div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-slate-900/50 border border-brand-borderLine/40" id="consolFile_' + idx + '">'
+                    + '<span class="text-slate-400 truncate flex-1">' + escapeHtml(name) + '</span>'
+                    + '<button onclick="removeConsolidateFile(' + idx + ')" class="text-rose-400 hover:text-rose-300 bg-transparent border-0 cursor-pointer px-1" title="Remove">&times;</button>'
+                    + '</div>';
+            });
+            listEl.innerHTML = html;
+        }
+
+        function removeConsolidateFile(idx) {
+            if (idx >= 0 && idx < state.consolSelectedFiles.length) {
+                state.consolSelectedFiles.splice(idx, 1);
+                renderConsolidateFiles();
+                checkConsolRunReady();
+            }
+        }
+
+        async function browseConsolidateFiles() {
+            try {
+                const res = await fetch('/api/browse/files');
+                const data = await res.json();
+                if (!data.paths || data.paths.length === 0) return;
+
+                const before = state.consolSelectedFiles.length;
+                data.paths.forEach(p => {
+                    if (!state.consolSelectedFiles.includes(p)) {
+                        state.consolSelectedFiles.push(p);
+                    }
+                });
+                const added = state.consolSelectedFiles.length - before;
+                renderConsolidateFiles();
+                checkConsolRunReady();
+                showToast('Added ' + added + ' source file(s)', 'success');
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to select files', 'error');
+            }
+        }
+
+        async function addConsolidateFile() {
+            try {
+                const res = await fetch('/api/browse/file');
+                const data = await res.json();
+                if (!data.path) return;
+
+                if (!state.consolSelectedFiles.includes(data.path)) {
+                    state.consolSelectedFiles.push(data.path);
+                    renderConsolidateFiles();
+                    checkConsolRunReady();
+                    showToast('Added 1 source file', 'success');
+                } else {
+                    showToast('File already selected', 'info');
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to select file', 'error');
+            }
+        }
+
+        function checkConsolRunReady() {
+            const runBtn = document.getElementById('consolBtnRun');
+            if (!runBtn) return;
+            runBtn.disabled = state.consolSelectedFiles.length === 0;
+        }
+
+        async function openMappingRulesExcel() {
+            try {
+                showToast('Launching mapping rules in Excel...', 'info');
+                const res = await fetch('/api/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: 'settings/mapping_rules.xlsx' })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('✓ Mapping rules opened in Excel', 'success');
+                } else {
+                    showToast(data.error || 'Failed to open mapping rules', 'error');
+                }
+            } catch (err) {
+                showToast('Failed to launch rules spreadsheet', 'error');
+            }
+        }
+
+        async function runConsolidation() {
+            if (state.consolSelectedFiles.length === 0) return;
+
+            const month = document.getElementById('consolMonth').value;
+            const mergeMode = document.getElementById('consolMergeMode').checked;
+            const outputDir = document.getElementById('consolOutputDir').value.trim();
+            if (!outputDir) {
+                showToast('Please select an output directory first.', 'warning');
+                return;
+            }
+            const runBtn = document.getElementById('consolBtnRun');
+            const progress = document.getElementById('consolProgressContainer');
+            const progressBar = progress ? progress.querySelector('div[style*="width"]') : null;
+            const status = document.getElementById('consolStatusText');
+            const bankProgress = document.getElementById('consolBankProgress');
+            const bankProgressList = document.getElementById('consolBankProgressList');
+
+            runBtn.disabled = true;
+            progress.classList.remove('hidden');
+            if (progressBar) progressBar.style.width = '0%';
+            status.textContent = "Starting consolidation pipeline...";
+            if (bankProgress) bankProgress.classList.remove('hidden');
+
+            let bpHtml = '';
+            state.consolSelectedFiles.forEach((fp, idx) => {
+                const name = fp.split('/').pop().split('\\').pop();
+                bpHtml += '<div class="flex items-center gap-3 text-xs py-1.5 px-3 rounded-lg bg-slate-900/40 border border-brand-borderLine/30">'
+                    + '<span class="w-5 h-5 flex items-center justify-center rounded-full bg-slate-800 text-slate-500 text-[10px] font-bold" id="consolStepDot_' + idx + '">' + (idx + 1) + '</span>'
+                    + '<span class="flex-1 text-slate-300 truncate">' + escapeHtml(name) + '</span>'
+                    + '<span id="consolStepStatus_' + idx + '" class="text-slate-600 font-semibold">Queued</span>'
+                    + '</div>';
+            });
+            if (bankProgressList) bankProgressList.innerHTML = bpHtml;
+
+            try {
+                const res = await fetch('/api/consolidate/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        files: state.consolSelectedFiles,
+                        month: month,
+                        merge_mode: mergeMode,
+                        output_dir: outputDir
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Consolidation pipeline active...', 'info');
+                    pollConsolidationProgress(progressBar);
+                } else {
+                    showToast(data.error || 'Failed to start consolidation', 'error');
+                    runBtn.disabled = false;
+                    progress.classList.add('hidden');
+                    if (bankProgress) bankProgress.classList.add('hidden');
+                }
+            } catch (err) {
+                showToast('Network error starting pipeline', 'error');
+                runBtn.disabled = false;
+                progress.classList.add('hidden');
+                if (bankProgress) bankProgress.classList.add('hidden');
+            }
+        }
+
+        function pollConsolidationProgress(progressBar) {
+            if (consolPollTimer) {
+                clearInterval(consolPollTimer);
+            }
+
+            const runBtn = document.getElementById('consolBtnRun');
+            const progress = document.getElementById('consolProgressContainer');
+            const status = document.getElementById('consolStatusText');
+            const bankProgress = document.getElementById('consolBankProgress');
+
+            const fn = async () => {
+                try {
+                    const res = await fetch('/api/consolidate/progress');
+                    const data = await res.json();
+
+                    if (data.is_running) {
+                        if (progress) progress.classList.remove('hidden');
+                        if (status) status.textContent = data.progress_text || "Processing...";
+                        if (runBtn) runBtn.disabled = true;
+                        if (progressBar) progressBar.style.width = '60%';
+                    } else {
+                        if (progress) progress.classList.add('hidden');
+                        if (runBtn) runBtn.disabled = false;
+                        if (progressBar) progressBar.style.width = '100%';
+
+                        // Mark all steps as done
+                        for (let i = 0; i < state.consolSelectedFiles.length; i++) {
+                            const dot = document.getElementById('consolStepDot_' + i);
+                            const st = document.getElementById('consolStepStatus_' + i);
+                            if (dot) {
+                                dot.className = 'w-5 h-5 flex items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold';
+                                dot.textContent = '\u2713';
+                            }
+                            if (st) {
+                                st.textContent = 'Done';
+                                st.className = 'text-emerald-400 font-semibold';
+                            }
+                        }
+
+                        if (data.summary && Object.keys(data.summary).length > 0) {
+                            const resultsFrame = document.getElementById('consolResultsFrame');
+                            const statFiles = document.getElementById('consolStat-files');
+                            const statPt = document.getElementById('consolStat-pt');
+                            const statMd = document.getElementById('consolStat-md');
+                            const statAlerts = document.getElementById('consolStat-alerts');
+                            const warnFrame = document.getElementById('consolWarnFrame');
+                            const warnList = document.getElementById('consolWarnList');
+                            const mergeBadge = document.getElementById('consolMergeBadge');
+                            const filesPrev = document.getElementById('consolStat-files-prev');
+
+                            if (resultsFrame) resultsFrame.classList.remove('hidden');
+                            if (statFiles) statFiles.textContent = data.summary.sources_processed || '0';
+                            if (statPt) statPt.textContent = data.summary.total_pt_rows || '0';
+                            if (statMd) statMd.textContent = data.summary.total_md_rows || '0';
+
+                            const dups = data.summary.cross_duplicates || [];
+                            if (statAlerts) statAlerts.textContent = dups.length;
+
+                            if (dups.length > 0) {
+                                if (warnFrame) warnFrame.classList.remove('hidden');
+                                if (warnList) {
+                                    let html = '';
+                                    dups.forEach(d => {
+                                        html += '<div>\u2022 Assayer Code <b>' + escapeHtml(d.assayer_code) + '</b> (' + escapeHtml(d.assayer_name) + ') was double-paid in both \'' + escapeHtml(d.source_1_client) + '\' and \'' + escapeHtml(d.source_2_client) + '\'!</div>';
+                                    });
+                                    warnList.innerHTML = html;
+                                }
+                            } else {
+                                if (warnFrame) warnFrame.classList.add('hidden');
+                            }
+
+                            // Show merge badge if incremental merge happened
+                            if (data.merge_mode && data.summary.new_rows > 0) {
+                                if (mergeBadge) {
+                                    mergeBadge.textContent = 'Merged +' + data.summary.new_rows + ' new rows';
+                                    mergeBadge.classList.remove('hidden');
+                                }
+                                if (filesPrev) {
+                                    filesPrev.innerHTML = '+ ' + data.summary.new_sources + ' new sources';
+                                    filesPrev.classList.remove('hidden');
+                                }
+                            }
+
+                            // Check for output file and exit code warnings
+                            if (data.exit_code !== 0 || data.output_exists === false) {
+                                const warn = data.error_msg || 'Consolidation completed but output file may not have been created. Check the audit log.';
+                                showToast('\u26A0 ' + warn, 'error');
+                            } else {
+                                showToast('\u2713 Consolidation Completed Successfully!', 'success');
+                            }
+                        } else if (data.exit_code !== 0) {
+                            showToast('\u26A0 Consolidation completed with errors', 'error');
+                        }
+
+                        if (data.error_msg) {
+                            showToast('Pipeline error: ' + data.error_msg, 'error');
+                        }
+
+                        clearInterval(consolPollTimer);
+                        consolPollTimer = null;
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+
+            fn();
+            consolPollTimer = setInterval(fn, 1000);
+        }
+
+        async function openConsolidatedExcel() {
+            try {
+                const outputDir = document.getElementById('consolOutputDir').value.trim();
+                if (!outputDir) {
+                    showToast('No output directory configured.', 'warning');
+                    return;
+                }
+                const filePath = outputDir + '/Consolidated_Report/consolidated_output.xlsx';
+                showToast('Opening consolidated workbook in Excel...', 'info');
+                const res = await fetch('/api/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: filePath })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast(data.error || 'Failed to open output workbook', 'error');
+                }
+            } catch (err) {
+                showToast('Failed to open output workbook', 'error');
+            }
+        }
+
+        async function openConsolidatedFolder() {
+            const outputDir = document.getElementById('consolOutputDir').value.trim();
+            if (!outputDir) {
+                showToast('No output directory configured.', 'warning');
+                return;
+            }
+            try {
+                const res = await fetch('/api/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: outputDir })
+                });
+                const data = await res.json();
+                if (!data.success) showToast(data.error || 'Failed to open folder', 'error');
+            } catch (err) {
+                showToast('Failed to open folder', 'error');
+            }
+        }
+
+        function clearConsolidateFiles() {
+            state.consolSelectedFiles = [];
+            renderConsolidateFiles();
+            checkConsolRunReady();
+            document.getElementById('consolResultsFrame').classList.add('hidden');
+            document.getElementById('consolBankProgress').classList.add('hidden');
+            showToast('Source file list cleared', 'info');
         }
 
         // DYNAMIC WIDGET OPTION UPDATERS
@@ -1990,7 +2526,7 @@
                 // Active bank
                 if (data.bank) {
                     state.activeBank = data.bank;
-                    switchBank(data.bank);
+                    switchBank(data.bank, true);
                 }
                 
                 // IDFC Preferences
@@ -2021,6 +2557,8 @@
                     idfcOutputDir.value = data.out_path;
                     eqOutputDir.value = data.out_path;
                     arvogOutputDir.value = data.out_path;
+                    const consolOut = document.getElementById('consolOutputDir');
+                    if (consolOut) consolOut.value = data.out_path;
                 }
                 
                 // Restore saved file checklists for each bank
@@ -2079,16 +2617,16 @@
             }
         }
 
-        // RENDER RECENT FILES
         function renderRecentFiles(files) {
             const idfcList = document.getElementById('idfcRecentList');
             const eqList = document.getElementById('eqRecentList');
             const arvogList = document.getElementById('arvogRecentList');
             
             if (!files || files.length === 0) {
-                idfcList.innerHTML = '<div class="empty-state flex items-center space-x-2 text-slate-600"><svg class="icon w-4 h-4 empty-state-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span class="italic text-xs">None saved</span></div>';
-                eqList.innerHTML = idfcList.innerHTML;
-                if (arvogList) arvogList.innerHTML = idfcList.innerHTML;
+                const emptyHtml = '<div class="empty-state flex items-center space-x-2 text-slate-600"><svg class="icon w-4 h-4 empty-state-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span class="italic text-xs">None saved</span></div>';
+                if (idfcList) idfcList.innerHTML = emptyHtml;
+                if (eqList) eqList.innerHTML = emptyHtml;
+                if (arvogList) arvogList.innerHTML = emptyHtml;
                 return;
             }
             
@@ -2098,8 +2636,8 @@
                 html += `<button onclick="selectRecentFile('${encodeURIComponent(f)}')" class="bg-slate-900 border border-brand-borderLine text-slate-400 hover:text-white hover:border-slate-500 rounded px-2.5 py-1 transition truncate max-w-[200px]" title="${escapeHtml(f)}">${escapeHtml(filename)}</button>`;
             });
             
-            idfcList.innerHTML = html;
-            eqList.innerHTML = html;
+            if (idfcList) idfcList.innerHTML = html;
+            if (eqList) eqList.innerHTML = html;
             if (arvogList) arvogList.innerHTML = html;
         }
 
@@ -2304,7 +2842,8 @@
         function getActivePrefix() {
             if (state.activeBank === 'IDFC First Bank') return 'idfc';
             if (state.activeBank === 'Equitas Small Finance Bank') return 'eq';
-            return 'arvog';
+            if (state.activeBank === 'Arvog Bank') return 'arvog';
+            return 'consol';
         }
 
         function handleDragOver(e) {
@@ -2658,10 +3197,11 @@
                 const data = await resp.json();
                 if (data.path) {
                     document.getElementById(fieldId).value = data.path;
-                    // Sync both inputs
                     idfcOutputDir.value = data.path;
                     eqOutputDir.value = data.path;
                     if (arvogOutputDir) arvogOutputDir.value = data.path;
+                    const consolOut = document.getElementById('consolOutputDir');
+                    if (consolOut) consolOut.value = data.path;
                     
                     saveConfig('out_path', data.path);
                 }
