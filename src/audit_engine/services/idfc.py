@@ -464,17 +464,7 @@ class IDFCService:
     # PDF Generation
     # ------------------------------------------------------------------
     
-    def generate(
-        self,
-        audit_type: str,
-        branch_code: str,
-        branch_name: str,
-        state: str,
-        rows: list[dict[str, Any]],
-        output_path: str,
-    ) -> None:
-        """Generate a single branch audit PDF report."""
-
+    def generate(self,audit_type: str,branch_code: str,branch_name: str,state: str,rows: list[dict[str, Any]],output_path: str,) -> None:
         if not isinstance(rows, list):
             raise ValidationError("Rows must be a list.")
 
