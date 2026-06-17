@@ -73,7 +73,6 @@ class IDFCService:
         "CurrentBranchName",
     ]
 
-
     def __init__(self, fonts_dir: str | None = None) -> None:
         self._fonts_dir = fonts_dir or self._resolve_fonts_dir()
 
@@ -88,26 +87,14 @@ class IDFCService:
 
     @staticmethod
     def _resolve_fonts_dir() -> str:
-        base = getattr(sys, "_MEIPASS", None) or os.path.dirname(
-            os.path.dirname(
-                os.path.dirname(
-                    os.path.dirname(os.path.abspath(__file__))
-                )
-            )
-        )
+        base = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         return os.path.join(base, "fonts")
 
     @staticmethod
     def get_resource_path(relative_path: str) -> str:
         """Resolve a resource path for dev and PyInstaller."""
 
-        base = getattr(sys, "_MEIPASS", None) or os.path.dirname(
-            os.path.dirname(
-                os.path.dirname(
-                    os.path.dirname(os.path.abspath(__file__))
-                )
-            )
-        )
+        base = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
         return os.path.join(base, relative_path)
 
@@ -218,9 +205,7 @@ class IDFCService:
         log_callback: Any = logger.info,
     ) -> tuple[str, list[str], list[dict[str, Any]]]:
 
-        log_callback(
-            f"Reading Excel: {os.path.basename(excel_path)}"
-        )
+        log_callback(f"Reading Excel: {os.path.basename(excel_path)}")
 
         try:
             wb = openpyxl.load_workbook(
@@ -229,33 +214,19 @@ class IDFCService:
                 read_only=True,
             )
         except Exception as exc:
-            raise ValidationError(
-                f"Unable to open workbook: {exc}"
-            ) from exc
+            raise ValidationError(f"Unable to open workbook: {exc}") from exc
 
         try:
-
-            required_lower = {
-                col.lower()
-                for col in IDFCService.REQUIRED_COLUMNS
-            }
+            required_lower = {col.lower() for col in IDFCService.REQUIRED_COLUMNS}
 
             target_sheet = None
 
             for sheet_name in wb.sheetnames:
-
                 ws = wb[sheet_name]
 
                 try:
-
                     header_row = [
-                        (
-                            str(cell.value)
-                            .replace("\n", " ")
-                            .strip()
-                            if cell.value is not None
-                            else ""
-                        )
+                        (str(cell.value).replace("\n", " ").strip() if cell.value is not None else "")
                         for cell in next(
                             ws.iter_rows(
                                 min_row=1,
@@ -264,11 +235,7 @@ class IDFCService:
                         )
                     ]
 
-                    header_lower = {
-                        h.lower()
-                        for h in header_row
-                        if h
-                    }
+                    header_lower = {h.lower() for h in header_row if h}
 
                     if required_lower.issubset(header_lower):
                         target_sheet = sheet_name
@@ -278,25 +245,14 @@ class IDFCService:
                     continue
 
             if target_sheet is None:
-                raise ValidationError(
-                    "No valid sheet found. Required columns: "
-                    + ", ".join(IDFCService.REQUIRED_COLUMNS)
-                )
+                raise ValidationError("No valid sheet found. Required columns: " + ", ".join(IDFCService.REQUIRED_COLUMNS))
 
-            log_callback(
-                f"Found valid sheet: {target_sheet}"
-            )
+            log_callback(f"Found valid sheet: {target_sheet}")
 
             ws = wb[target_sheet]
 
             headers = [
-                (
-                    str(cell.value)
-                    .replace("\n", " ")
-                    .strip()
-                    if cell.value is not None
-                    else ""
-                )
+                (str(cell.value).replace("\n", " ").strip() if cell.value is not None else "")
                 for cell in next(
                     ws.iter_rows(
                         min_row=1,
@@ -310,33 +266,16 @@ class IDFCService:
             # "Tare Weight") or downstream .get() lookups silently miss
             # the data. Normalize any required header to its canonical
             # casing while leaving non-required headers untouched.
-            canonical_lookup = {
-                col.lower(): col
-                for col in IDFCService.REQUIRED_COLUMNS
-            }
+            canonical_lookup = {col.lower(): col for col in IDFCService.REQUIRED_COLUMNS}
 
-            headers = [
-                canonical_lookup.get(h.lower(), h)
-                for h in headers
-            ]
+            headers = [canonical_lookup.get(h.lower(), h) for h in headers]
 
-            header_lower = {
-                h.lower()
-                for h in headers
-                if h
-            }
+            header_lower = {h.lower() for h in headers if h}
 
-            missing = [
-                col
-                for col in IDFCService.REQUIRED_COLUMNS
-                if col.lower() not in header_lower
-            ]
+            missing = [col for col in IDFCService.REQUIRED_COLUMNS if col.lower() not in header_lower]
 
             if missing:
-                raise ValidationError(
-                    "Missing required columns: "
-                    + ", ".join(missing)
-                )
+                raise ValidationError("Missing required columns: " + ", ".join(missing))
 
             rows: list[dict[str, Any]] = []
 
@@ -344,12 +283,10 @@ class IDFCService:
                 min_row=2,
                 values_only=False,
             ):
-
                 row_data: dict[str, Any] = {}
                 all_blank = True
 
                 for i, cell in enumerate(row):
-
                     if i >= len(headers):
                         continue
 
@@ -367,11 +304,7 @@ class IDFCService:
                         all_blank = False
 
                     if header in ("Prospectno", "CUID"):
-                        row_data[header] = (
-                            str(value).strip()
-                            if value is not None
-                            else ""
-                        )
+                        row_data[header] = str(value).strip() if value is not None else ""
                     else:
                         row_data[header] = value
 
@@ -413,10 +346,7 @@ class IDFCService:
         groups: dict[str, list[dict[str, Any]]] = {}
 
         for row in rows:
-
-            branch = IDFCService._clean_text(
-                row.get("CurrentBranch", "")
-            )
+            branch = IDFCService._clean_text(row.get("CurrentBranch", ""))
 
             if branch.lower() in {
                 "",
@@ -465,11 +395,7 @@ class IDFCService:
             if num.is_integer():
                 return str(int(num))
 
-            return (
-                f"{num:.2f}"
-                .rstrip("0")
-                .rstrip(".")
-            )
+            return f"{num:.2f}".rstrip("0").rstrip(".")
 
         except (TypeError, ValueError):
             return str(val).strip()
@@ -477,7 +403,7 @@ class IDFCService:
     # ------------------------------------------------------------------
     # PDF Generation
     # ------------------------------------------------------------------
-    
+
     def generate(
         self,
         audit_type: str,
@@ -585,46 +511,26 @@ class IDFCService:
             ("SPAN", (4, 0), (5, 0)),
             ("SPAN", (0, 1), (1, 1)),
             ("SPAN", (4, 1), (5, 1)),
-
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-
             ("FONTNAME", (0, 0), (-1, 1), self._font_bld),
             ("FONTSIZE", (0, 0), (-1, 1), 9),
-
             ("FONTNAME", (0, 3), (-1, -1), self._font_reg),
             ("FONTSIZE", (0, 3), (-1, -1), 9),
-
             ("FONTNAME", (0, 3), (0, -1), self._font_bld),
-
             ("BACKGROUND", (0, 2), (3, 2), self.COLOR_HEADER_BANK),
             ("BACKGROUND", (4, 2), (6, 2), self.COLOR_HEADER_AUDIT),
-
             ("TOPPADDING", (0, 0), (-1, -1), 0),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
             ("LEFTPADDING", (0, 0), (-1, -1), 1),
             ("RIGHTPADDING", (0, 0), (-1, -1), 1),
-
-            ("LINEBEFORE", (0, 0), (0, -1),
-             self.BORDER_WIDTH, self.COLOR_BORDER),
-
-            ("LINEAFTER", (6, 0), (6, -1),
-             self.BORDER_WIDTH, self.COLOR_BORDER),
-
-            ("LINEABOVE", (0, 0), (-1, 0),
-             self.BORDER_WIDTH, self.COLOR_BORDER),
-
-            ("LINEBELOW", (0, -1), (-1, -1),
-             self.BORDER_WIDTH, self.COLOR_BORDER),
-
-            ("GRID", (0, 0), (2, 1),
-             self.BORDER_WIDTH, self.COLOR_BORDER),
-
-            ("GRID", (4, 0), (6, 1),
-             self.BORDER_WIDTH, self.COLOR_BORDER),
-
-            ("GRID", (0, 2), (-1, -1),
-             self.BORDER_WIDTH, self.COLOR_BORDER),
+            ("LINEBEFORE", (0, 0), (0, -1), self.BORDER_WIDTH, self.COLOR_BORDER),
+            ("LINEAFTER", (6, 0), (6, -1), self.BORDER_WIDTH, self.COLOR_BORDER),
+            ("LINEABOVE", (0, 0), (-1, 0), self.BORDER_WIDTH, self.COLOR_BORDER),
+            ("LINEBELOW", (0, -1), (-1, -1), self.BORDER_WIDTH, self.COLOR_BORDER),
+            ("GRID", (0, 0), (2, 1), self.BORDER_WIDTH, self.COLOR_BORDER),
+            ("GRID", (4, 0), (6, 1), self.BORDER_WIDTH, self.COLOR_BORDER),
+            ("GRID", (0, 2), (-1, -1), self.BORDER_WIDTH, self.COLOR_BORDER),
         ]
 
         table.setStyle(TableStyle(style_cmds))
