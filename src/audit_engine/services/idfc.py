@@ -73,7 +73,6 @@ class IDFCService:
         "CurrentBranchName",
     ]
 
-    _fonts_registered = False
 
     def __init__(self, fonts_dir: str | None = None) -> None:
         self._fonts_dir = fonts_dir or self._resolve_fonts_dir()
@@ -117,35 +116,16 @@ class IDFCService:
     # ------------------------------------------------------------------
 
     def _register_fonts(self) -> None:
-
-        if IDFCService._fonts_registered:
-            return
-
-        reg_path = os.path.join(
-            self._fonts_dir,
-            "Carlito-Regular.ttf",
-        )
-
-        bld_path = os.path.join(
-            self._fonts_dir,
-            "Arimo-Bold.ttf",
-        )
+        reg_path = os.path.join(self._fonts_dir, "Carlito-Regular.ttf")
+        bld_path = os.path.join(self._fonts_dir, "Arimo-Bold.ttf")
 
         try:
             if os.path.exists(reg_path) and os.path.exists(bld_path):
-
-                pdfmetrics.registerFont(
-                    TTFont("Carlito", reg_path)
-                )
-
-                pdfmetrics.registerFont(
-                    TTFont("ArimoBold", bld_path)
-                )
+                pdfmetrics.registerFont(TTFont("Carlito", reg_path))
+                pdfmetrics.registerFont(TTFont("ArimoBold", bld_path))
 
                 self._font_reg = "Carlito"
                 self._font_bld = "ArimoBold"
-
-                IDFCService._fonts_registered = True
 
         except (OSError, ValueError) as exc:
             logger.warning(
@@ -325,6 +305,21 @@ class IDFCService:
                 )
             ]
 
+            # Required columns are matched case-insensitively above, but
+            # row_data keys must match REQUIRED_COLUMNS exactly (e.g.
+            # "Tare Weight") or downstream .get() lookups silently miss
+            # the data. Normalize any required header to its canonical
+            # casing while leaving non-required headers untouched.
+            canonical_lookup = {
+                col.lower(): col
+                for col in IDFCService.REQUIRED_COLUMNS
+            }
+
+            headers = [
+                canonical_lookup.get(h.lower(), h)
+                for h in headers
+            ]
+
             header_lower = {
                 h.lower()
                 for h in headers
@@ -397,6 +392,20 @@ class IDFCService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _clean_text(value: Any) -> str:
+        """Convert a value to display text without float artifacts.
+
+        Excel numeric cells (e.g. a branch code) often come back from
+        openpyxl as floats, so a plain str() turns "1023" into
+        "1023.0". Collapse whole-number floats to their int form first.
+        """
+
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+
+        return str(value).strip()
+
+    @staticmethod
     def group_by_branch(
         rows: list[dict[str, Any]],
     ) -> dict[str, list[dict[str, Any]]]:
@@ -405,9 +414,9 @@ class IDFCService:
 
         for row in rows:
 
-            branch = str(
+            branch = IDFCService._clean_text(
                 row.get("CurrentBranch", "")
-            ).strip()
+            )
 
             if branch.lower() in {
                 "",
@@ -432,7 +441,8 @@ class IDFCService:
         - Empty -> ""
         - 10.0 -> "10"
         - 10.5000 -> "10.5"
-        - Maximum 3 decimal places
+        - 10.0110000001 -> "10.01"
+        - Maximum 2 decimal places
         - Removes floating point artifacts
         """
 
@@ -448,11 +458,15 @@ class IDFCService:
             if not math.isfinite(num):
                 return ""
 
+            # Round first so artifacts (e.g. 9.999999999999) collapse
+            # to a clean value before the integer/decimal check below.
+            num = round(num, 2)
+
             if num.is_integer():
                 return str(int(num))
 
             return (
-                f"{num:.3f}"
+                f"{num:.2f}"
                 .rstrip("0")
                 .rstrip(".")
             )
@@ -464,7 +478,17 @@ class IDFCService:
     # PDF Generation
     # ------------------------------------------------------------------
     
-    def generate(self,audit_type: str,branch_code: str,branch_name: str,state: str,rows: list[dict[str, Any]],output_path: str,) -> None:
+    def generate(
+        self,
+        audit_type: str,
+        branch_code: str,
+        branch_name: str,
+        state: str,
+        rows: list[dict[str, Any]],
+        output_path: str,
+    ) -> None:
+        """Generate a single branch audit PDF report."""
+
         if not isinstance(rows, list):
             raise ValidationError("Rows must be a list.")
 
@@ -501,20 +525,20 @@ class IDFCService:
             [
                 "Audit Type :",
                 "",
-                str(audit_type).strip(),
+                self._clean_text(audit_type),
                 "",
                 "Branch Name :",
                 "",
-                str(branch_name).strip(),
+                self._clean_text(branch_name),
             ],
             [
                 "Branch Code :",
                 "",
-                str(branch_code).strip(),
+                self._clean_text(branch_code),
                 "",
                 "State :",
                 "",
-                str(state).strip(),
+                self._clean_text(state),
             ],
             [
                 Paragraph("Sr<br/>No", style_hdr),
