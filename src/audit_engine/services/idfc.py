@@ -365,17 +365,6 @@ class IDFCService:
 
     @staticmethod
     def format_tare_weight(val: Any) -> str:
-        """
-        Format tare weight.
-
-        - Empty -> ""
-        - 10.0 -> "10"
-        - 10.5000 -> "10.5"
-        - 10.0110000001 -> "10.01"
-        - Maximum 2 decimal places
-        - Removes floating point artifacts
-        """
-
         try:
             if val is None or pd.isna(val):
                 return ""
@@ -388,14 +377,11 @@ class IDFCService:
             if not math.isfinite(num):
                 return ""
 
-            # Round first so artifacts (e.g. 9.999999999999) collapse
-            # to a clean value before the integer/decimal check below.
-            num = round(num, 2)
-
             if num.is_integer():
                 return str(int(num))
 
-            return f"{num:.2f}".rstrip("0").rstrip(".")
+            # Preserve precision while removing floating-point artifacts.
+            return format(num, ".15g")
 
         except (TypeError, ValueError):
             return str(val).strip()
