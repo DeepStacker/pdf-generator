@@ -205,7 +205,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Audit Engine Elite - Web Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=8080, help="Port to bind to (default: 8080)")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8080)), help="Port to bind to (default: 8080, or $PORT env)")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     args = parser.parse_args()
 
