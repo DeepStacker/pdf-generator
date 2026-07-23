@@ -18,6 +18,9 @@ typecheck:
 run:
 	PYTHONPATH=src $(PYTHON) -m $(PACKAGE)
 
+web:
+	PYTHONPATH=src $(PYTHON) -m audit_engine_web --host 0.0.0.0 --port 8080
+
 build:
 	bash scripts/BUILD_FOR_MAC_LINUX.sh
 
