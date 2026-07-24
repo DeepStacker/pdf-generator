@@ -1541,15 +1541,18 @@
                 idfcBtnRun.textContent = 'Generate Reports';
                 idfcBtnRun.disabled = false;
                 idfcBtnCancel.disabled = true;
+                idfcProgressContainer.classList.add('hidden');
                 
                 arvogBtnRun.textContent = 'Generate Reports';
                 arvogBtnRun.disabled = false;
                 arvogBtnCancel.disabled = true;
+                arvogProgressContainer.classList.add('hidden');
                 
                 const stageText = (state.equitas.stage === 'STAGE 1') ? 'Generate (Stage 1)' : 'Consolidate (Stage 2)';
                 eqBtnRun.textContent = stageText;
                 eqBtnRun.disabled = false;
                 eqBtnCancel.disabled = true;
+                eqProgressContainer.classList.add('hidden');
                 
                 footerStatus.textContent = 'STATUS: Headless Worker Pool Idle';
                 footerStatus.className = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider';
