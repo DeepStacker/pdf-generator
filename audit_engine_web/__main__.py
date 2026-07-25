@@ -43,16 +43,17 @@ import threading
 def _start_temp_garbage_collector():
     def gc_loop():
         while True:
-            time.sleep(900)  # Check every 15 minutes
+            time.sleep(30)  # Check every 30 seconds for zero-trace security
             try:
                 now = time.time()
                 temp_root = Path(tempfile.gettempdir())
                 for p in temp_root.glob("audit_engine_*"):
-                    if p.is_dir() and p not in (UPLOAD_DIR, OUTPUT_DIR):
+                    if p.is_dir():
                         try:
-                            if now - p.stat().st_mtime > 3600:
+                            # Prune if directory modified > 120 seconds (2 mins) ago
+                            if now - p.stat().st_mtime > 120:
                                 shutil.rmtree(str(p), ignore_errors=True)
-                                logger.info("GC pruned stale temp dir: %s", p.name)
+                                logger.info("Zero-Trace Security GC pruned temp dir: %s", p.name)
                         except Exception:
                             pass
             except Exception as e:
@@ -76,11 +77,11 @@ def _add_cors():
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    if request.path.startswith("/static/") and request.path.endswith((".png", ".svg", ".ico")):
-        response.headers["Cache-Control"] = "public, max-age=86400"
-    elif request.path.startswith("/static/") and request.path.endswith((".css", ".js")):
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
 
 @route("/", method=["GET", "HEAD"])
 def serve_index():

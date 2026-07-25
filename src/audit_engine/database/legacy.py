@@ -73,9 +73,12 @@ def log_generation(excel_name: str, pdf_count: int, output_path: str, audit_type
     with _lock:
         conn = _get_connection()
         cursor = conn.cursor()
+        safe_excel = os.path.basename(excel_name) if excel_name else "Audit Workbook"
+        safe_full = full_path if full_path is not None else safe_excel
+        safe_out = output_path if output_path else "Outputs"
         cursor.execute(
             "INSERT INTO history (timestamp, excel_name, pdf_count, output_path, audit_type, full_path) VALUES (?, ?, ?, ?, ?, ?)",
-            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), excel_name, pdf_count, output_path, audit_type, full_path)
+            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), safe_excel, pdf_count, safe_out, audit_type, safe_full)
         )
         conn.commit()
 
