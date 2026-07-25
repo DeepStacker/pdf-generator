@@ -84,6 +84,14 @@ def serve_static(filename):
         return {"error": "File not found"}
     return static_file(str(file_path.name), root=str(file_path.parent))
 
+@route("/assets/<filename:path>")
+def serve_assets(filename):
+    file_path = STATIC_DIR / "assets" / filename
+    if not file_path.exists() or not file_path.is_file():
+        response.status = 404
+        return {"error": "Asset not found"}
+    return static_file(str(file_path.name), root=str(file_path.parent))
+
 @route("/api/upload", method=["OPTIONS", "POST"])
 def handle_upload():
     if request.method == "OPTIONS":
