@@ -1241,139 +1241,92 @@
 
                 <!-- SECTION: CONSOLIDATE -->
                 <section id="tab-CONSOLIDATE" class="space-y-6 hidden tab-content">
-                    <div class="border-b border-brand-borderLine pb-4 flex justify-between items-center">
-                        <h2 class="text-3xl font-bold tracking-tight text-white font-sans">Spreadsheet Consolidation</h2>
-                        <span class="px-3 py-1.5 text-xs font-bold rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">Multi-Source Merger</span>
+                    <div class="border-b border-slate-800 pb-4">
+                        <h2 class="text-xl font-bold tracking-tight text-white">Batch Workbook Consolidation</h2>
+                        <p class="text-xs text-slate-400 mt-1">Upload Payment Tracker and Master Data client workbooks to consolidate records into standard schema.</p>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-6">
-                        <!-- Left Panel: Source File Selection -->
-                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
-                            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Step 1: Select Source Spreadsheets</h3>
-                            <p class="text-[11px] text-slate-500">Select all source files at once. Supports 30+ spreadsheets.</p>
-                            
-                            <div class="space-y-2">
-                                <div onclick="browseConsolidateFiles()" class="arvog-drag-zone rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-violet-500/50 hover:bg-violet-500/5">
-                                    <div class="flex flex-col items-center space-y-2 pointer-events-none">
-                                        <svg class="icon w-8 h-8 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                            <polyline points="14 2 14 8 20 8"/>
-                                            <line x1="9" y1="15" x2="15" y2="15"/>
-                                            <line x1="12" y1="12" x2="12" y2="18"/>
-                                        </svg>
-                                        <span class="block text-sm font-medium text-slate-200">
-                                            Click to <span class="text-violet-400 font-semibold">browse local spreadsheets</span>
-                                        </span>
-                                        <span class="block text-[11px] text-slate-500">Supports multiple .xlsx, .xls files</span>
-                                    </div>
-                                </div>
-                                <button onclick="addConsolidateFile()" class="w-full bg-slate-800 text-slate-300 text-xs font-semibold py-2 rounded-lg border border-dashed border-brand-borderLine hover:bg-slate-700 hover:border-violet-500/50 transition">+ Add Single File</button>
+                    <!-- Dropzone Area -->
+                    <div id="newConsolDropzone" class="border border-dashed border-slate-700 bg-slate-900/50 hover:border-slate-500 hover:bg-slate-900 rounded-xl p-8 text-center cursor-pointer transition" onclick="document.getElementById('newConsolFileInput').click()">
+                        <input type="file" id="newConsolFileInput" multiple accept=".xlsx,.XLSX,.xls" class="hidden" onchange="handleNewConsolFilesSelected(event)">
+                        <div class="flex flex-col items-center justify-center space-y-3">
+                            <div class="p-3 rounded-lg bg-slate-800 text-blue-400 border border-slate-700">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
                             </div>
-
-                            <div id="consolFilesContainer" class="hidden space-y-2">
-                                <div class="flex justify-between items-center text-xs font-bold text-slate-400">
-                                    <span>SELECTED SOURCES (<span id="consolFilesCount">0</span>)</span>
-                                    <button onclick="clearConsolidateFiles()" class="text-rose-400 hover:text-rose-300 transition bg-transparent border-0 cursor-pointer" style="font-weight: 600;">Clear All</button>
-                                </div>
-                                <div id="consolFilesList" class="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-                                </div>
+                            <div>
+                                <p class="text-sm font-semibold text-slate-200">Upload Client Excel Workbooks</p>
+                                <p class="text-xs text-slate-400 mt-0.5">Drag & drop .xlsx files here or click to select from file system</p>
                             </div>
-                        </div>
-
-                        <!-- Right Panel: Configurations & Execution -->
-                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-5 shadow-sm">
-                            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Step 2: Configuration & Exec</h3>
-
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Audit Processing Month</label>
-                                    <input id="consolMonth" type="text" value="Feb'26" list="monthSuggestions" placeholder="e.g. Mar'26" class="w-full bg-slate-900 border border-brand-borderLine rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-violet-500">
-                                    <datalist id="monthSuggestions">
-                                        <option value="Jan'26">
-                                        <option value="Feb'26">
-                                        <option value="Mar'26">
-                                        <option value="Apr'26">
-                                        <option value="May'26">
-                                        <option value="Jun'26">
-                                        <option value="Jul'26">
-                                        <option value="Aug'26">
-                                        <option value="Sep'26">
-                                        <option value="Oct'26">
-                                        <option value="Nov'26">
-                                        <option value="Dec'26">
-                                    </datalist>
-                                </div>
-
-                                <!-- Incremental update toggle -->
-                                <div class="flex items-center gap-3 bg-slate-900/50 border border-brand-borderLine/50 rounded-lg px-4 py-3">
-                                    <input type="checkbox" id="consolMergeMode" checked class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500">
-                                    <label for="consolMergeMode" class="text-xs text-slate-300 cursor-pointer">
-                                        <span class="font-semibold text-violet-400">Merge mode</span> — Append new sources to existing consolidated report instead of rebuilding from scratch
-                                    </label>
-                                </div>
-
-                                <div>
-                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">System Settings</label>
-                                    <button onclick="openMappingRulesExcel()" class="w-full bg-slate-800 text-slate-300 text-sm font-semibold py-2.5 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Edit Mapping Rules</button>
-                                </div>
-                            </div>
-
-                            <div class="pt-2 flex items-center space-x-3">
-                                <button id="consolBtnRun" onclick="runConsolidation()" disabled class="w-full bg-violet-600 text-white text-sm font-bold py-3.5 px-6 rounded-lg hover:bg-violet-500 transition shadow-md disabled:opacity-40 disabled:pointer-events-none">Execute Consolidation</button>
-                            </div>
-
-                            <div id="consolProgressContainer" class="hidden space-y-2">
-                                <div class="h-2 w-full bg-slate-900 border border-brand-borderLine rounded-full overflow-hidden">
-                                    <div class="h-full bg-violet-500 rounded-full transition-all duration-300" style="width: 0%"></div>
-                                </div>
-                                <span id="consolStatusText" class="text-xs italic text-slate-500">Ready...</span>
-                            </div>
+                            <button type="button" class="px-4 py-2 rounded-md bg-slate-800 text-slate-200 text-xs font-medium border border-slate-700">Select Workbooks</button>
                         </div>
                     </div>
 
-                    <!-- Per-Source Processing Status -->
-                    <div id="consolBankProgress" class="hidden bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-3 shadow-sm">
-                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Processing Sequence</h3>
-                        <div id="consolBankProgressList" class="space-y-1 max-h-48 overflow-y-auto">
+                    <!-- Staged Files List -->
+                    <div id="newConsolStagedContainer" class="hidden enterprise-panel rounded-xl overflow-hidden">
+                        <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+                            <div class="flex items-center space-x-2">
+                                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-200">Staged Client Workbooks (<span id="newConsolFileCount">0</span>)</h3>
+                            </div>
+                            <button onclick="clearNewConsolFiles()" class="text-xs text-slate-400 hover:text-red-400 transition">Clear Batch</button>
+                        </div>
+                        <div id="newConsolFilesList" class="max-h-60 overflow-y-auto divide-y divide-slate-800/60 text-xs"></div>
+                        <div class="p-4 border-t border-slate-800 bg-slate-900/60 flex justify-between items-center">
+                            <span class="text-xs text-slate-400">Ready to process selected client workbooks.</span>
+                            <button id="btnRunNewConsolidation" onclick="executeNewConsolidation()" class="px-6 py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">Run Batch Consolidation</button>
                         </div>
                     </div>
 
-                    <!-- Results Summary Ledger Cards -->
-                    <div id="consolResultsFrame" class="hidden bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-5 shadow-md">
-                        <div class="flex items-center justify-between">
-                            <h3 class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Consolidation Report Summary</h3>
-                            <span id="consolMergeBadge" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">Merged</span>
+                    <!-- Summary Metrics Dashboard -->
+                    <div id="newConsolSummaryDashboard" class="hidden space-y-6">
+                        <div class="enterprise-panel p-5 rounded-xl flex items-center justify-between bg-emerald-950/20 border-emerald-800/50">
+                            <div>
+                                <h3 class="text-sm font-semibold text-slate-100">Batch Processing Complete</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Successfully consolidated workbooks into standard 24-column / 62-column schema.</p>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <button onclick="resetNewConsolidation()" class="px-4 py-2 rounded-md border border-slate-700 bg-slate-800 text-slate-300 text-xs font-medium">Process New Batch</button>
+                                <a id="btnDownloadNewConsolidated" href="#" download="Mar'26 consolidated.xlsx" class="px-5 py-2 rounded-md bg-blue-600 text-white text-xs font-semibold">Export Consolidated Workbook (.xlsx)</a>
+                            </div>
                         </div>
-                        
+
                         <div class="grid grid-cols-4 gap-4">
-                            <div class="bg-slate-900 border border-brand-borderLine rounded-lg p-4">
-                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Ingested Files</span>
-                                <span id="consolStat-files" class="text-2xl font-bold mt-1 block text-white">0</span>
-                                <span id="consolStat-files-prev" class="text-[9px] text-slate-600 hidden">+ <span>0</span> new</span>
+                            <div class="enterprise-panel p-4 rounded-xl border-l-4 border-l-blue-500">
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">Total Consolidated Pay</span>
+                                <span id="newStatTotalPay" class="text-2xl font-bold font-mono text-slate-100 mt-1 block">₹0.00</span>
                             </div>
-                            <div class="bg-slate-900 border border-brand-borderLine rounded-lg p-4">
-                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Reconciled Rows (PT)</span>
-                                <span id="consolStat-pt" class="text-2xl font-bold mt-1 block text-white">0</span>
+                            <div class="enterprise-panel p-4 rounded-xl border-l-4 border-l-indigo-500">
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">Payment Tracker Rows</span>
+                                <span id="newStatPTRows" class="text-2xl font-bold font-mono text-slate-100 mt-1 block">0</span>
                             </div>
-                            <div class="bg-slate-900 border border-brand-borderLine rounded-lg p-4">
-                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Reconciled Rows (MD)</span>
-                                <span id="consolStat-md" class="text-2xl font-bold mt-1 block text-white">0</span>
+                            <div class="enterprise-panel p-4 rounded-xl border-l-4 border-l-purple-500">
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">Master Data Assignments</span>
+                                <span id="newStatMDRows" class="text-2xl font-bold font-mono text-slate-100 mt-1 block">0</span>
                             </div>
-                            <div class="bg-slate-900 border border-brand-borderLine rounded-lg p-4">
-                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Control Alerts</span>
-                                <span id="consolStat-alerts" class="text-2xl font-bold mt-1 block text-amber-500">0</span>
-                            </div>
-                        </div>
-
-                        <div id="consolWarnFrame" class="hidden bg-rose-950/20 border border-rose-900/30 rounded-lg p-4 space-y-2">
-                            <span class="block text-xs font-bold text-rose-400">Audit Warnings / Double-Payment Alerts Flagged:</span>
-                            <div id="consolWarnList" class="text-xs text-rose-300 font-mono space-y-1.5">
+                            <div class="enterprise-panel p-4 rounded-xl border-l-4 border-l-emerald-500">
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">Validated Clients</span>
+                                <span id="newStatClients" class="text-2xl font-bold font-mono text-slate-100 mt-1 block">0</span>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-3">
-                            <button onclick="openConsolidatedExcel()" class="bg-violet-600 text-white text-sm font-bold py-3.5 rounded-lg hover:bg-violet-500 transition shadow-md">Open Consolidated Spreadsheet</button>
-                            <button onclick="openConsolidatedFolder()" class="bg-slate-800 text-slate-300 text-sm font-semibold py-3.5 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Open Output Folder</button>
+                        <div class="enterprise-panel rounded-xl overflow-hidden">
+                            <div class="p-4 border-b border-slate-800 text-xs font-semibold text-slate-200 uppercase tracking-wider bg-slate-900/60">
+                                Workbook Parsing Log
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="bg-slate-950 text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-800">
+                                        <tr>
+                                            <th class="py-2.5 px-4">#</th>
+                                            <th class="py-2.5 px-4">Source Workbook</th>
+                                            <th class="py-2.5 px-4">Mapped Client Entity</th>
+                                            <th class="py-2.5 px-4 text-center">PT Records</th>
+                                            <th class="py-2.5 px-4 text-center">MD Records</th>
+                                            <th class="py-2.5 px-4 text-right">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="newConsolSummaryTableBody" class="divide-y divide-slate-800/60"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </section>

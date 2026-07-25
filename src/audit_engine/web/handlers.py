@@ -575,30 +575,49 @@ def handle_consolidate_banks() -> dict:
 
 
 def handle_consolidate_run(data: dict) -> dict:
-    if consolidation_tracker.is_running:
-        return {"success": False, "error": "A consolidation process is already running."}
-        
     selected_files = data.get("files", [])
-    month = data.get("month", "Feb'26")
-    merge_mode = data.get("merge_mode", False)
-    output_dir = data.get("output_dir", "")
-    
     if not selected_files:
         return {"success": False, "error": "No source files selected."}
+
+    output_dir = data.get("output_dir", "")
     if not output_dir:
-        return {"success": False, "error": "No output directory selected."}
-        
-    consolidation_tracker.reset()
-    consolidation_tracker.merge_mode = merge_mode
-    
-    import threading
-    threading.Thread(
-        target=worker_consolidation_thread,
-        args=(selected_files, month, merge_mode, output_dir),
-        daemon=True
-    ).start()
-    
-    return {"success": True}
+        from audit_engine.database.legacy import get_config
+        import tempfile
+        output_dir = get_config("out_path") or tempfile.gettempdir()
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    files_dict = {}
+    for fpath in selected_files:
+        if os.path.exists(fpath):
+            fname = os.path.basename(fpath)
+            files_dict[fname] = fpath
+
+    if not files_dict:
+        return {"success": False, "error": "No valid source files found on disk."}
+
+    try:
+        from audit_engine.consolidator.consolidate import consolidate_in_memory
+        excel_bytes, summary = consolidate_in_memory(files_dict, save_mapping=True)
+
+        output_path = os.path.join(output_dir, "Mar'26 consolidated.xlsx")
+        with open(output_path, "wb") as f:
+            f.write(excel_bytes)
+
+        summary["output_path"] = output_path
+        summary["output_exists"] = True
+
+        consolidation_tracker.summary = summary
+        consolidation_tracker.is_running = False
+        consolidation_tracker.exit_code = 0
+        consolidation_tracker.progress_text = "Consolidation Complete."
+
+        return {"success": True, "summary": summary, "output_path": output_path}
+    except Exception as e:
+        consolidation_tracker.error_msg = str(e)
+        consolidation_tracker.is_running = False
+        consolidation_tracker.exit_code = 1
+        return {"success": False, "error": str(e)}
 
 
 def handle_consolidate_progress() -> dict:

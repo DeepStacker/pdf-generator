@@ -2350,3 +2350,138 @@
                 el.style.display = 'none';
             });
         }
+
+        // ---- NEW CONSOLIDATION ENGINE JS HANDLERS ----
+        let newStagedFiles = [];
+
+        function handleNewConsolFilesSelected(event) {
+            if (event.target.files && event.target.files.length > 0) {
+                const added = Array.from(event.target.files);
+                newStagedFiles = [...newStagedFiles, ...added];
+                renderNewStagedFiles();
+            }
+        }
+
+        function renderNewStagedFiles() {
+            const dropzone = document.getElementById('newConsolDropzone');
+            const container = document.getElementById('newConsolStagedContainer');
+            const list = document.getElementById('newConsolFilesList');
+            const count = document.getElementById('newConsolFileCount');
+
+            if (!container || !dropzone) return;
+
+            if (newStagedFiles.length === 0) {
+                container.classList.add('hidden');
+                dropzone.classList.remove('hidden');
+                return;
+            }
+
+            if (count) count.textContent = newStagedFiles.length;
+            container.classList.remove('hidden');
+
+            if (list) {
+                list.innerHTML = newStagedFiles.map((file, idx) => `
+                    <div class="px-4 py-2.5 flex justify-between items-center bg-slate-900/40 hover:bg-slate-800/40">
+                        <div class="flex items-center space-x-3 truncate">
+                            <span class="font-mono text-slate-500">${String(idx + 1).padStart(2, '0')}</span>
+                            <span class="font-medium text-slate-200 truncate">${file.name}</span>
+                            <span class="text-slate-500 font-mono">(${formatBytes(file.size)})</span>
+                        </div>
+                        <button onclick="removeNewStagedFile(${idx})" class="text-slate-400 hover:text-red-400">✕</button>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function removeNewStagedFile(idx) {
+            newStagedFiles.splice(idx, 1);
+            renderNewStagedFiles();
+        }
+
+        function clearNewConsolFiles() {
+            newStagedFiles = [];
+            renderNewStagedFiles();
+        }
+
+        async function executeNewConsolidation() {
+            if (newStagedFiles.length === 0) return;
+            const btn = document.getElementById('btnRunNewConsolidation');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Processing Batch...';
+            }
+
+            try {
+                let filePaths = [];
+                if (typeof uploadMultipleFilesToServer === 'function' && isWebMode()) {
+                    filePaths = await uploadMultipleFilesToServer(newStagedFiles);
+                } else {
+                    filePaths = newStagedFiles.map(f => f.path || f.name);
+                }
+
+                const runResp = await fetch('/api/consolidate/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ files: filePaths })
+                });
+                const runData = await runResp.json();
+
+                if (runData.success && runData.summary) {
+                    renderNewConsolSummary(runData.summary, runData.output_path);
+                } else {
+                    alert('Consolidation error: ' + (runData.error || 'Failed to process files.'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An unexpected error occurred during consolidation.');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Run Batch Consolidation';
+                }
+            }
+        }
+
+        function renderNewConsolSummary(summary, outputPath) {
+            document.getElementById('newConsolStagedContainer').classList.add('hidden');
+            document.getElementById('newConsolDropzone').classList.add('hidden');
+            document.getElementById('newConsolSummaryDashboard').classList.remove('hidden');
+
+            document.getElementById('newStatTotalPay').textContent = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(summary.total_pay || 0);
+            document.getElementById('newStatPTRows').textContent = (summary.pt_rows || 0).toLocaleString();
+            document.getElementById('newStatMDRows').textContent = (summary.md_rows || 0).toLocaleString();
+            document.getElementById('newStatClients').textContent = (summary.pt_clients || []).length;
+
+            const downloadBtn = document.getElementById('btnDownloadNewConsolidated');
+            if (downloadBtn && outputPath) {
+                downloadBtn.href = '/api/download?path=' + encodeURIComponent(outputPath);
+            }
+
+            const tbody = document.getElementById('newConsolSummaryTableBody');
+            if (tbody) {
+                tbody.innerHTML = (summary.file_summaries || []).map((item, idx) => `
+                    <tr class="hover:bg-slate-800/30">
+                        <td class="py-2.5 px-4 font-mono text-slate-500">${idx + 1}</td>
+                        <td class="py-2.5 px-4 font-medium text-slate-200">${item.filename}</td>
+                        <td class="py-2.5 px-4 text-blue-400 font-medium">${item.client}</td>
+                        <td class="py-2.5 px-4 text-center font-mono">${item.pt_rows}</td>
+                        <td class="py-2.5 px-4 text-center font-mono">${item.md_rows}</td>
+                        <td class="py-2.5 px-4 text-right">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">${item.status}</span>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function resetNewConsolidation() {
+            newStagedFiles = [];
+            document.getElementById('newConsolSummaryDashboard').classList.add('hidden');
+            document.getElementById('newConsolDropzone').classList.remove('hidden');
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024, i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
+        }

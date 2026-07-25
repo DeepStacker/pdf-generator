@@ -15,8 +15,8 @@
                     _pywebviewReady = true; 
                     resolve(); 
                 });
-                // Fallback timeout for normal web browser mode
-                setTimeout(() => resolve(), 2000);
+                // In web browser mode, resolve immediately — no IPC bridge needed
+                setTimeout(() => resolve(), 100);
             }
         });
 
@@ -142,6 +142,8 @@
         window.addEventListener('hashchange', handleHashRouting);
 
         window.addEventListener('DOMContentLoaded', () => {
+            // Hide desktop indicators
+            if (isWebMode()) hideDesktopUI();
             // Load configs and history list
             loadDashboardData();
             // Start silent updater background check after 2 seconds
@@ -154,34 +156,49 @@
             pollConsolidationProgress(true);
         });
 
-        // BANK SELECTION CHANGE EVENT
-        bankSelector.addEventListener('change', (e) => {
-            const val = e.target.value;
-            state.activeBank = val;
+        // BANK SELECTION via pills
+        function switchBank(bankName, force = false) {
+            if (state.activeBank === bankName && !force) return;
             
-            // Save active bank to config
-            saveConfig('bank', val);
+            // Update pill active states
+            document.querySelectorAll('.bank-pill').forEach(p => p.classList.remove('active'));
+            const pillMap = { 'IDFC First Bank': 'bankPill-IDFC', 'Equitas Small Finance Bank': 'bankPill-EQUITAS', 'Arvog Bank': 'bankPill-ARVOG', 'CONSOLIDATION': 'bankPill-CONSOLIDATION' };
+            const activePill = document.getElementById(pillMap[bankName]);
+            if (activePill) activePill.classList.add('active');
             
-            // Dynamic branding updates
+            state.activeBank = bankName;
+            saveConfig('bank', bankName);
+            
+            if (bankName === 'CONSOLIDATION') {
+                // Show consolidation section, hide bank sections
+                document.getElementById('tab-CONSOLIDATE').classList.remove('hidden');
+                ['tab-PROCESS-IDFC','tab-PROCESS-EQUITAS','tab-PROCESS-ARVOG'].forEach(id => {
+                    const s = document.getElementById(id);
+                    if (s) s.classList.add('hidden');
+                });
+                loadConsolidationBanks();
+                pollConsolidationProgress();
+                return;
+            }
+            
+            // Hide consolidation section
+            document.getElementById('tab-CONSOLIDATE').classList.add('hidden');
+            
             updateThemeBranding();
-            
-            // Render selection checklist for this newly active bank!
             renderSelectedFilesList();
             
-            // Trigger preview highlight for this bank if there are success files
-            const bankFiles = state.selectedFiles[val] || [];
+            const bankFiles = state.selectedFiles[bankName] || [];
             const successIdx = bankFiles.findIndex(f => f.status === "success");
             if (successIdx !== -1) {
                 selectPreviewFile(successIdx);
             } else {
-                // Clear active preview input values
                 const prefix = getActivePrefix();
-                const targetInput = document.getElementById(`${prefix}InputFile`);
-                if (targetInput) targetInput.value = '';
-                const gridContainer = document.getElementById(`${prefix}GridContainer`);
-                if (gridContainer) gridContainer.classList.add('hidden');
+                const ti = document.getElementById(`${prefix}InputFile`);
+                if (ti) ti.value = '';
+                const gc = document.getElementById(`${prefix}GridContainer`);
+                if (gc) gc.classList.add('hidden');
             }
-        });
+        }
 
         // OUTPUT DIRECTORY SYNC & PERSIST LISTENERS
         ['idfcOutputDir', 'eqOutputDir', 'arvogOutputDir'].forEach(id => {
@@ -225,42 +242,35 @@
             const isIDFC = (state.activeBank === 'IDFC First Bank');
             const isArvog = (state.activeBank === 'Arvog Bank');
             
-            // 1. Update logo area text and icons
+            // 1. Update logo area text and icons (null-safe for web mode)
             const logoText1 = document.querySelector('.logo-text-primary');
             const logoText2 = document.querySelector('.logo-text-secondary');
             const logoIcon = document.querySelector('.logo-icon');
             const logoCopyright = document.querySelector('.copyright-label');
 
-            if (isIDFC) {
-                logoText1.textContent = 'IDFC FIRST';
-                logoText2.textContent = 'AUDIT ENGINE';
-                logoText2.className = 'text-[10px] font-extrabold tracking-widest text-blue-500 mt-1 logo-text-secondary';
-                logoIcon.className = 'w-8 h-8 text-blue-500 logo-icon';
-                logoCopyright.textContent = '© 2026 IDFC FIRST Bank';
-            } else if (isArvog) {
-                logoText1.textContent = 'ARVOG';
-                logoText2.textContent = 'AUDIT ENGINE';
-                logoText2.className = 'text-[10px] font-extrabold tracking-widest text-emerald-500 mt-1 logo-text-secondary';
-                logoIcon.className = 'w-8 h-8 text-emerald-500 logo-icon';
-                logoCopyright.textContent = '© 2026 Arvog Bank';
-            } else {
-                logoText1.textContent = 'EQUITAS';
-                logoText2.textContent = 'AUDIT ENGINE';
-                logoText2.className = 'text-[10px] font-extrabold tracking-widest text-amber-500 mt-1 logo-text-secondary';
-                logoIcon.className = 'w-8 h-8 text-amber-500 logo-icon';
-                logoCopyright.textContent = '© 2026 Equitas Small Finance Bank';
+            if (logoText1 && logoText2 && logoIcon && logoCopyright) {
+                if (isIDFC) {
+                    logoText1.textContent = 'IDFC FIRST';
+                    logoText2.textContent = 'AUDIT ENGINE';
+                    logoText2.className = 'text-[10px] font-extrabold tracking-widest text-blue-500 mt-1 logo-text-secondary';
+                    logoIcon.className = 'w-8 h-8 text-blue-500 logo-icon';
+                    logoCopyright.textContent = '© 2026 IDFC FIRST Bank';
+                } else if (isArvog) {
+                    logoText1.textContent = 'ARVOG';
+                    logoText2.textContent = 'AUDIT ENGINE';
+                    logoText2.className = 'text-[10px] font-extrabold tracking-widest text-emerald-500 mt-1 logo-text-secondary';
+                    logoIcon.className = 'w-8 h-8 text-emerald-500 logo-icon';
+                    logoCopyright.textContent = '© 2026 Arvog Bank';
+                } else {
+                    logoText1.textContent = 'EQUITAS';
+                    logoText2.textContent = 'AUDIT ENGINE';
+                    logoText2.className = 'text-[10px] font-extrabold tracking-widest text-amber-500 mt-1 logo-text-secondary';
+                    logoIcon.className = 'w-8 h-8 text-amber-500 logo-icon';
+                    logoCopyright.textContent = '© 2026 Equitas Small Finance Bank';
+                }
             }
 
-            // 2. Adjust active sidebar navigation indicator border-color and icons
-            const activeBtn = document.getElementById(`tabBtn-${state.activeTab}`);
-            if (activeBtn) {
-                let borderCol = 'border-amber-500';
-                if (isIDFC) borderCol = 'border-blue-500';
-                else if (isArvog) borderCol = 'border-emerald-500';
-                activeBtn.className = `w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 ${borderCol} nav-btn`;
-            }
-
-            // 3. Inject CSS dynamically for classes marked as "dynamic-accent-*"
+            // 2. Inject CSS dynamically for classes marked as "dynamic-accent-*"
             let primaryColor = '#D97706';
             if (isIDFC) primaryColor = '#2563EB';
             else if (isArvog) primaryColor = '#10B981';
@@ -307,20 +317,12 @@
             }
             
             // Update navigation button active styles
-            document.querySelectorAll('.nav-btn').forEach(btn => {
-                btn.className = 'w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 text-slate-400 hover:bg-slate-900 hover:text-white nav-btn';
-            });
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
             
             const isIDFC = (state.activeBank === 'IDFC First Bank');
             const isArvog = (state.activeBank === 'Arvog Bank');
             const activeBtn = document.getElementById(`tabBtn-${tabId}`);
-            if (activeBtn) {
-                let borderCol = 'border-amber-500';
-                if (tabId === 'CONSOLIDATE') borderCol = 'border-indigo-500';
-                else if (isIDFC) borderCol = 'border-blue-500';
-                else if (isArvog) borderCol = 'border-emerald-500';
-                activeBtn.className = `w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-200 bg-brand-panelBg text-white border-l-4 ${borderCol} nav-btn`;
-            }
+            if (activeBtn) activeBtn.classList.add('active');
 
             // Hide all tab sections
             document.getElementById('tab-PROCESS-IDFC').classList.add('hidden');
@@ -527,15 +529,18 @@
 
         // LOAD DASHBOARD DATA (Initial load)
         async function loadDashboardData() {
-            setLoadingState(['idfcStat-sessions', 'idfcStat-pdfs'], true);
+            const elementsToLoad = [];
+            ['idfcStat-sessions', 'idfcStat-pdfs', 'arvogStat-sessions', 'arvogStat-pdfs', 'eqStat-sessions', 'eqStat-pdfs'].forEach(id => {
+                if (document.getElementById(id)) elementsToLoad.push(id);
+            });
+            setLoadingState(elementsToLoad, true);
             try {
                 const resp = await fetch('/api/dashboard');
                 const data = await resp.json();
                 
-                // Active bank
+                // Active bank — switchBank handles pill UI + section visibility
                 if (data.bank) {
-                    state.activeBank = data.bank;
-                    bankSelector.value = data.bank;
+                    switchBank(data.bank, true);
                 }
                 
                 // IDFC Preferences
@@ -595,17 +600,23 @@
                     addSelectedFiles([data.last_file]);
                 }
                 
-                // Stats numbers
-                document.getElementById('idfcStat-sessions').textContent = data.total_sessions || 0;
-                document.getElementById('idfcStat-lastRun').textContent = data.last_run || 'No activity yet';
-                document.getElementById('idfcStat-pdfs').textContent = data.total_pdfs || 0;
+                // Stats numbers (shared across all bank profiles)
+                const stats = { sessions: data.total_sessions || 0, lastRun: data.last_run || 'No activity yet', pdfs: data.total_pdfs || 0 };
+                ['idfc', 'arvog', 'eq'].forEach(p => {
+                    const sEl = document.getElementById(`${p}Stat-sessions`);
+                    if (sEl) sEl.textContent = stats.sessions;
+                    const lEl = document.getElementById(`${p}Stat-lastRun`);
+                    if (lEl) lEl.textContent = stats.lastRun;
+                    const pEl = document.getElementById(`${p}Stat-pdfs`);
+                    if (pEl) pEl.textContent = stats.pdfs;
+                });
                 
                 // Load recent files cache
                 renderRecentFiles(data.recent_files || []);
                 
                 // DB and Log path labels
-                if (data.db_path) document.getElementById('dbPathLabel').textContent = data.db_path;
-                if (data.log_path) document.getElementById('logPathLabel').textContent = data.log_path;
+                if (data.db_path) { const el = document.getElementById('dbPathLabel'); if (el) el.textContent = data.db_path; }
+                if (data.log_path) { const el = document.getElementById('logPathLabel'); if (el) el.textContent = data.log_path; }
                 if (data.naming_pattern) {
                     document.getElementById('settingsNamingPattern').value = data.naming_pattern;
                     updateNamingPreview();
@@ -626,8 +637,8 @@
             
             if (!files || files.length === 0) {
                 const empty = '<span class="text-slate-600 italic">None saved</span>';
-                idfcList.innerHTML = empty;
-                eqList.innerHTML = empty;
+                if (idfcList) idfcList.innerHTML = empty;
+                if (eqList) eqList.innerHTML = empty;
                 if (arvogList) arvogList.innerHTML = empty;
                 return;
             }
@@ -638,8 +649,8 @@
                 html += `<button onclick="selectRecentFile('${encodeURIComponent(f)}')" class="bg-slate-900 border border-brand-borderLine text-slate-400 hover:text-white hover:border-slate-500 rounded px-2.5 py-1 transition truncate max-w-[200px]" title="${escapeHtml(f)}">${escapeHtml(filename)}</button>`;
             });
             
-            idfcList.innerHTML = html;
-            eqList.innerHTML = html;
+            if (idfcList) idfcList.innerHTML = html;
+            if (eqList) eqList.innerHTML = html;
             if (arvogList) arvogList.innerHTML = html;
         }
 
@@ -785,11 +796,7 @@
                 if (data.success) {
                     // Update active bank if file auto-detects another bank!
                     if (data.detected_bank && data.detected_bank !== state.activeBank) {
-                        state.activeBank = data.detected_bank;
-                        bankSelector.value = data.detected_bank;
-                        saveConfig('bank', data.detected_bank);
-                        updateThemeBranding();
-                        
+                        switchBank(data.detected_bank);
                         addSelectedFiles([filepath]);
                         return;
                     }
@@ -1534,15 +1541,18 @@
                 idfcBtnRun.textContent = 'Generate Reports';
                 idfcBtnRun.disabled = false;
                 idfcBtnCancel.disabled = true;
+                idfcProgressContainer.classList.add('hidden');
                 
                 arvogBtnRun.textContent = 'Generate Reports';
                 arvogBtnRun.disabled = false;
                 arvogBtnCancel.disabled = true;
+                arvogProgressContainer.classList.add('hidden');
                 
                 const stageText = (state.equitas.stage === 'STAGE 1') ? 'Generate (Stage 1)' : 'Consolidate (Stage 2)';
                 eqBtnRun.textContent = stageText;
                 eqBtnRun.disabled = false;
                 eqBtnCancel.disabled = true;
+                eqProgressContainer.classList.add('hidden');
                 
                 footerStatus.textContent = 'STATUS: Headless Worker Pool Idle';
                 footerStatus.className = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider';
@@ -1785,6 +1795,11 @@
 
         async function openSystemPath(path) {
             if (!path) return;
+            if (isWebMode()) {
+                path = decodeURIComponent(path);
+                window.open('/api/download?path=' + encodeURIComponent(path), '_blank');
+                return;
+            }
             path = decodeURIComponent(path);
             try {
                 await fetch('/api/open', {
@@ -2317,5 +2332,156 @@
         }
 
         function getDownloadUrl(path) {
-            return '/api/download/' + encodeURIComponent(path);
+            return '/api/download?path=' + encodeURIComponent(path);
+        }
+
+        function hideDesktopUI() {
+            document.querySelectorAll('[id$="AutoOpen"]').forEach(el => {
+                const container = el.closest('.flex.items-center') || el.parentElement;
+                if (container) container.style.display = 'none';
+            });
+            document.querySelectorAll('button[onclick*="browseFolder"]').forEach(el => {
+                el.style.display = 'none';
+            });
+            document.querySelectorAll('[id$="OutputDir"]').forEach(el => {
+                if (el.tagName === 'INPUT') el.placeholder = 'Auto (temp directory)';
+            });
+            document.querySelectorAll('[onclick*="openConsolidatedFolder"]').forEach(el => {
+                el.style.display = 'none';
+            });
+        }
+
+        // ---- NEW CONSOLIDATION ENGINE JS HANDLERS ----
+        let newStagedFiles = [];
+
+        function handleNewConsolFilesSelected(event) {
+            if (event.target.files && event.target.files.length > 0) {
+                const added = Array.from(event.target.files);
+                newStagedFiles = [...newStagedFiles, ...added];
+                renderNewStagedFiles();
+            }
+        }
+
+        function renderNewStagedFiles() {
+            const dropzone = document.getElementById('newConsolDropzone');
+            const container = document.getElementById('newConsolStagedContainer');
+            const list = document.getElementById('newConsolFilesList');
+            const count = document.getElementById('newConsolFileCount');
+
+            if (!container || !dropzone) return;
+
+            if (newStagedFiles.length === 0) {
+                container.classList.add('hidden');
+                dropzone.classList.remove('hidden');
+                return;
+            }
+
+            if (count) count.textContent = newStagedFiles.length;
+            container.classList.remove('hidden');
+
+            if (list) {
+                list.innerHTML = newStagedFiles.map((file, idx) => `
+                    <div class="px-4 py-2.5 flex justify-between items-center bg-slate-900/40 hover:bg-slate-800/40">
+                        <div class="flex items-center space-x-3 truncate">
+                            <span class="font-mono text-slate-500">${String(idx + 1).padStart(2, '0')}</span>
+                            <span class="font-medium text-slate-200 truncate">${file.name}</span>
+                            <span class="text-slate-500 font-mono">(${formatBytes(file.size)})</span>
+                        </div>
+                        <button onclick="removeNewStagedFile(${idx})" class="text-slate-400 hover:text-red-400">✕</button>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function removeNewStagedFile(idx) {
+            newStagedFiles.splice(idx, 1);
+            renderNewStagedFiles();
+        }
+
+        function clearNewConsolFiles() {
+            newStagedFiles = [];
+            renderNewStagedFiles();
+        }
+
+        async function executeNewConsolidation() {
+            if (newStagedFiles.length === 0) return;
+            const btn = document.getElementById('btnRunNewConsolidation');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Processing Batch...';
+            }
+
+            try {
+                let filePaths = [];
+                if (typeof uploadMultipleFilesToServer === 'function' && isWebMode()) {
+                    filePaths = await uploadMultipleFilesToServer(newStagedFiles);
+                } else {
+                    filePaths = newStagedFiles.map(f => f.path || f.name);
+                }
+
+                const runResp = await fetch('/api/consolidate/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ files: filePaths })
+                });
+                const runData = await runResp.json();
+
+                if (runData.success && runData.summary) {
+                    renderNewConsolSummary(runData.summary, runData.output_path);
+                } else {
+                    alert('Consolidation error: ' + (runData.error || 'Failed to process files.'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An unexpected error occurred during consolidation.');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Run Batch Consolidation';
+                }
+            }
+        }
+
+        function renderNewConsolSummary(summary, outputPath) {
+            document.getElementById('newConsolStagedContainer').classList.add('hidden');
+            document.getElementById('newConsolDropzone').classList.add('hidden');
+            document.getElementById('newConsolSummaryDashboard').classList.remove('hidden');
+
+            document.getElementById('newStatTotalPay').textContent = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(summary.total_pay || 0);
+            document.getElementById('newStatPTRows').textContent = (summary.pt_rows || 0).toLocaleString();
+            document.getElementById('newStatMDRows').textContent = (summary.md_rows || 0).toLocaleString();
+            document.getElementById('newStatClients').textContent = (summary.pt_clients || []).length;
+
+            const downloadBtn = document.getElementById('btnDownloadNewConsolidated');
+            if (downloadBtn && outputPath) {
+                downloadBtn.href = '/api/download?path=' + encodeURIComponent(outputPath);
+            }
+
+            const tbody = document.getElementById('newConsolSummaryTableBody');
+            if (tbody) {
+                tbody.innerHTML = (summary.file_summaries || []).map((item, idx) => `
+                    <tr class="hover:bg-slate-800/30">
+                        <td class="py-2.5 px-4 font-mono text-slate-500">${idx + 1}</td>
+                        <td class="py-2.5 px-4 font-medium text-slate-200">${item.filename}</td>
+                        <td class="py-2.5 px-4 text-blue-400 font-medium">${item.client}</td>
+                        <td class="py-2.5 px-4 text-center font-mono">${item.pt_rows}</td>
+                        <td class="py-2.5 px-4 text-center font-mono">${item.md_rows}</td>
+                        <td class="py-2.5 px-4 text-right">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">${item.status}</span>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function resetNewConsolidation() {
+            newStagedFiles = [];
+            document.getElementById('newConsolSummaryDashboard').classList.add('hidden');
+            document.getElementById('newConsolDropzone').classList.remove('hidden');
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024, i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
         }

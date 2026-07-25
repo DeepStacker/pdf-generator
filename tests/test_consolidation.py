@@ -31,30 +31,25 @@ class TestConsolidationHandlers:
         assert res["success"] is False
         assert "No source files selected" in res["error"]
 
-    def test_run_fails_when_already_running(self):
-        consolidation_tracker.is_running = True
-        res = handle_consolidate_run({"files": ["dummy.xlsx"], "month": "Feb'26"})
+    def test_run_fails_with_invalid_files(self):
+        res = handle_consolidate_run({"files": ["non_existent_file.xlsx"], "month": "Feb'26"})
         assert res["success"] is False
-        assert "already running" in res["error"]
+        assert "No valid source files" in res["error"]
 
-    def test_run_fails_with_no_output_dir(self):
-        res = handle_consolidate_run({"files": ["dummy.xlsx"], "month": "Feb'26", "output_dir": ""})
-        assert res["success"] is False
-        assert "output directory" in res["error"].lower()
+    def test_run_executes_successfully_with_valid_files(self, tmp_path):
+        source_dir = Path(__file__).resolve().parent.parent / "src" / "audit_engine" / "consolidator" / "source_files"
+        if not source_dir.exists():
+            pytest.skip("source_files directory not found")
 
-    def test_run_starts_successfully(self, monkeypatch):
-        # We don't want to run the actual background worker thread since it copies real files,
-        # so we monkeypatch/mock the threading.Thread start.
-        started_thread = False
-        def mock_start(self_thread):
-            nonlocal started_thread
-            started_thread = True
+        source_files = [str(p) for p in source_dir.glob("*.xlsx") if not p.name.startswith(".")]
+        if not source_files:
+            pytest.skip("No source files available for testing")
 
-        import threading
-        monkeypatch.setattr(threading.Thread, "start", mock_start)
-
-        res = handle_consolidate_run({"files": ["dummy.xlsx"], "month": "Feb'26", "output_dir": "/tmp"})
+        res = handle_consolidate_run({
+            "files": source_files[:2],
+            "month": "Mar'26",
+            "output_dir": str(tmp_path)
+        })
         assert res["success"] is True
-        assert started_thread is True
-        assert consolidation_tracker.is_running is True
-        assert "Executing" in consolidation_tracker.progress_text
+        assert "summary" in res
+        assert os.path.exists(res["output_path"])
