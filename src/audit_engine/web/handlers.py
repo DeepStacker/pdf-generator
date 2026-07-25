@@ -154,7 +154,18 @@ def handle_run(data: dict) -> dict:
 
     bank: str = str(data.get("bank") or "")
     filepath_raw: object = data.get("filepath")
-    out_path: str = str(data.get("out_path") or "")
+    if filepath_raw is None:
+        filepath_raw = data.get("files") or data.get("excel_path")
+
+    out_path_raw = data.get("out_path")
+    if out_path_raw is not None:
+        if not out_path_raw or not os.path.exists(str(out_path_raw)):
+            return {"success": False, "error": "Output directory invalid."}
+        out_path = str(out_path_raw)
+    else:
+        import tempfile
+        out_path = config_repo.get("out_path") or tempfile.gettempdir()
+        os.makedirs(out_path, exist_ok=True)
     auto_open = bool(data.get("auto_open", True))
     naming_pattern: str = str(data.get("naming_pattern", "{branch}_{type}"))
 
@@ -197,8 +208,6 @@ def handle_run(data: dict) -> dict:
         config_repo.add_recent_file(filepath_raw[0])
     else:
         return {"success": False, "error": "Invalid filepath format."}
-    if not out_path or not os.path.exists(out_path):
-        return {"success": False, "error": "Output directory invalid."}
 
     config_repo.set("bank", bank)
     config_repo.set("out_path", out_path)
