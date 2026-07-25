@@ -37,6 +37,32 @@ def _cleanup_temp():
             logger.info("Cleaned up: %s", d)
 atexit.register(_cleanup_temp)
 
+import time
+import threading
+
+def _start_temp_garbage_collector():
+    def gc_loop():
+        while True:
+            time.sleep(900)  # Check every 15 minutes
+            try:
+                now = time.time()
+                temp_root = Path(tempfile.gettempdir())
+                for p in temp_root.glob("audit_engine_*"):
+                    if p.is_dir() and p not in (UPLOAD_DIR, OUTPUT_DIR):
+                        try:
+                            if now - p.stat().st_mtime > 3600:
+                                shutil.rmtree(str(p), ignore_errors=True)
+                                logger.info("GC pruned stale temp dir: %s", p.name)
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.warning("Temp GC error: %s", e)
+
+    t = threading.Thread(target=gc_loop, daemon=True)
+    t.start()
+
+_start_temp_garbage_collector()
+
 app = create_app()
 
 from audit_engine.database.legacy import set_config as _set_cfg
