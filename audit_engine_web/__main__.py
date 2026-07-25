@@ -17,7 +17,8 @@ from audit_engine_web.patches import apply_patches
 apply_patches()
 
 from audit_engine.app import create_app, shutdown_requested
-from audit_engine.lib.bottle import route, request, response, static_file, run, hook
+from audit_engine.lib.bottle import route, request, response, static_file, run, hook, BaseRequest
+BaseRequest.MEMFILE_MAX = 500 * 1024 * 1024  # 500 MB limit for file uploads
 from audit_engine.utils.config import paths
 from audit_engine._version import VERSION
 
