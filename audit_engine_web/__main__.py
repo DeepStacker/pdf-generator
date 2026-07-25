@@ -158,15 +158,34 @@ def handle_download_zip():
 
     with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
         for item in paths_to_zip:
-            item_path = Path(item)
-            if item_path.exists():
-                if item_path.is_dir():
-                    for f in item_path.rglob("*"):
-                        zf.write(str(f), str(f.relative_to(item_path.parent)))
-                else:
-                    zf.write(str(item_path), item_path.name)
+            p = Path(item)
+            if p.exists() and p.is_file():
+                zf.write(str(p), p.name)
 
-    return {"success": True, "download_url": f"/api/download?path={zip_path}"}
+    return {"success": True, "zip_path": str(zip_path)}
+
+@route("/api/list_output")
+def handle_list_output():
+    dirpath = request.query.path
+    if not dirpath:
+        return {"success": False, "files": []}
+    p = Path(dirpath)
+    if not p.exists():
+        return {"success": False, "files": []}
+    
+    files = []
+    if p.is_file():
+        files.append({"name": p.name, "path": str(p), "size": p.stat().st_size})
+    elif p.is_dir():
+        for item in p.rglob("*"):
+            if item.is_file() and not item.name.startswith("."):
+                files.append({
+                    "name": item.name,
+                    "path": str(item),
+                    "size": item.stat().st_size,
+                    "rel_path": str(item.relative_to(p))
+                })
+    return {"success": True, "files": files}
 
 @route("/api/history/<entry_id>/download/<filename:path>")
 def handle_history_download(entry_id, filename):
