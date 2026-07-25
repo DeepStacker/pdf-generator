@@ -2408,15 +2408,22 @@
             const btn = document.getElementById('btnRunNewConsolidation');
             if (btn) {
                 btn.disabled = true;
-                btn.textContent = 'Processing Batch...';
+                btn.textContent = 'Uploading & Processing...';
             }
 
             try {
                 let filePaths = [];
-                if (typeof uploadMultipleFilesToServer === 'function' && isWebMode()) {
-                    filePaths = await uploadMultipleFilesToServer(newStagedFiles);
+                if (isWebMode()) {
+                    const uploadPromises = newStagedFiles.map(f => uploadFileToServer(f));
+                    const uploadedPaths = await Promise.all(uploadPromises);
+                    filePaths = uploadedPaths.filter(p => p !== null);
                 } else {
                     filePaths = newStagedFiles.map(f => f.path || f.name);
+                }
+
+                if (filePaths.length === 0) {
+                    alert('Error: Could not upload client workbooks to server.');
+                    return;
                 }
 
                 const runResp = await fetch('/api/consolidate/run', {
