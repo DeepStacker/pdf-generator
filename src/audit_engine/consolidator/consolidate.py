@@ -1221,7 +1221,8 @@ def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None
     total_files = len(files_dict) or 1
     for idx, (fname, source) in enumerate(files_dict.items()):
         if progress_callback:
-            current_pct = round(((idx + 1) / total_files) * 100, 1)
+            # File parsing accounts for 80% of overall consolidation workload
+            current_pct = round(((idx + 1) / total_files) * 80.0, 1)
             progress_callback(current_pct, f"Parsing {fname} ({idx+1}/{total_files} - {current_pct:.1f}%)")
         if fname == "Payment Tracker Mar26.xlsx":
             file_summaries.append({"filename": fname, "client": "META_FILE", "pt_rows": 0, "md_rows": 0, "status": "SKIPPED"})
@@ -1283,6 +1284,9 @@ def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None
             import gc
             gc.collect()
 
+    if progress_callback:
+        progress_callback(85.0, "Normalizing & merging master schema DataFrames (85%)...")
+
     pt_df = pd.DataFrame(all_pt_rows)
     for c in PT_COLS:
         if c not in pt_df.columns:
@@ -1324,6 +1328,9 @@ def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None
 
     pt_df['S.no'] = range(1, len(pt_df) + 1)
     md_df['Sr No'] = range(1, len(md_df) + 1)
+
+    if progress_callback:
+        progress_callback(92.0, "Formatting Excel styles & writing workbook stream (92%)...")
 
     output_buffer = io.BytesIO()
     wb = openpyxl.Workbook()
