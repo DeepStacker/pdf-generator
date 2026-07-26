@@ -635,6 +635,24 @@ def worker_consolidation_thread(files_dict: dict, output_dir: str):
         consolidation_tracker.exit_code = 1
 
 
+def handle_preparse_file(filepath: str) -> dict:
+    if not filepath or not os.path.exists(filepath):
+        return {"success": False, "error": "File missing"}
+    try:
+        from audit_engine.consolidator.consolidate import preparse_single_file
+        res = preparse_single_file(filepath)
+        return {
+            "success": True,
+            "filename": res["filename"],
+            "client": res["client"],
+            "pt_count": res["pt_count"],
+            "md_count": res["md_count"],
+            "status": res["status"]
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def handle_consolidate_run(data: dict) -> dict:
     selected_files = data.get("files", [])
     if not selected_files:

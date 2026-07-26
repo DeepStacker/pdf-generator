@@ -238,6 +238,15 @@ def handle_preview_excel():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@route("/api/consolidate/preparse", method="POST")
+def handle_preparse():
+    data = request.json or {}
+    filepath = data.get("filepath")
+    if not filepath:
+        return {"success": False, "error": "No filepath provided"}
+    from audit_engine.web.handlers import handle_preparse_file
+    return handle_preparse_file(filepath)
+
 @route("/api/download/zip", method="POST")
 def handle_download_zip():
     data = request.json or {}

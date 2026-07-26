@@ -1167,29 +1167,19 @@ def process_payment_tracker_mar26(fname, fpath):
     return rows
 
 
-def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None):
-    """
-    Process multiple Excel workbooks purely in-memory.
-    
-    Parameters
-    ----------
-    files_dict : dict
-        Dict mapping filename string to bytes stream (io.BytesIO) or file path.
-    save_mapping : bool
-        Whether to persist column mapping JSON updates.
-    progress_callback : callable, optional
-        Function callback(pct: float, message: str) for real-time percentage tracking.
-        
-    Returns
-    -------
-    tuple: (excel_bytes: bytes, summary: dict)
-    """
-    all_pt_rows = []
-    all_md_rows = []
-    flags = []
-    file_summaries = []
-    mapping_mgr = ColumnMappingManager()
+PREPARSED_CACHE = {}
 
+
+def preparse_single_file(fname, source=None):
+    """Pre-parse a single Excel workbook into memory cache for instant batch consolidation."""
+    actual_source = source or fname
+    if fname in PREPARSED_CACHE:
+        return PREPARSED_CACHE[fname]
+    if actual_source in PREPARSED_CACHE:
+        return PREPARSED_CACHE[actual_source]
+
+    mapping_mgr = ColumnMappingManager()
+    fname_norm = norm(os.path.basename(fname))
     known_patterns = [
         ("Axis Bank POA", "Axis Bank POA"),
         ("Axis Bank Muthoot POA", "Axis Bank Muthoot POA"),
@@ -1217,72 +1207,113 @@ def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None
         ("YES BANK AMC|Yes Bank Forex", "YES BANK AMC"),
         ("Yes Bank Touch and Feel", "Yes Bank T&F & POA"),
     ]
+    client_name = None
+    for pattern, client in known_patterns:
+        if re.search(pattern, fname_norm, re.IGNORECASE):
+            client_name = client
+            break
+    if not client_name:
+        client_name = fname_norm.split(' payment')[0].split(' -')[0][:30].title()
+
+    try:
+        xls = pd.ExcelFile(actual_source)
+        pt_sheet, md_sheet, extras = identify_sheets(xls)
+        pt_rows, md_rows = [], []
+        if pt_sheet:
+            df_pt = pd.read_excel(xls, sheet_name=pt_sheet)
+            pt_rows = normalize_pt_sheet(df_pt, client_name, fname, mapping_mgr=mapping_mgr)
+        if md_sheet:
+            df_md = pd.read_excel(xls, sheet_name=md_sheet)
+            md_rows = normalize_md_sheet(df_md, client_name, fname, mapping_mgr=mapping_mgr)
+        xls.close()
+        del xls
+        import gc
+        gc.collect()
+
+        res = {
+            "client": client_name,
+            "pt_rows": pt_rows,
+            "md_rows": md_rows,
+            "pt_count": len(pt_rows),
+            "md_count": len(md_rows),
+            "filename": os.path.basename(fname),
+            "status": "SUCCESS"
+        }
+        PREPARSED_CACHE[fname] = res
+        if actual_source != fname:
+            PREPARSED_CACHE[actual_source] = res
+        return res
+    except Exception as e:
+        res = {
+            "client": client_name or "Unknown",
+            "pt_rows": [],
+            "md_rows": [],
+            "pt_count": 0,
+            "md_count": 0,
+            "filename": os.path.basename(fname),
+            "status": f"ERROR: {str(e)[:50]}"
+        }
+        PREPARSED_CACHE[fname] = res
+        return res
+
+
+def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None):
+    """
+    Process multiple Excel workbooks purely in-memory.
+    
+    Parameters
+    ----------
+    files_dict : dict
+        Dict mapping filename string to bytes stream (io.BytesIO) or file path.
+    save_mapping : bool
+        Whether to persist column mapping JSON updates.
+    progress_callback : callable, optional
+        Function callback(pct: float, message: str) for real-time percentage tracking.
+        
+    Returns
+    -------
+    tuple: (excel_bytes: bytes, summary: dict)
+    """
+    all_pt_rows = []
+    all_md_rows = []
+    flags = []
+    file_summaries = []
+    mapping_mgr = ColumnMappingManager()
 
     total_files = len(files_dict) or 1
     for idx, (fname, source) in enumerate(files_dict.items()):
         if progress_callback:
-            # File parsing accounts for 80% of overall consolidation workload
             current_pct = round(((idx + 1) / total_files) * 80.0, 1)
-            progress_callback(current_pct, f"Parsing {fname} ({idx+1}/{total_files} - {current_pct:.1f}%)")
+            progress_callback(current_pct, f"Processing {fname} ({idx+1}/{total_files} - {current_pct:.1f}%)")
         if fname == "Payment Tracker Mar26.xlsx":
             file_summaries.append({"filename": fname, "client": "META_FILE", "pt_rows": 0, "md_rows": 0, "status": "SKIPPED"})
             continue
 
-        fname_norm = norm(fname)
-        client_name = None
-        for pattern, client in known_patterns:
-            if re.search(pattern, fname_norm, re.IGNORECASE):
-                client_name = client
-                break
-        if not client_name:
-            client_name = fname_norm.split(' payment')[0].split(' -')[0][:30].title()
-
-        try:
-            xls = pd.ExcelFile(source)
-            pt_sheet, md_sheet, extras = identify_sheets(xls)
-
-            pt_count = 0
-            md_count = 0
-            if pt_sheet:
-                df_pt = pd.read_excel(xls, sheet_name=pt_sheet)
-                pt_rows = normalize_pt_sheet(df_pt, client_name, fname, mapping_mgr=mapping_mgr)
-                all_pt_rows.extend(pt_rows)
-                pt_count = len(pt_rows)
-            else:
-                flags.append(f"{fname}: No PT sheet identified")
-
-            if md_sheet:
-                df_md = pd.read_excel(xls, sheet_name=md_sheet)
-                md_rows = normalize_md_sheet(df_md, client_name, fname, mapping_mgr=mapping_mgr)
-                all_md_rows.extend(md_rows)
-                md_count = len(md_rows)
-            else:
-                flags.append(f"{fname}: No MD sheet identified")
-
-            xls.close()
-            del xls
-            import gc
-            gc.collect()
-
+        # Check if file is already pre-parsed in memory cache
+        cached = PREPARSED_CACHE.get(source) or PREPARSED_CACHE.get(fname)
+        if cached:
+            all_pt_rows.extend(cached["pt_rows"])
+            all_md_rows.extend(cached["md_rows"])
             file_summaries.append({
-                "filename": fname,
-                "client": client_name,
-                "pt_rows": pt_count,
-                "md_rows": md_count,
-                "status": "SUCCESS"
+                "filename": cached["filename"],
+                "client": cached["client"],
+                "pt_rows": cached["pt_count"],
+                "md_rows": cached["md_count"],
+                "status": cached["status"]
             })
+            continue
 
-        except Exception as e:
-            flags.append(f"{fname}: {str(e)[:80]}")
-            file_summaries.append({
-                "filename": fname,
-                "client": client_name,
-                "pt_rows": 0,
-                "md_rows": 0,
-                "status": f"ERROR: {str(e)[:50]}"
-            })
-            import gc
-            gc.collect()
+        # If not cached, pre-parse now
+        parsed = preparse_single_file(fname, source)
+        all_pt_rows.extend(parsed["pt_rows"])
+        all_md_rows.extend(parsed["md_rows"])
+        file_summaries.append({
+            "filename": parsed["filename"],
+            "client": parsed["client"],
+            "pt_rows": parsed["pt_count"],
+            "md_rows": parsed["md_count"],
+            "status": parsed["status"]
+        })
 
     if progress_callback:
         progress_callback(85.0, "Normalizing & merging master schema DataFrames (85%)...")
