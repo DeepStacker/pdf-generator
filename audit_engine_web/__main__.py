@@ -111,12 +111,23 @@ def serve_static(filename):
         return {"error": "File not found"}
     return static_file(str(file_path.name), root=str(file_path.parent))
 
+@route("/logo.png")
+@route("/assets/logo.png")
+def serve_logo():
+    logo_path = STATIC_DIR / "assets" / "logo.png"
+    if not logo_path.exists():
+        logo_path = STATIC_DIR / "logo.png"
+    return static_file(logo_path.name, root=str(logo_path.parent))
+
 @route("/assets/<filename:path>")
 def serve_assets(filename):
     file_path = STATIC_DIR / "assets" / filename
     if not file_path.exists() or not file_path.is_file():
-        response.status = 404
-        return {"error": "Asset not found"}
+        # Fallback to root STATIC_DIR if not in assets/
+        file_path = STATIC_DIR / filename
+        if not file_path.exists() or not file_path.is_file():
+            response.status = 404
+            return {"error": "Asset not found"}
     return static_file(str(file_path.name), root=str(file_path.parent))
 
 @route("/api/upload", method=["OPTIONS", "POST"])
