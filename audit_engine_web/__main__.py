@@ -201,6 +201,12 @@ def handle_preview():
 def handle_preview_excel():
     filepath = request.query.path
     requested_sheet = request.query.sheet
+    max_rows_param = request.query.get('max_rows', '3000')
+    try:
+        max_rows_limit = int(max_rows_param)
+    except ValueError:
+        max_rows_limit = 3000
+
     if not filepath:
         return {"success": False, "error": "No path provided"}
     abs_path = Path(filepath)
@@ -214,7 +220,7 @@ def handle_preview_excel():
         ws = wb[sheet_name]
         rows = []
         for idx, row in enumerate(ws.iter_rows(values_only=True)):
-            if idx >= 60:  # Preview top 60 rows
+            if idx >= max_rows_limit:
                 break
             rows.append([str(c) if c is not None else "" for c in row])
         wb.close()
@@ -227,7 +233,7 @@ def handle_preview_excel():
             "sheet_names": sheet_names,
             "headers": headers,
             "rows": data_rows,
-            "total_rows": len(rows),
+            "total_rows": len(data_rows),
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
