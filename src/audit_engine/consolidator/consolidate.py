@@ -1252,6 +1252,11 @@ def consolidate_in_memory(files_dict, save_mapping=False):
             else:
                 flags.append(f"{fname}: No MD sheet identified")
 
+            xls.close()
+            del xls
+            import gc
+            gc.collect()
+
             file_summaries.append({
                 "filename": fname,
                 "client": client_name,
@@ -1269,6 +1274,8 @@ def consolidate_in_memory(files_dict, save_mapping=False):
                 "md_rows": 0,
                 "status": f"ERROR: {str(e)[:50]}"
             })
+            import gc
+            gc.collect()
 
     pt_df = pd.DataFrame(all_pt_rows)
     for c in PT_COLS:

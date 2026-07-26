@@ -18254,12 +18254,12 @@
     },
     "Zone": {
       "source_col": "Region",
-      "method": "content",
+      "method": "multi",
       "position": 4
     },
     "SOL ID": {
       "source_col": "Base Audit Fees in INR",
-      "method": "content",
+      "method": "multi",
       "position": 13
     },
     "BRANCH": {
@@ -18274,7 +18274,7 @@
     },
     "State": {
       "source_col": "Location",
-      "method": "content",
+      "method": "multi",
       "position": 3
     },
     "Total No.of A/cs": {
@@ -19870,7 +19870,7 @@
     },
     "State": {
       "source_col": "Location",
-      "method": "content",
+      "method": "multi",
       "position": 7
     },
     "Total No.of A/cs": {

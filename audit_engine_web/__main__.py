@@ -173,6 +173,61 @@ def handle_download():
     response.content_type = mimetypes.get(ext, 'application/octet-stream')
     return static_file(str(abs_path.name), root=str(abs_path.parent), download=abs_path.name)
 
+@route("/api/preview")
+def handle_preview():
+    filepath = request.query.path
+    if not filepath:
+        response.status = 400
+        return {"error": "No path provided"}
+    abs_path = Path(filepath)
+    if not abs_path.exists():
+        response.status = 404
+        return {"error": "File not found"}
+    ext = abs_path.suffix.lower()
+    mimetypes = {
+        '.pdf': 'application/pdf',
+        '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        '.xls': 'application/vnd.ms-excel',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.csv': 'text/csv',
+        '.txt': 'text/plain'
+    }
+    response.content_type = mimetypes.get(ext, 'application/octet-stream')
+    response.headers["Content-Disposition"] = f"inline; filename=\"{abs_path.name}\""
+    return static_file(str(abs_path.name), root=str(abs_path.parent))
+
+@route("/api/preview/excel")
+def handle_preview_excel():
+    filepath = request.query.path
+    if not filepath:
+        return {"success": False, "error": "No path provided"}
+    abs_path = Path(filepath)
+    if not abs_path.exists():
+        return {"success": False, "error": "File not found"}
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(str(abs_path), read_only=True, data_only=True)
+        sheet_name = wb.sheetnames[0] if wb.sheetnames else "Sheet1"
+        ws = wb[sheet_name]
+        rows = []
+        for idx, row in enumerate(ws.iter_rows(values_only=True)):
+            if idx >= 40:  # Preview top 40 rows
+                break
+            rows.append([str(c) if c is not None else "" for c in row])
+        wb.close()
+        headers = rows[0] if rows else []
+        data_rows = rows[1:] if len(rows) > 1 else []
+        return {
+            "success": True,
+            "file_name": abs_path.name,
+            "sheet_name": sheet_name,
+            "headers": headers,
+            "rows": data_rows,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 @route("/api/download/zip", method="POST")
 def handle_download_zip():
     data = request.json or {}
