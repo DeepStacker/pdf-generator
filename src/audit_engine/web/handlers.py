@@ -594,29 +594,12 @@ def handle_consolidate_banks() -> dict:
         return {"success": False, "error": str(e), "banks": []}
 
 
-def handle_consolidate_run(data: dict) -> dict:
-    selected_files = data.get("files", [])
-    if not selected_files:
-        return {"success": False, "error": "No source files selected."}
-
-    output_dir = data.get("output_dir", "")
-    if not output_dir:
-        from audit_engine.database.legacy import get_config
-        import tempfile
-        output_dir = get_config("out_path") or tempfile.gettempdir()
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    files_dict = {}
-    for fpath in selected_files:
-        if os.path.exists(fpath):
-            fname = os.path.basename(fpath)
-            files_dict[fname] = fpath
-
-    if not files_dict:
-        return {"success": False, "error": "No valid source files found on disk."}
-
+def worker_consolidation_thread(files_dict: dict, output_dir: str):
     try:
+        consolidation_tracker.is_running = True
+        consolidation_tracker.progress_text = f"Consolidating {len(files_dict)} workbooks in memory..."
+        consolidation_tracker.error_msg = None
+
         from audit_engine.consolidator.consolidate import consolidate_in_memory
         excel_bytes, summary = consolidate_in_memory(files_dict, save_mapping=True)
 
@@ -640,13 +623,48 @@ def handle_consolidate_run(data: dict) -> dict:
             md_rows=summary.get("md_rows", 0),
             output_path=output_path,
         )
-
-        return {"success": True, "summary": summary, "output_path": output_path}
     except Exception as e:
         consolidation_tracker.error_msg = str(e)
         consolidation_tracker.is_running = False
         consolidation_tracker.exit_code = 1
-        return {"success": False, "error": str(e)}
+
+
+def handle_consolidate_run(data: dict) -> dict:
+    selected_files = data.get("files", [])
+    if not selected_files:
+        return {"success": False, "error": "No source files selected."}
+
+    output_dir = data.get("output_dir", "")
+    if not output_dir:
+        from audit_engine.database.legacy import get_config
+        import tempfile
+        output_dir = get_config("out_path") or tempfile.gettempdir()
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    files_dict = {}
+    for fpath in selected_files:
+        if os.path.exists(fpath):
+            fname = os.path.basename(fpath)
+            files_dict[fname] = fpath
+
+    if not files_dict:
+        return {"success": False, "error": "No valid source files found on disk."}
+
+    import threading
+    consolidation_tracker.is_running = True
+    consolidation_tracker.progress_text = f"Initializing consolidation for {len(files_dict)} files..."
+    consolidation_tracker.summary = None
+    consolidation_tracker.error_msg = None
+
+    t = threading.Thread(
+        target=worker_consolidation_thread,
+        args=(files_dict, output_dir),
+        daemon=True
+    )
+    t.start()
+
+    return {"success": True, "message": "Consolidation pipeline launched in background worker thread."}
 
 
 def handle_consolidate_progress() -> dict:
