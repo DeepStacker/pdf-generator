@@ -1290,7 +1290,12 @@ def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None
             continue
 
         # Check if file is already pre-parsed in memory cache
-        cached = PREPARSED_CACHE.get(source) or PREPARSED_CACHE.get(fname)
+        cached = (
+            PREPARSED_CACHE.get(source) or
+            PREPARSED_CACHE.get(fname) or
+            PREPARSED_CACHE.get(os.path.basename(fname)) or
+            PREPARSED_CACHE.get(os.path.basename(str(source)))
+        )
         if cached:
             all_pt_rows.extend(cached["pt_rows"])
             all_md_rows.extend(cached["md_rows"])
@@ -1367,48 +1372,55 @@ def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
+    hdr_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    hdr_font = Font(bold=True, color='FFFFFF', size=11)
+    hdr_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    data_align = Alignment(horizontal='center', vertical='center')
+    data_font = Font(size=10)
+    thin_border = Border(
+        left=Side(style='thin', color='D9D9D9'),
+        right=Side(style='thin', color='D9D9D9'),
+        top=Side(style='thin', color='D9D9D9'),
+        bottom=Side(style='thin', color='D9D9D9'),
+    )
+    alt_fill = PatternFill(start_color='F2F7FB', end_color='F2F7FB', fill_type='solid')
+
+    col_widths = {
+        'S.no': 6, 'client': 22, 'Sr No': 6, 'Client': 22,
+        'Assayer Name': 24, 'Assayer Code': 12, 'Assayer Phone': 15,
+        'Location': 16, 'State': 14, 'Zone': 10, 'Audit Month & Year': 14,
+        'Type of Audit': 22, 'BRANCH': 20, 'SOL ID': 8, 'Total pay': 12,
+        'Total pay (Base)': 14, ' Travel charges(If any)': 12,
+        'Cancelled visits': 12, 'Branch Cancellation Charges': 12,
+        ' Andaman & Nicobar Branch Expenses': 12, 'Error Deduction': 12,
+        'PAN Number': 16, 'Bank Name': 20, 'A/c Number': 18, 'IFSC Code': 16,
+    }
+
     def write_formatted(sheet_name, df):
         ws = wb.create_sheet(title=sheet_name)
         headers = list(df.columns)
 
-        hdr_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-        hdr_font = Font(bold=True, color='FFFFFF', size=11)
-        hdr_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        data_align = Alignment(horizontal='center', vertical='center')
-        thin_border = Border(
-            left=Side(style='thin', color='D9D9D9'),
-            right=Side(style='thin', color='D9D9D9'),
-            top=Side(style='thin', color='D9D9D9'),
-            bottom=Side(style='thin', color='D9D9D9'),
-        )
-        alt_fill = PatternFill(start_color='F2F7FB', end_color='F2F7FB', fill_type='solid')
-
-        for c, h in enumerate(headers, 1):
-            cell = ws.cell(1, c, h)
+        # Header Row
+        ws.append(headers)
+        for c in range(1, len(headers) + 1):
+            cell = ws.cell(1, c)
             cell.fill = hdr_fill
             cell.font = hdr_font
             cell.alignment = hdr_align
             cell.border = thin_border
 
-        for r_idx, row in df.iterrows():
-            for c_idx, h in enumerate(headers):
-                cell = ws.cell(r_idx + 2, c_idx + 1, row.get(h))
+        # Ultra-Fast Data Append using itertuples
+        for r_idx, row_tuple in enumerate(df.itertuples(index=False), 2):
+            ws.append(list(row_tuple))
+            is_alt = (r_idx % 2 == 1)
+            for c in range(1, len(headers) + 1):
+                cell = ws.cell(r_idx, c)
                 cell.alignment = data_align
                 cell.border = thin_border
-                cell.font = Font(size=10)
-                if r_idx % 2 == 1:
+                cell.font = data_font
+                if is_alt:
                     cell.fill = alt_fill
 
-        col_widths = {
-            'S.no': 6, 'client': 22, 'Sr No': 6, 'Client': 22,
-            'Assayer Name': 24, 'Assayer Code': 12, 'Assayer Phone': 15,
-            'Location': 16, 'State': 14, 'Zone': 10, 'Audit Month & Year': 14,
-            'Type of Audit': 22, 'BRANCH': 20, 'SOL ID': 8, 'Total pay': 12,
-            'Total pay (Base)': 14, ' Travel charges(If any)': 12,
-            'Cancelled visits': 12, 'Branch Cancellation Charges': 12,
-            ' Andaman & Nicobar Branch Expenses': 12, 'Error Deduction': 12,
-            'PAN Number': 16, 'Bank Name': 20, 'A/c Number': 18, 'IFSC Code': 16,
-        }
         for c, h in enumerate(headers, 1):
             ws.column_dimensions[get_column_letter(c)].width = col_widths.get(h, 14)
 
