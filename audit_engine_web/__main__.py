@@ -200,6 +200,7 @@ def handle_preview():
 @route("/api/preview/excel")
 def handle_preview_excel():
     filepath = request.query.path
+    requested_sheet = request.query.sheet
     if not filepath:
         return {"success": False, "error": "No path provided"}
     abs_path = Path(filepath)
@@ -208,11 +209,12 @@ def handle_preview_excel():
     try:
         import openpyxl
         wb = openpyxl.load_workbook(str(abs_path), read_only=True, data_only=True)
-        sheet_name = wb.sheetnames[0] if wb.sheetnames else "Sheet1"
+        sheet_names = wb.sheetnames
+        sheet_name = requested_sheet if (requested_sheet and requested_sheet in sheet_names) else (sheet_names[0] if sheet_names else "Sheet1")
         ws = wb[sheet_name]
         rows = []
         for idx, row in enumerate(ws.iter_rows(values_only=True)):
-            if idx >= 40:  # Preview top 40 rows
+            if idx >= 60:  # Preview top 60 rows
                 break
             rows.append([str(c) if c is not None else "" for c in row])
         wb.close()
@@ -222,8 +224,10 @@ def handle_preview_excel():
             "success": True,
             "file_name": abs_path.name,
             "sheet_name": sheet_name,
+            "sheet_names": sheet_names,
             "headers": headers,
             "rows": data_rows,
+            "total_rows": len(rows),
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
