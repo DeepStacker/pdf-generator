@@ -20527,5 +20527,117 @@
       "method": "none",
       "position": null
     }
+  },
+  "PT:Payment-Tracker-Mar26.xlsx": {
+    "Assayer Name": {
+      "source_col": "Assayer Name",
+      "method": "multi",
+      "position": 1
+    },
+    "Assayer Code": {
+      "source_col": "Assayer Code",
+      "method": "multi",
+      "position": 2
+    },
+    "Assayer Phone": {
+      "source_col": "Phone",
+      "method": "multi",
+      "position": 3
+    },
+    "Location": {
+      "source_col": "Location",
+      "method": "multi",
+      "position": 4
+    },
+    "State": {
+      "source_col": "State",
+      "method": "multi",
+      "position": 5
+    },
+    "Zone": {
+      "source_col": "Zone",
+      "method": "multi",
+      "position": 7
+    },
+    "Audit Month & Year": {
+      "source_col": "Audit Month & Year",
+      "method": "multi",
+      "position": 8
+    },
+    "Type of Audit": {
+      "source_col": "Type of Audit",
+      "method": "multi",
+      "position": 9
+    },
+    "No. of Visits": {
+      "source_col": "No of visits",
+      "method": "multi",
+      "position": 10
+    },
+    "Base Audit Fee": {
+      "source_col": "Base Audit Fee",
+      "method": "multi",
+      "position": 11
+    },
+    "Total pay (Base)": {
+      "source_col": "Total pay (Base)",
+      "method": "multi",
+      "position": 12
+    },
+    " Travel charges(If any)": {
+      "source_col": " Travel charges(If any)",
+      "method": "multi",
+      "position": 14
+    },
+    "Cancelled visits": {
+      "source_col": "No of visits",
+      "method": "multi",
+      "position": 10
+    },
+    "Branch Cancellation Charges": {
+      "source_col": "Branch Cancellation Charges",
+      "method": "multi",
+      "position": 15
+    },
+    " Andaman & Nicobar Branch Expenses": {
+      "source_col": " Andaman & Nicobar Branch Expenses",
+      "method": "multi",
+      "position": 16
+    },
+    "Error Deduction": {
+      "source_col": "Error Deduction",
+      "method": "multi",
+      "position": 18
+    },
+    "Total pay": {
+      "source_col": "Total pay",
+      "method": "multi",
+      "position": 19
+    },
+    "Remarks (if any)": {
+      "source_col": " Travel charges(If any)",
+      "method": "multi",
+      "position": 14
+    },
+    "PAN Number": {
+      "source_col": "Assayer Name",
+      "method": "multi",
+      "position": 1
+    },
+    "Bank Name": {
+      "source_col": null,
+      "method": "none",
+      "position": null
+    },
+    "A/c Number": {
+      "source_col": null,
+      "method": "none",
+      "position": null
+    },
+    "IFSC Code": {
+      "source_col": null,
+      "method": "none",
+      "position": null
+    }
   }
 }

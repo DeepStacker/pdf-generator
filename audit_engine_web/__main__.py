@@ -81,7 +81,7 @@ def _add_cors():
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
 
 @route("/", method=["GET", "HEAD"])
 def serve_index():
