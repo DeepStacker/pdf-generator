@@ -287,13 +287,24 @@ def handle_recent_clear() -> dict:
 
 
 def handle_stats() -> dict:
+    from audit_engine.database.legacy import get_comprehensive_stats
+    comp_stats = get_comprehensive_stats()
     types, trend = history_repo.analytics()
     total_sessions, total_pdfs = history_repo.stats()
     return {
+        "success": True,
         "distribution": types,
         "trend": [list(row) for row in trend],
         "total_sessions": total_sessions,
-        "total_pdfs": total_pdfs,
+        "total_pdfs": comp_stats["total_reports"] or total_pdfs,
+        "total_reports": comp_stats["total_reports"] or total_pdfs,
+        "successful_runs": comp_stats["successful_runs"],
+        "total_consolidated_pay": comp_stats["total_consolidated_pay"],
+        "pt_rows": comp_stats["pt_rows"],
+        "md_rows": comp_stats["md_rows"],
+        "avg_speed_sec": comp_stats["avg_speed_sec"],
+        "audit_breakdown": comp_stats["audit_breakdown"],
+        "monthly_trends": comp_stats["monthly_trends"],
         "total_excels": history_repo.total_unique_excels(),
     }
 
@@ -620,6 +631,15 @@ def handle_consolidate_run(data: dict) -> dict:
         consolidation_tracker.is_running = False
         consolidation_tracker.exit_code = 0
         consolidation_tracker.progress_text = "Consolidation Complete."
+
+        from audit_engine.database.legacy import log_consolidation
+        log_consolidation(
+            file_count=len(files_dict),
+            total_pay=summary.get("total_pay", 0.0),
+            pt_rows=summary.get("pt_rows", 0),
+            md_rows=summary.get("md_rows", 0),
+            output_path=output_path,
+        )
 
         return {"success": True, "summary": summary, "output_path": output_path}
     except Exception as e:
