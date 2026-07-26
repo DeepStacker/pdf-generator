@@ -598,10 +598,15 @@ def worker_consolidation_thread(files_dict: dict, output_dir: str):
     try:
         consolidation_tracker.is_running = True
         consolidation_tracker.progress_text = f"Consolidating {len(files_dict)} workbooks in memory..."
+        consolidation_tracker.pct = 0
         consolidation_tracker.error_msg = None
 
+        def on_progress(pct, text):
+            consolidation_tracker.pct = pct
+            consolidation_tracker.progress_text = text
+
         from audit_engine.consolidator.consolidate import consolidate_in_memory
-        excel_bytes, summary = consolidate_in_memory(files_dict, save_mapping=True)
+        excel_bytes, summary = consolidate_in_memory(files_dict, save_mapping=True, progress_callback=on_progress)
 
         output_path = os.path.join(output_dir, "Mar'26 consolidated.xlsx")
         with open(output_path, "wb") as f:
@@ -612,6 +617,7 @@ def worker_consolidation_thread(files_dict: dict, output_dir: str):
 
         consolidation_tracker.summary = summary
         consolidation_tracker.is_running = False
+        consolidation_tracker.pct = 100
         consolidation_tracker.exit_code = 0
         consolidation_tracker.progress_text = "Consolidation Complete."
 
@@ -683,6 +689,7 @@ def handle_consolidate_progress() -> dict:
     return {
         "is_running": consolidation_tracker.is_running,
         "progress_text": consolidation_tracker.progress_text,
+        "pct": getattr(consolidation_tracker, "pct", 0),
         "exit_code": consolidation_tracker.exit_code,
         "summary": summary,
         "error_msg": consolidation_tracker.error_msg,

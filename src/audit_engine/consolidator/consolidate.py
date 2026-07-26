@@ -1167,7 +1167,7 @@ def process_payment_tracker_mar26(fname, fpath):
     return rows
 
 
-def consolidate_in_memory(files_dict, save_mapping=False):
+def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None):
     """
     Process multiple Excel workbooks purely in-memory.
     
@@ -1177,6 +1177,8 @@ def consolidate_in_memory(files_dict, save_mapping=False):
         Dict mapping filename string to bytes stream (io.BytesIO) or file path.
     save_mapping : bool
         Whether to persist column mapping JSON updates.
+    progress_callback : callable, optional
+        Function callback(pct: float, message: str) for real-time percentage tracking.
         
     Returns
     -------
@@ -1216,7 +1218,11 @@ def consolidate_in_memory(files_dict, save_mapping=False):
         ("Yes Bank Touch and Feel", "Yes Bank T&F & POA"),
     ]
 
-    for fname, source in files_dict.items():
+    total_files = len(files_dict) or 1
+    for idx, (fname, source) in enumerate(files_dict.items()):
+        if progress_callback:
+            current_pct = round(((idx + 1) / total_files) * 100, 1)
+            progress_callback(current_pct, f"Parsing {fname} ({idx+1}/{total_files} - {current_pct:.1f}%)")
         if fname == "Payment Tracker Mar26.xlsx":
             file_summaries.append({"filename": fname, "client": "META_FILE", "pt_rows": 0, "md_rows": 0, "status": "SKIPPED"})
             continue
