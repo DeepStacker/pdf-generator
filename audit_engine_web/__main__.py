@@ -85,14 +85,11 @@ def _add_cors():
 
 @route("/", method=["GET", "HEAD"])
 def serve_index():
-    global INDEX_CACHE
-    if INDEX_CACHE is None:
-        index_path = STATIC_DIR / "index.html"
-        if not index_path.exists():
-            response.status = 500
-            return "<h1>500 - index.html not found</h1>"
-        INDEX_CACHE = index_path.read_text(encoding="utf-8")
-    html = INDEX_CACHE.replace("{{VERSION}}", VERSION)
+    index_path = STATIC_DIR / "index.html"
+    if not index_path.exists():
+        response.status = 500
+        return "<h1>500 - index.html not found</h1>"
+    html = index_path.read_text(encoding="utf-8").replace("{{VERSION}}", VERSION)
     response.content_type = "text/html; charset=utf-8"
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
