@@ -1,12 +1,8 @@
-"""Report Validator & Branch Tracking API routes (ported from report_automation).
+"""Report Validator API routes (ported from report_automation).
 
 Registers bottle routes on the default app for:
   POST /api/report/upload                 - validate an xlsx (optionally reorder by PDF)
   POST /api/report/download               - download the validated/edited workbook
-  GET  /api/report/tracking               - list tracking records
-  POST /api/report/tracking               - create tracking record
-  PUT  /api/report/tracking/<id>          - update tracking record
-  DELETE /api/report/tracking/<id>        - delete tracking record
 """
 
 import datetime
@@ -24,7 +20,6 @@ from openpyxl.utils import get_column_letter
 from audit_engine.lib.bottle import route, request, response, static_file, HTTPError
 
 from audit_engine_web import report_validator as rv
-from audit_engine_web import tracking
 
 REPORT_UPLOAD_DIR = Path(__file__).resolve().parent.parent / "report_uploads"
 REPORT_UPLOAD_DIR.mkdir(exist_ok=True)
@@ -389,44 +384,4 @@ def report_download():
     )
 
 
-# ── Tracking CRUD ─────────────────────────────────────────────────────
 
-@route("/api/report/tracking", method=["OPTIONS", "GET"])
-def report_tracking_list():
-    if request.method == "OPTIONS":
-        return {}
-    return tracking.list_records()
-
-
-@route("/api/report/tracking", method=["POST"])
-def report_tracking_create():
-    data = request.json or {}
-    try:
-        return tracking.create_record(data)
-    except Exception as e:
-        response.status = 400
-        return {"detail": f"Create failed: {e}"}
-
-
-@route("/api/report/tracking/<record_id:int>", method=["OPTIONS", "PUT"])
-def report_tracking_update(record_id):
-    if request.method == "OPTIONS":
-        return {}
-    data = request.json or {}
-    filtered = {k: v for k, v in data.items() if v is not None}
-    updated = tracking.update_record(record_id, filtered)
-    if updated is None:
-        response.status = 404
-        return {"detail": "Record not found"}
-    return updated
-
-
-@route("/api/report/tracking/<record_id:int>", method=["OPTIONS", "DELETE"])
-def report_tracking_delete(record_id):
-    if request.method == "OPTIONS":
-        return {}
-    deleted = tracking.delete_record(record_id)
-    if not deleted:
-        response.status = 404
-        return {"detail": "Record not found"}
-    return {"ok": True}

@@ -64,10 +64,6 @@ output/
 audit_logs/
 sources/
 
-# Report Validator runtime artifacts
-report_uploads/
-report_tracking.db*
-
 # Allow baseline settings and master template
 !settings/mapping_rules.xlsx
 !templates/Feb'26 consolidated.xlsx
