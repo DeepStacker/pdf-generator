@@ -66,6 +66,8 @@ _start_temp_garbage_collector()
 
 app = create_app()
 
+import audit_engine_web.report_routes as report_routes  # noqa: E402,F401 — registers /api/report/* on default_app
+
 from audit_engine.database.legacy import set_config as _set_cfg
 _set_cfg("out_path", str(OUTPUT_DIR))
 _set_cfg("auto_open", "False")

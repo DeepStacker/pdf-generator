@@ -29,7 +29,9 @@ dev = [
     "certifi",
 ]
 gui = ["pywebview>=5.0"]
-web = []
+web = [
+    "pypdf>=5.0",
+]
 all = ["audit-engine[dev,gui,web]"]
 
 [project.scripts]
