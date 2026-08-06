@@ -64,6 +64,9 @@ output/
 audit_logs/
 sources/
 
+# Report validator runtime storage (instant upload jobs)
+report_uploads/
+
 # Allow baseline settings and master template
 !settings/mapping_rules.xlsx
 !templates/Feb'26 consolidated.xlsx
