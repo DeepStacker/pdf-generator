@@ -74,8 +74,8 @@ def ask_files_dialog() -> list[str]:
             open_type = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else getattr(webview, "OPEN_DIALOG", 10)
             result = active_win.create_file_dialog(
                 dialog_type=open_type,
+                allow_multiple=True,
                 file_types=file_types,
-                allow_multiple=True
             )
             if result:
                 if isinstance(result, (list, tuple)):

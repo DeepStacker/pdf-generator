@@ -57,3 +57,14 @@ web/
 !scripts/BUILD_FOR_MAC_LINUX.sh
 !scripts/BUILD_FOR_WINDOWS.bat
 !scripts/create_distribution_zip.py
+
+# Consolidation dynamic files
+temp_uploads/
+output/
+audit_logs/
+sources/
+
+# Allow baseline settings and master template
+!settings/mapping_rules.xlsx
+!templates/Feb'26 consolidated.xlsx
+

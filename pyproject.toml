@@ -29,13 +29,18 @@ dev = [
     "certifi",
 ]
 gui = ["pywebview>=5.0"]
-all = ["audit-engine[dev,gui]"]
+web = [
+    "pypdf>=5.0",
+]
+all = ["audit-engine[dev,gui,web]"]
 
 [project.scripts]
 audit-engine = "audit_engine.__main__:main"
+audit-engine-web = "audit_engine_web.__main__:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["audit_engine*", "audit_engine_web*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

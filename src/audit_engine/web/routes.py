@@ -16,6 +16,9 @@ from audit_engine.web.handlers import (
     handle_browse_folder,
     handle_cancel,
     handle_config_save,
+    handle_consolidate_banks,
+    handle_consolidate_progress,
+    handle_consolidate_run,
     handle_dashboard,
     handle_history,
     handle_history_clear,
@@ -143,3 +146,18 @@ def update_progress() -> dict:
 @route("/api/update/apply", method="POST")
 def update_apply() -> dict:
     return handle_update_apply()
+
+
+@route("/api/consolidate/run", method="POST")
+def api_consolidate_run() -> dict:
+    return handle_consolidate_run(request.json)
+
+
+@route("/api/consolidate/banks")
+def api_consolidate_banks() -> dict:
+    return handle_consolidate_banks()
+
+@route("/api/consolidate/progress")
+def api_consolidate_progress() -> dict:
+    return handle_consolidate_progress()
+

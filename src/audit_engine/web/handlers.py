@@ -7,6 +7,7 @@ Handlers return plain dicts (JSON-serializable) that Bottle can return directly.
 import os
 import sys
 import time
+from pathlib import Path
 
 from audit_engine.database.repos import config_repo, history_repo
 from audit_engine.domain.enums import AuditType, BankType, EquitasFormat, EquitasStage, OutputMode
@@ -153,7 +154,18 @@ def handle_run(data: dict) -> dict:
 
     bank: str = str(data.get("bank") or "")
     filepath_raw: object = data.get("filepath")
-    out_path: str = str(data.get("out_path") or "")
+    if filepath_raw is None:
+        filepath_raw = data.get("files") or data.get("excel_path")
+
+    out_path_raw = data.get("out_path")
+    if out_path_raw is not None:
+        if not out_path_raw or not os.path.exists(str(out_path_raw)):
+            return {"success": False, "error": "Output directory invalid."}
+        out_path = str(out_path_raw)
+    else:
+        import tempfile
+        out_path = config_repo.get("out_path") or tempfile.gettempdir()
+        os.makedirs(out_path, exist_ok=True)
     auto_open = bool(data.get("auto_open", True))
     naming_pattern: str = str(data.get("naming_pattern", "{branch}_{type}"))
 
@@ -196,8 +208,6 @@ def handle_run(data: dict) -> dict:
         config_repo.add_recent_file(filepath_raw[0])
     else:
         return {"success": False, "error": "Invalid filepath format."}
-    if not out_path or not os.path.exists(out_path):
-        return {"success": False, "error": "Output directory invalid."}
 
     config_repo.set("bank", bank)
     config_repo.set("out_path", out_path)
@@ -277,13 +287,24 @@ def handle_recent_clear() -> dict:
 
 
 def handle_stats() -> dict:
+    from audit_engine.database.legacy import get_comprehensive_stats
+    comp_stats = get_comprehensive_stats()
     types, trend = history_repo.analytics()
     total_sessions, total_pdfs = history_repo.stats()
     return {
+        "success": True,
         "distribution": types,
         "trend": [list(row) for row in trend],
         "total_sessions": total_sessions,
-        "total_pdfs": total_pdfs,
+        "total_pdfs": comp_stats["total_reports"] or total_pdfs,
+        "total_reports": comp_stats["total_reports"] or total_pdfs,
+        "successful_runs": comp_stats["successful_runs"],
+        "total_consolidated_pay": comp_stats["total_consolidated_pay"],
+        "pt_rows": comp_stats["pt_rows"],
+        "md_rows": comp_stats["md_rows"],
+        "avg_speed_sec": comp_stats["avg_speed_sec"],
+        "audit_breakdown": comp_stats["audit_breakdown"],
+        "monthly_trends": comp_stats["monthly_trends"],
         "total_excels": history_repo.total_unique_excels(),
     }
 
@@ -316,11 +337,61 @@ def handle_browse_folder() -> dict:
     return {"path": ask_directory_dialog()}
 
 
+def _get_project_root() -> Path:
+    """Return project root — works in dev mode and PyInstaller frozen mode."""
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        return Path(sys._MEIPASS)
+    return Path(__file__).parent.parent.parent.parent
+
+
+def _resolve_writable_path(relative_path: str) -> str:
+    """Resolve a relative path to an absolute, writable location.
+
+    For frozen (PyInstaller) apps: copies bundled default to ~/.audit_engine_elite/
+    on first access so the user can edit and save. For dev mode: uses the project path.
+    Absolute paths (like /tmp/test.xlsx) are returned as-is.
+    """
+    if os.path.isabs(relative_path):
+        return relative_path
+
+    import shutil
+    from pathlib import Path
+
+    user_dir = Path.home() / ".audit_engine_elite"
+    user_file = user_dir / relative_path
+
+    if user_file.exists():
+        return str(user_file)
+
+    project_root = _get_project_root()
+    bundled = project_root / relative_path
+
+    if bundled.exists():
+        user_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(bundled), str(user_file))
+        return str(user_file)
+
+    project_path = project_root / relative_path
+    if project_path.exists():
+        return str(project_path)
+
+    return str(project_path)
+
+
 def handle_open(data: dict) -> dict:
-    path = data.get("path", "")
-    if path and os.path.exists(path):
-        open_path(path)
-    return {"success": True}
+    rel_path = data.get("path", "")
+    if not rel_path:
+        return {"success": False, "error": "No path provided."}
+    
+    abs_path = _resolve_writable_path(rel_path)
+    
+    if not os.path.exists(abs_path):
+        return {"success": False, "error": f"File not found: {abs_path}"}
+    try:
+        open_path(abs_path)
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": f"Failed to open file: {e}"}
 
 
 def handle_update_check(force: bool = False) -> dict:
@@ -355,3 +426,292 @@ def handle_update_apply() -> dict:
         _restart_app()
     threading.Thread(target=_apply, daemon=True).start()
     return {"success": True}
+
+
+class _ConsolidationTracker:
+    def __init__(self) -> None:
+        self.is_running: bool = False
+        self.progress_text: str = "Ready. Ingest raw spreadsheets."
+        self.exit_code: int = 0
+        self.summary: dict = {}
+        self.error_msg: str = ""
+        self.merge_mode: bool = False
+
+    def reset(self) -> None:
+        self.is_running = True
+        self.progress_text = "Executing mapping solvers..."
+        self.exit_code = 0
+        self.summary = {}
+        self.error_msg = ""
+        self.merge_mode = False
+
+
+consolidation_tracker = _ConsolidationTracker()
+
+
+def _reload_runtime_configs() -> list:
+    """Reload source configs from mapping_rules.xlsx at runtime.
+    
+    Returns the merged list of source configs. Also updates the module-level
+    HEADER_PATTERNS so the mapper picks up external alias changes immediately.
+    """
+    from audit_engine.consolidator.mappings import (
+        AXIS_POA, AXIS_COLLECTION, SCB, VISTAAR,
+        load_external_source_configs,
+    )
+    import audit_engine.consolidator.config as _cfg_mod
+    import audit_engine.consolidator.mapper as _mapper_mod
+    
+    defaults_cfg = [AXIS_POA, AXIS_COLLECTION, SCB, VISTAAR]
+    fresh = load_external_source_configs(defaults_cfg)
+    if fresh and fresh is not defaults_cfg:
+        for default in defaults_cfg:
+            name_strip = default.client_name.strip()
+            for cfg in fresh:
+                if cfg.client_name.strip() == name_strip:
+                    cfg.needs_manual_enrichment = default.needs_manual_enrichment
+                    cfg.exclude_md_names = default.exclude_md_names
+        configs = fresh
+    else:
+        configs = defaults_cfg
+    
+    fresh_patterns = _cfg_mod.load_external_header_patterns(_cfg_mod.HEADER_PATTERNS)
+    _cfg_mod.HEADER_PATTERNS.clear()
+    _cfg_mod.HEADER_PATTERNS.update(fresh_patterns)
+    _mapper_mod.HEADER_PATTERNS.clear()
+    _mapper_mod.HEADER_PATTERNS.update(fresh_patterns)
+    
+    return configs
+
+
+def worker_consolidation_thread(selected_files: list[str], month: str, merge_mode: bool = False, output_dir: str = ""):
+    import shutil
+    import json
+    from pathlib import Path
+    from audit_engine.consolidator.config import ProcessingContext
+    from audit_engine.consolidator.consolidate import Consolidator
+    
+    source_configs = _reload_runtime_configs()
+    
+    project_root = _get_project_root()
+    upload_dir = project_root / "temp_uploads"
+    template_path = project_root / "templates" / "Feb'26 consolidated.xlsx"
+    
+    output_path = Path(output_dir) / "Consolidated_Report" / "consolidated_output.xlsx" if output_dir else project_root / "output" / "consolidated_output.xlsx"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    audit_dir = project_root / "audit_logs"
+    
+    try:
+        if upload_dir.exists():
+            shutil.rmtree(upload_dir)
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        for f in selected_files:
+            src_path = Path(f)
+            if src_path.exists():
+                shutil.copy(src_path, upload_dir / src_path.name)
+                
+        context = ProcessingContext(audit_month=month)
+        consolidator = Consolidator(
+            template_path=template_path,
+            source_dir=upload_dir,
+            output_path=output_path,
+            audit_dir=audit_dir,
+            context=context,
+            merge_mode=merge_mode,
+        )
+        
+        exit_code = consolidator.run(source_configs)
+        
+        audit_log_path = audit_dir / "consolidation_audit.json"
+        summary = {}
+        if audit_log_path.exists():
+            with open(audit_log_path, "r") as json_f:
+                summary = json.load(json_f)
+                
+        if upload_dir.exists():
+            shutil.rmtree(upload_dir)
+            
+        summary["merge_mode"] = merge_mode
+        summary["output_path"] = str(output_path)
+        if merge_mode and hasattr(consolidator, "merge_stats"):
+            summary["new_rows"] = consolidator.merge_stats.get("new_rows", 0)
+            summary["new_sources"] = consolidator.merge_stats.get("new_sources", 0)
+            summary["merged_rows"] = consolidator.merge_stats.get("existing_rows", 0)
+        
+        # Verify output file was actually written
+        output_exists = output_path.exists() and output_path.stat().st_size > 0
+        summary["output_exists"] = output_exists
+        
+        # Check for specific write error from consolidator
+        write_error = getattr(consolidator, "_write_error", None)
+        
+        if exit_code != 0 or not output_exists:
+            parts = []
+            if not output_exists:
+                parts.append("Output file was not created")
+            if write_error:
+                parts.append(write_error)
+            elif summary.get("errors"):
+                parts.extend(summary["errors"][:3])  # first 3 errors max
+            elif consolidation_tracker.error_msg:
+                parts.append(consolidation_tracker.error_msg)
+            error_msg = "; ".join(parts) if parts else "Consolidation completed with errors. Check audit log."
+            consolidation_tracker.is_running = False
+            consolidation_tracker.progress_text = "Consolidation completed with warnings."
+            consolidation_tracker.exit_code = exit_code
+            consolidation_tracker.summary = summary
+            consolidation_tracker.error_msg = error_msg
+        else:
+            consolidation_tracker.is_running = False
+            consolidation_tracker.progress_text = "Consolidation Completed Successfully!"
+            consolidation_tracker.exit_code = exit_code
+            consolidation_tracker.summary = summary
+        
+    except Exception as e:
+        if upload_dir.exists():
+            shutil.rmtree(upload_dir)
+        consolidation_tracker.is_running = False
+        consolidation_tracker.progress_text = "Pipeline execution failed."
+        consolidation_tracker.error_msg = str(e)
+
+
+def handle_consolidate_banks() -> dict:
+    """Return the list of configured banks from mapping rules."""
+    try:
+        configs = _reload_runtime_configs()
+        banks = []
+        for c in configs:
+            banks.append({
+                "client": c.client_name.strip(),
+                "pattern": c.file_pattern,
+                "pt_hint": c.pt_sheet_hint,
+                "md_hint": c.md_sheet_hint,
+                "overrides": len(c.column_overrides),
+            })
+        return {"success": True, "banks": banks}
+    except Exception as e:
+        return {"success": False, "error": str(e), "banks": []}
+
+
+def worker_consolidation_thread(files_dict: dict, output_dir: str):
+    try:
+        consolidation_tracker.is_running = True
+        consolidation_tracker.progress_text = f"Consolidating {len(files_dict)} workbooks in memory..."
+        consolidation_tracker.pct = 0
+        consolidation_tracker.error_msg = None
+
+        def on_progress(pct, text):
+            consolidation_tracker.pct = pct
+            consolidation_tracker.progress_text = text
+
+        from audit_engine.consolidator.consolidate import consolidate_in_memory
+        excel_bytes, summary = consolidate_in_memory(files_dict, save_mapping=True, progress_callback=on_progress)
+
+        output_path = os.path.join(output_dir, "Mar'26 consolidated.xlsx")
+        with open(output_path, "wb") as f:
+            f.write(excel_bytes)
+
+        summary["output_path"] = output_path
+        summary["output_exists"] = True
+
+        consolidation_tracker.summary = summary
+        consolidation_tracker.is_running = False
+        consolidation_tracker.pct = 100
+        consolidation_tracker.exit_code = 0
+        consolidation_tracker.progress_text = "Consolidation Complete."
+
+        from audit_engine.database.legacy import log_consolidation
+        log_consolidation(
+            file_count=len(files_dict),
+            total_pay=summary.get("total_pay", 0.0),
+            pt_rows=summary.get("pt_rows", 0),
+            md_rows=summary.get("md_rows", 0),
+            output_path=output_path,
+        )
+    except Exception as e:
+        consolidation_tracker.error_msg = str(e)
+        consolidation_tracker.is_running = False
+        consolidation_tracker.exit_code = 1
+
+
+def handle_preparse_file(filepath: str) -> dict:
+    if not filepath or not os.path.exists(filepath):
+        return {"success": False, "error": "File missing"}
+    try:
+        from audit_engine.consolidator.consolidate import preparse_single_file
+        res = preparse_single_file(filepath)
+        return {
+            "success": True,
+            "filename": res["filename"],
+            "client": res["client"],
+            "pt_count": res["pt_count"],
+            "md_count": res["md_count"],
+            "status": res["status"]
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def handle_consolidate_run(data: dict) -> dict:
+    selected_files = data.get("files", [])
+    if not selected_files:
+        return {"success": False, "error": "No source files selected."}
+
+    output_dir = data.get("output_dir", "")
+    if not output_dir:
+        from audit_engine.database.legacy import get_config
+        import tempfile
+        output_dir = get_config("out_path") or tempfile.gettempdir()
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    files_dict = {}
+    for fpath in selected_files:
+        if os.path.exists(fpath):
+            fname = os.path.basename(fpath)
+            files_dict[fname] = fpath
+
+    if not files_dict:
+        return {"success": False, "error": "No valid source files found on disk."}
+
+    import threading
+    consolidation_tracker.is_running = True
+    consolidation_tracker.progress_text = f"Initializing consolidation for {len(files_dict)} files..."
+    consolidation_tracker.summary = None
+    consolidation_tracker.error_msg = None
+
+    t = threading.Thread(
+        target=worker_consolidation_thread,
+        args=(files_dict, output_dir),
+        daemon=True
+    )
+    t.start()
+
+    return {"success": True, "message": "Consolidation pipeline launched in background worker thread."}
+
+
+def handle_consolidate_progress() -> dict:
+    summary = consolidation_tracker.summary
+    if not summary and not consolidation_tracker.is_running:
+        from pathlib import Path
+        import json
+        project_root = _get_project_root()
+        audit_log_path = project_root / "audit_logs" / "consolidation_audit.json"
+        if audit_log_path.exists():
+            try:
+                with open(audit_log_path, "r") as json_f:
+                    summary = json.load(json_f)
+            except Exception:
+                pass
+    return {
+        "is_running": consolidation_tracker.is_running,
+        "progress_text": consolidation_tracker.progress_text,
+        "pct": getattr(consolidation_tracker, "pct", 0),
+        "exit_code": consolidation_tracker.exit_code,
+        "summary": summary,
+        "error_msg": consolidation_tracker.error_msg,
+        "merge_mode": consolidation_tracker.merge_mode,
+        "output_exists": summary.get("output_exists", False) if summary else False
+    }
+

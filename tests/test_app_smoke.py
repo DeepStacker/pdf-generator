@@ -217,11 +217,13 @@ class TestHandleConfigSave:
 class TestHandleOpen:
     def test_open_nonexistent_path(self):
         result = handle_open({"path": "/nonexistent/path"})
-        assert result == {"success": True}
+        assert result["success"] is False
+        assert "File not found" in result["error"]
 
     def test_open_empty_path(self):
         result = handle_open({"path": ""})
-        assert result == {"success": True}
+        assert result["success"] is False
+        assert "No path provided" in result["error"]
 
 
 class TestHandleUpdate:

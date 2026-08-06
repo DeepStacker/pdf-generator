@@ -36,8 +36,12 @@ def create_app(register_routes: bool = True) -> object:
 
     app = default_app()
 
-    # Request body size limit middleware (10 MB)
-    _max_body = 10 * 1024 * 1024
+    # Set bottle MEMFILE_MAX limit to 500 MB for large multi-file uploads
+    from audit_engine.lib.bottle import BaseRequest
+    BaseRequest.MEMFILE_MAX = 500 * 1024 * 1024
+
+    # Request body size limit middleware (500 MB)
+    _max_body = 500 * 1024 * 1024
 
     @app.hook("before_request")
     def _log_request() -> None:

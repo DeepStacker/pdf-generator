@@ -1,0 +1,1402 @@
+{
+  "timestamp": "2026-05-29T16:19:33.785966",
+  "sources_processed": 2,
+  "status": "completed",
+  "total_pt_rows": 164,
+  "total_md_rows": 815,
+  "warnings_count": 34,
+  "errors_count": 0,
+  "errors": [],
+  "warnings": [
+    "PT row count 101 outside [4, 100]",
+    "Cross-source duplicate assayer: Rajeshwer Kumar (AS0001) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Srinivasa Rao Talabathula (AS0006) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Shaik Mobin Basha (AS0007) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: SANDEEP KUMAR (AS0008) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Sanjay Das (AS0009) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: R Deepak Shet (AS0024) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Surinder Pal (AS0026) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Devender Kumar (AS0031) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Prakash B S (AS0043) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Ramesh Chand Verma (AS0085) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Pradeep Kumar (AS0110) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: valaboju Santosh Kumar (AS0186) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Yogendra Kumar (AS0257) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Chandan Santra (AS0265) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Nitin Kiritbhai Soni (AS0294) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Jayaraman S (AS0296) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Anjan Karmakar (AS0313) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: P Pravesh (AS0340) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Saraf Gopal Achari (AS0349) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: R Jeganathan (AS0361) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Sachin Verma (AS0455) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Leela Krishna Soni (AS0465) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Nihal Soni (AS0469) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Sellaperumal (AS0482) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: K Gopinath (AS0487) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Dilip Kumar Verma (AS0488) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Sangareddy Peta Sangameswar (AS0522) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Rajib Rana (AS0565) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Ashok Kumar (AS0573) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Shubham Mahajan (AS0668) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Srinivasa Anandappa (AS0694) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Guruprasad R Shet (AS0701) appears in both Axis Bank POA and RBL(muthoot)",
+    "Cross-source duplicate assayer: Raavula Gopal Chary (AS0725) appears in both Axis Bank POA and RBL(muthoot)"
+  ],
+  "cross_source_duplicates": 33,
+  "sources": [
+    {
+      "filename": "Axis Bank POA Payment Tracker - Feb'26.xlsx",
+      "pt_rows": 101,
+      "md_rows": 384,
+      "pt_mappings": [
+        {
+          "canonical_col": "S.no",
+          "schema_idx": 0,
+          "mapped_header": null,
+          "match_type": "auto"
+        },
+        {
+          "canonical_col": "client",
+          "schema_idx": 1,
+          "mapped_header": null,
+          "match_type": "auto"
+        },
+        {
+          "canonical_col": "Assayer Name",
+          "schema_idx": 2,
+          "mapped_header": "Assayer Name",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Branch Cancellation Charges",
+          "schema_idx": 15,
+          "mapped_header": "Branch Cancellation Charges",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Error Deduction",
+          "schema_idx": 17,
+          "mapped_header": "Error Deduction",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "No. of Visits",
+          "schema_idx": 10,
+          "mapped_header": "No. of Visits",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Location",
+          "schema_idx": 5,
+          "mapped_header": "Location",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Base Audit Fee",
+          "schema_idx": 11,
+          "mapped_header": "Base Audit Fee",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Total pay",
+          "schema_idx": 18,
+          "mapped_header": "Total pay",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer Phone",
+          "schema_idx": 4,
+          "mapped_header": "Assayer Phone",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Total pay (Base)",
+          "schema_idx": 12,
+          "mapped_header": "Total pay (Base)",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "A/c Number",
+          "schema_idx": 22,
+          "mapped_header": "A/c Number",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer Code",
+          "schema_idx": 3,
+          "mapped_header": "Assayer Code",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Type of Audit",
+          "schema_idx": 9,
+          "mapped_header": "Type of Audit",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": " Travel charges(If any)",
+          "schema_idx": 13,
+          "mapped_header": "Travel charges(If any)",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Remarks (if any)",
+          "schema_idx": 19,
+          "mapped_header": "Remarks (if any)",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Audit Month & Year",
+          "schema_idx": 8,
+          "mapped_header": "Audit Month & Year",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "State",
+          "schema_idx": 6,
+          "mapped_header": "State",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "PAN Number",
+          "schema_idx": 20,
+          "mapped_header": "PAN Number",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Zone",
+          "schema_idx": 7,
+          "mapped_header": "Zone",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Cancelled visits",
+          "schema_idx": 14,
+          "mapped_header": "Cancelled visits",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Bank Name",
+          "schema_idx": 21,
+          "mapped_header": "Bank Name",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "IFSC Code",
+          "schema_idx": 23,
+          "mapped_header": "IFSC Code",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": " Andaman & Nicobar Branch Expenses",
+          "schema_idx": 16,
+          "mapped_header": "Andaman & Nicobar Branch Expenses",
+          "match_type": "pattern"
+        }
+      ],
+      "md_mappings": [
+        {
+          "canonical_col": "Sr No",
+          "schema_idx": 0,
+          "mapped_header": null,
+          "match_type": "auto"
+        },
+        {
+          "canonical_col": "Client",
+          "schema_idx": 1,
+          "mapped_header": null,
+          "match_type": "auto"
+        },
+        {
+          "canonical_col": "Month",
+          "schema_idx": 2,
+          "mapped_header": null,
+          "match_type": "auto"
+        },
+        {
+          "canonical_col": "Location ",
+          "schema_idx": 6,
+          "mapped_header": "State",
+          "match_type": "override"
+        },
+        {
+          "canonical_col": "Total No.of packets actually audited",
+          "schema_idx": 47,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Audit \ncompletion date",
+          "schema_idx": 16,
+          "mapped_header": "Audit \ncompletion date",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "No of Packets \naudited",
+          "schema_idx": 19,
+          "mapped_header": "No of Packets \naudited",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer Reporting time at Branch",
+          "schema_idx": 21,
+          "mapped_header": "Assayer Reporting time at Branch",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Client fee",
+          "schema_idx": 24,
+          "mapped_header": "Final Client Fees",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional fee",
+          "schema_idx": 28,
+          "mapped_header": "Additional fee",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional fee",
+          "schema_idx": 33,
+          "mapped_header": "Additional fee___2",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer Name",
+          "schema_idx": 9,
+          "mapped_header": "Assayer Name",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "No of days \naudited For client",
+          "schema_idx": 18,
+          "mapped_header": "No of days \naudited For client",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer fee",
+          "schema_idx": 27,
+          "mapped_header": "Assayer fee",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer fee",
+          "schema_idx": 32,
+          "mapped_header": "Assayer fee___2",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional Packet  T& F",
+          "schema_idx": 58,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Base Location",
+          "schema_idx": 30,
+          "mapped_header": "Base Location",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional Packet  POA",
+          "schema_idx": 59,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Touch and Feel Audit Packet Count",
+          "schema_idx": 56,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Contact Person",
+          "schema_idx": 13,
+          "mapped_header": "Contact Person",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Schedule date",
+          "schema_idx": 14,
+          "mapped_header": "Schedule date",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional Packet",
+          "schema_idx": 20,
+          "mapped_header": "Additional Packet",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Final Client Fees",
+          "schema_idx": 26,
+          "mapped_header": "Final Client Fees",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Total",
+          "schema_idx": 36,
+          "mapped_header": "Total",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Total pouches suggested for audit",
+          "schema_idx": 40,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "A/C Auctioned",
+          "schema_idx": 43,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Cancelled\nClient fee",
+          "schema_idx": 54,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Total No.of A/cs",
+          "schema_idx": 8,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Error Deduciton",
+          "schema_idx": 35,
+          "mapped_header": "Error Deduciton",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Already Audited",
+          "schema_idx": 41,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "billing  remarks",
+          "schema_idx": 55,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Seeding Status",
+          "schema_idx": 38,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "A/C Closed",
+          "schema_idx": 42,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Packet Missing",
+          "schema_idx": 44,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Actual Audited (except already audited & A/C closed) ",
+          "schema_idx": 45,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "T & F Client fee",
+          "schema_idx": 52,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Assayer Code",
+          "schema_idx": 10,
+          "mapped_header": "Assayer Code",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "AssayerPhone",
+          "schema_idx": 11,
+          "mapped_header": "AssayerPhone",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Audit Remarks",
+          "schema_idx": 37,
+          "mapped_header": "Audit Remarks",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Extra audited pouches",
+          "schema_idx": 46,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Type oof Audit",
+          "schema_idx": 48,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Aadhar No",
+          "schema_idx": 49,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Audit \nStatus",
+          "schema_idx": 15,
+          "mapped_header": "Audit \nStatus",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "No of days \naudited ",
+          "schema_idx": 17,
+          "mapped_header": "No of days \naudited",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Cancelled",
+          "schema_idx": 34,
+          "mapped_header": "Cancelled",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "BRANCH",
+          "schema_idx": 5,
+          "mapped_header": "BRANCH",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer PAN",
+          "schema_idx": 12,
+          "mapped_header": "Assayer PAN",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Audit start time",
+          "schema_idx": 22,
+          "mapped_header": "Audit start time",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "State",
+          "schema_idx": 7,
+          "mapped_header": "State",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional",
+          "schema_idx": 25,
+          "mapped_header": "Additional",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "POA Client Fees",
+          "schema_idx": 53,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "POA \nPacket count",
+          "schema_idx": 57,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Zone",
+          "schema_idx": 3,
+          "mapped_header": "Zone",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Audit End Time",
+          "schema_idx": 23,
+          "mapped_header": "Audit End Time",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "oracle_id",
+          "schema_idx": 60,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Distance",
+          "schema_idx": 29,
+          "mapped_header": "Distance",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Remarks",
+          "schema_idx": 31,
+          "mapped_header": "Remarks",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Remarks",
+          "schema_idx": 50,
+          "mapped_header": "Audit Remarks",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Address",
+          "schema_idx": 61,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "SOL ID",
+          "schema_idx": 4,
+          "mapped_header": "SOL ID",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Urban/ Rural",
+          "schema_idx": 51,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Report",
+          "schema_idx": 39,
+          "mapped_header": null,
+          "match_type": "default"
+        }
+      ],
+      "pt_financials": {
+        "Base Audit Fee___11": 99550.0,
+        "Total pay (Base)___12": 611400.0,
+        " Travel charges(If any)___13": 378350.0,
+        "Cancelled visits___14": 11.0,
+        "Branch Cancellation Charges___15": 15600.0,
+        " Andaman & Nicobar Branch Expenses___16": 0.0,
+        "Error Deduction___17": 16500.0,
+        "Total pay___18": 988850.0
+      },
+      "md_financials": {
+        "Client fee___24": 2228450.0,
+        "Additional___25": 1031450.0,
+        "Final Client Fees___26": 2228450.0,
+        "Assayer fee___27": 378000.0,
+        "Additional fee___28": 218650.0,
+        "Assayer fee___32": 611400.0,
+        "Additional fee___33": 378350.0,
+        "Cancelled___34": 15600.0,
+        "Error Deduciton___35": 16500.0,
+        "Total___36": 988850.0,
+        "Total pouches suggested for audit___40": 0.0,
+        "Already Audited___41": 0.0,
+        "A/C Closed___42": 0.0,
+        "A/C Auctioned___43": 0.0,
+        "Packet Missing___44": 0.0,
+        "Actual Audited (except already audited & A/C closed) ___45": 0.0,
+        "Extra audited pouches___46": 0.0,
+        "Total No.of packets actually audited___47": 0.0
+      },
+      "enriched_columns": [],
+      "defaulted_columns": [],
+      "extras_columns": [],
+      "warnings": [],
+      "status": "completed"
+    },
+    {
+      "filename": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "pt_rows": 63,
+      "md_rows": 431,
+      "pt_mappings": [
+        {
+          "canonical_col": "S.no",
+          "schema_idx": 0,
+          "mapped_header": null,
+          "match_type": "auto"
+        },
+        {
+          "canonical_col": "client",
+          "schema_idx": 1,
+          "mapped_header": null,
+          "match_type": "auto"
+        },
+        {
+          "canonical_col": "Assayer Name",
+          "schema_idx": 2,
+          "mapped_header": "Assayer Name",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Branch Cancellation Charges",
+          "schema_idx": 15,
+          "mapped_header": "Audit Cancellation Fees",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Error Deduction",
+          "schema_idx": 17,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "No. of Visits",
+          "schema_idx": 10,
+          "mapped_header": "No of visits",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Location",
+          "schema_idx": 5,
+          "mapped_header": "Location",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Base Audit Fee",
+          "schema_idx": 11,
+          "mapped_header": "Base Audit Fee",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Total pay",
+          "schema_idx": 18,
+          "mapped_header": "Total pay",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer Phone",
+          "schema_idx": 4,
+          "mapped_header": "Assayer Phone",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Total pay (Base)",
+          "schema_idx": 12,
+          "mapped_header": "Total pay (Base)",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "A/c Number",
+          "schema_idx": 22,
+          "mapped_header": "A/c Number",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer Code",
+          "schema_idx": 3,
+          "mapped_header": "Assayer Code",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Type of Audit",
+          "schema_idx": 9,
+          "mapped_header": "Type of Audit",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": " Travel charges(If any)",
+          "schema_idx": 13,
+          "mapped_header": "Travel charges(If any)",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Remarks (if any)",
+          "schema_idx": 19,
+          "mapped_header": "Remarks (if any)",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Audit Month & Year",
+          "schema_idx": 8,
+          "mapped_header": "Audit Month & Year",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "State",
+          "schema_idx": 6,
+          "mapped_header": "State",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "PAN Number",
+          "schema_idx": 20,
+          "mapped_header": "PAN Number",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Zone",
+          "schema_idx": 7,
+          "mapped_header": "Zone",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Cancelled visits",
+          "schema_idx": 14,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Bank Name",
+          "schema_idx": 21,
+          "mapped_header": "Bank Name",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "IFSC Code",
+          "schema_idx": 23,
+          "mapped_header": "IFSC Code",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": " Andaman & Nicobar Branch Expenses",
+          "schema_idx": 16,
+          "mapped_header": null,
+          "match_type": "default"
+        }
+      ],
+      "md_mappings": [
+        {
+          "canonical_col": "Sr No",
+          "schema_idx": 0,
+          "mapped_header": null,
+          "match_type": "auto"
+        },
+        {
+          "canonical_col": "Client",
+          "schema_idx": 1,
+          "mapped_header": null,
+          "match_type": "auto"
+        },
+        {
+          "canonical_col": "Month",
+          "schema_idx": 2,
+          "mapped_header": null,
+          "match_type": "auto"
+        },
+        {
+          "canonical_col": "Total No.of packets actually audited",
+          "schema_idx": 47,
+          "mapped_header": "Total No.of packets actually audited",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Audit \ncompletion date",
+          "schema_idx": 16,
+          "mapped_header": "End Date",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "No of Packets \naudited",
+          "schema_idx": 19,
+          "mapped_header": "Total No.of packets actually audited",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer Reporting time at Branch",
+          "schema_idx": 21,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Client fee",
+          "schema_idx": 24,
+          "mapped_header": "Client Fees",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional fee",
+          "schema_idx": 28,
+          "mapped_header": "Additional Fees",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional fee",
+          "schema_idx": 33,
+          "mapped_header": "Additional Fees___2",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer Name",
+          "schema_idx": 9,
+          "mapped_header": "Assayer Name",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "No of days \naudited For client",
+          "schema_idx": 18,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Assayer fee",
+          "schema_idx": 27,
+          "mapped_header": "Assayer Fees",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer fee",
+          "schema_idx": 32,
+          "mapped_header": "Assayer Fees___2",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional Packet  T& F",
+          "schema_idx": 58,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Base Location",
+          "schema_idx": 30,
+          "mapped_header": "Assayer Base location",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional Packet  POA",
+          "schema_idx": 59,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Touch and Feel Audit Packet Count",
+          "schema_idx": 56,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Contact Person",
+          "schema_idx": 13,
+          "mapped_header": "Process Manager",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Schedule date",
+          "schema_idx": 14,
+          "mapped_header": "Audit schedule date",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional Packet",
+          "schema_idx": 20,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Final Client Fees",
+          "schema_idx": 26,
+          "mapped_header": "Final Client Fees",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Total",
+          "schema_idx": 36,
+          "mapped_header": "Total",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Total pouches suggested for audit",
+          "schema_idx": 40,
+          "mapped_header": "Total pouches suggested for audit",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "A/C Auctioned",
+          "schema_idx": 43,
+          "mapped_header": "A/C Auctioned",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Cancelled\nClient fee",
+          "schema_idx": 54,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Total No.of A/cs",
+          "schema_idx": 8,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Error Deduciton",
+          "schema_idx": 35,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Already Audited",
+          "schema_idx": 41,
+          "mapped_header": "Actual Audited (except already audited & A/C closed)",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "billing  remarks",
+          "schema_idx": 55,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Seeding Status",
+          "schema_idx": 38,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "A/C Closed",
+          "schema_idx": 42,
+          "mapped_header": "A/C Closed",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Packet Missing",
+          "schema_idx": 44,
+          "mapped_header": "Packet Missing",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Actual Audited (except already audited & A/C closed) ",
+          "schema_idx": 45,
+          "mapped_header": "Actual Audited (except already audited & A/C closed)",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "T & F Client fee",
+          "schema_idx": 52,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Assayer Code",
+          "schema_idx": 10,
+          "mapped_header": "Assayer Code",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "AssayerPhone",
+          "schema_idx": 11,
+          "mapped_header": "AssayerPhone",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Audit Remarks",
+          "schema_idx": 37,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Extra audited pouches",
+          "schema_idx": 46,
+          "mapped_header": "Extra audited pouches",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Type oof Audit",
+          "schema_idx": 48,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Aadhar No",
+          "schema_idx": 49,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Audit \nStatus",
+          "schema_idx": 15,
+          "mapped_header": "Audit Status",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "No of days \naudited ",
+          "schema_idx": 17,
+          "mapped_header": "No. of Visit",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Cancelled",
+          "schema_idx": 34,
+          "mapped_header": "Cancellation",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "BRANCH",
+          "schema_idx": 5,
+          "mapped_header": "Branch Code",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Location ",
+          "schema_idx": 6,
+          "mapped_header": "BranchName",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Assayer PAN",
+          "schema_idx": 12,
+          "mapped_header": "Assayer PAN",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Audit start time",
+          "schema_idx": 22,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "State",
+          "schema_idx": 7,
+          "mapped_header": "State",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Additional",
+          "schema_idx": 25,
+          "mapped_header": "Additional Fees",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "POA Client Fees",
+          "schema_idx": 53,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "POA \nPacket count",
+          "schema_idx": 57,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Zone",
+          "schema_idx": 3,
+          "mapped_header": "Zone",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Audit End Time",
+          "schema_idx": 23,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "oracle_id",
+          "schema_idx": 60,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Distance",
+          "schema_idx": 29,
+          "mapped_header": "Distance",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Remarks",
+          "schema_idx": 31,
+          "mapped_header": "Remarks",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Remarks",
+          "schema_idx": 50,
+          "mapped_header": "Other Remarks",
+          "match_type": "pattern"
+        },
+        {
+          "canonical_col": "Address",
+          "schema_idx": 61,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "SOL ID",
+          "schema_idx": 4,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Urban/ Rural",
+          "schema_idx": 51,
+          "mapped_header": null,
+          "match_type": "default"
+        },
+        {
+          "canonical_col": "Report",
+          "schema_idx": 39,
+          "mapped_header": null,
+          "match_type": "default"
+        }
+      ],
+      "pt_financials": {
+        "Base Audit Fee___11": 60050.0,
+        "Total pay (Base)___12": 412900.0,
+        " Travel charges(If any)___13": 152800.0,
+        "Cancelled visits___14": 0.0,
+        "Branch Cancellation Charges___15": 23050.0,
+        " Andaman & Nicobar Branch Expenses___16": 0.0,
+        "Error Deduction___17": 0.0,
+        "Total pay___18": 588750.0
+      },
+      "md_financials": {
+        "Client fee___24": 1265500.0,
+        "Additional___25": 158000.0,
+        "Final Client Fees___26": 1265500.0,
+        "Assayer fee___27": 421900.0,
+        "Additional fee___28": 158000.0,
+        "Assayer fee___32": 412900.0,
+        "Additional fee___33": 152800.0,
+        "Cancelled___34": 23050.0,
+        "Error Deduciton___35": 0.0,
+        "Total___36": 588750.0,
+        "Total pouches suggested for audit___40": 2923.0,
+        "Already Audited___41": 2823.0,
+        "A/C Closed___42": 100.0,
+        "A/C Auctioned___43": 0.0,
+        "Packet Missing___44": 0.0,
+        "Actual Audited (except already audited & A/C closed) ___45": 2823.0,
+        "Extra audited pouches___46": 0.0,
+        "Total No.of packets actually audited___47": 2823.0
+      },
+      "enriched_columns": [],
+      "defaulted_columns": [],
+      "extras_columns": [],
+      "warnings": [],
+      "status": "completed"
+    }
+  ],
+  "cross_duplicates": [
+    {
+      "assayer_code": "AS0001",
+      "assayer_name": "Rajeshwer Kumar",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0006",
+      "assayer_name": "Srinivasa Rao Talabathula",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0007",
+      "assayer_name": "Shaik Mobin Basha",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0008",
+      "assayer_name": "SANDEEP KUMAR",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0009",
+      "assayer_name": "Sanjay Das",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0024",
+      "assayer_name": "R Deepak Shet",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0026",
+      "assayer_name": "Surinder Pal",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0031",
+      "assayer_name": "Devender Kumar",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0043",
+      "assayer_name": "Prakash B S",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0085",
+      "assayer_name": "Ramesh Chand Verma",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0110",
+      "assayer_name": "Pradeep Kumar",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0186",
+      "assayer_name": "valaboju Santosh Kumar",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0257",
+      "assayer_name": "Yogendra Kumar",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0265",
+      "assayer_name": "Chandan Santra",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0294",
+      "assayer_name": "Nitin Kiritbhai Soni",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0296",
+      "assayer_name": "Jayaraman S",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0313",
+      "assayer_name": "Anjan Karmakar",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0340",
+      "assayer_name": "P Pravesh",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0349",
+      "assayer_name": "Saraf Gopal Achari",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0361",
+      "assayer_name": "R Jeganathan",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0455",
+      "assayer_name": "Sachin Verma",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0465",
+      "assayer_name": "Leela Krishna Soni",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0469",
+      "assayer_name": "Nihal Soni",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0482",
+      "assayer_name": "Sellaperumal",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0487",
+      "assayer_name": "K Gopinath",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0488",
+      "assayer_name": "Dilip Kumar Verma",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0522",
+      "assayer_name": "Sangareddy Peta Sangameswar",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0565",
+      "assayer_name": "Rajib Rana",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0573",
+      "assayer_name": "Ashok Kumar",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0668",
+      "assayer_name": "Shubham Mahajan",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0694",
+      "assayer_name": "Srinivasa Anandappa",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0701",
+      "assayer_name": "Guruprasad R Shet",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    },
+    {
+      "assayer_code": "AS0725",
+      "assayer_name": "Raavula Gopal Chary",
+      "source_1_client": "Axis Bank POA",
+      "source_1_file": "RBL(Muthoot Fincorp) Payment Tracker -Feb'26.xlsx",
+      "source_2_client": "RBL(muthoot)"
+    }
+  ]
+}
