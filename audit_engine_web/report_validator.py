@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 import openpyxl
-from openpyxl.styles import PatternFill, Font, Border, Side
+from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from openpyxl.utils import get_column_letter
 from collections import defaultdict
 
@@ -60,6 +60,51 @@ def get_col(mapping, *names):
         if key in mapping:
             return mapping[key]
     return None
+
+
+def build_col_map(col):
+    """Build the canonical column map from a map_columns() header mapping."""
+    return {
+        "packet": get_col(col, "PACKET NO."),
+        "account": get_col(col, "ACCOUNT NUMBER"),
+        "applicant": get_col(col, "APPLICANT NAME"),
+        "status": get_col(col, "FRESH/RENEWAL/CLOSED/ALREADY VERIFIED"),
+        "taf": get_col(col, "TAF/POA"),
+        "remarks": get_col(col, "AGENCY REMARKS"),
+        "magnet": get_col(col, "MAGNET TEST RESULT"),
+        "tampered": get_col(col, "PACKET TAMPERED YES/NO"),
+        "gdr_gross": get_col(col, "GROSS WEIGHT AS PER GDR/PACKET"),
+        "actual_gross": get_col(col, "ACTUAL GROSS WEIGHT AS PER FCU AGENCY VERIFICATION"),
+        "tare": get_col(col, "ACTUAL TARE WEIGHT AS PER FCU AGENCY VERIFICATION"),
+        "gross_diff": get_col(col, "DIFFERENCE IN GROSS WEIGHT"),
+        "gdr_net": get_col(col, "NET WEIGHT AS PER GDR/PACKET"),
+        "actual_net": get_col(col, "ACTUAL NET WEIGHT AS PER FCU AGENCY VERIFICATION"),
+        "net_diff": get_col(col, "DIFFERENCE IN NET WEIGHT"),
+        "spur_count": get_col(col, "TOTAL NO.OF SPURIOUS ORNAMENTS"),
+        "spur_weight": get_col(col, "SPURIOUS ORNAMENTS GROSS WEIGHT"),
+        "spur_pct": get_col(col, "% OF SPURIOUS ORNAMENTS GROSS WEIGHT"),
+        "carat_count": get_col(col, "TOTAL NO.OF ORNAMENTS WITH CARAT MISMATCH"),
+        "uncommon_count": get_col(col, "TOTAL NO.OF UNCOMMON ORNAMENTS"),
+        "sanction_date": get_col(col, "SANCTION DATE"),
+        "verification_date": get_col(col, "AGENCY VERIFICATION DATE"),
+        "sanction_limit": get_col(col, "SANCTION LIMIT"),
+        "gdr_no": get_col(col, "GDR NUMBER"),
+        "ornaments_gdr": get_col(col, "TOTAL NO.OF ORNAMENTS AS PER THE GDR/PACKET"),
+        "ornaments_actual": get_col(col, "ACTUAL AVAILABLE ORNAMENTS AT THE TIME OF FCU VERIFICATION"),
+        "ornaments_diff": get_col(col, "DIFFRENCE IN ACTUAL ORNAMENTS"),
+        "renewal_date": get_col(col, "RENEWAL/CLOSED DATE"),
+    }
+
+
+def is_topup_remark(remarks):
+    """True if the remarks text marks the row as a top-up ("Top Up", "Top-up",
+    "Topup of account ..." and similar spellings).
+
+    Matches on a word boundary so unrelated remarks that merely contain "top"
+    and "up" as parts of other words (e.g. "Desktop Update pending") are not
+    mistaken for a top-up row.
+    """
+    return bool(re.search(r"\bTOP[\s\-]*UP\b", str(remarks or "").upper()))
 
 
 def safe_str(val):
@@ -230,13 +275,25 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
         if r not in used_rows:
             new_row_order.append(r)
             
-    # Bound the column range to the actual data area (known columns + a small
-    # buffer) rather than a flat 150 — real-world sheets often carry stray
-    # far-right formatting (ws.max_column can be in the thousands) that would
-    # otherwise make every row copy hundreds of empty style objects for nothing.
+    # Bound the column range to the true data width: the rightmost column that
+    # holds an actual value in the header rows or the data rows. This keeps
+    # extra columns beyond the mapped ones moving together with their rows
+    # (a fixed cap would silently leave far-right data behind, misaligning
+    # rows), while still ignoring style-only stray cells that can push
+    # ws.max_column into the thousands.
+    row_set = set(all_rows)
+    max_val_col = 0
+    for (r, c), cl in ws._cells.items():
+        if c <= max_val_col or (r not in row_set and r not in (1, 2)):
+            continue
+        v = cl.value
+        if v is None or (isinstance(v, str) and not v.strip()):
+            continue
+        max_val_col = c
     known_cols = [c for c in col_map.values() if c]
-    data_max_col = (max(known_cols) + 5) if known_cols else 150
-    max_col = min(ws.max_column, data_max_col, 150)
+    if known_cols:
+        max_val_col = max(max_val_col, max(known_cols))
+    max_col = min(ws.max_column, max_val_col + 2) if max_val_col else min(ws.max_column, 150)
     row_data_cache = {}
     row_heights = {}
     
@@ -271,15 +328,27 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
         for c in range(1, max_col + 1):
             cell = ws.cell(row=new_r, column=c)
             data = cells_dict[c]
+            # If the source cell carried no explicit style, the target must be
+            # reset to defaults — otherwise the moved row keeps the previous
+            # occupant's formatting.
+            target_had_style = cell.has_style
             cell.value = data["value"]
             if data["font"]:
                 cell.font = data["font"]
+            elif target_had_style:
+                cell.font = Font()
             if data["fill"]:
                 cell.fill = data["fill"]
+            elif target_had_style:
+                cell.fill = PatternFill()
             if data["border"]:
                 cell.border = data["border"]
+            elif target_had_style:
+                cell.border = Border()
             if data["alignment"]:
                 cell.alignment = data["alignment"]
+            elif target_had_style:
+                cell.alignment = Alignment()
             cell.number_format = data["number_format"]
 
 
@@ -309,36 +378,7 @@ def process_file(filepath: str, output_suffix: str = "_VALIDATED", pdf_path: str
     data_start = 5
     data_end = find_data_end(ws, data_start)
 
-    col_map = {
-        "packet": get_col(col, "PACKET NO."),
-        "account": get_col(col, "ACCOUNT NUMBER"),
-        "applicant": get_col(col, "APPLICANT NAME"),
-        "status": get_col(col, "FRESH/RENEWAL/CLOSED/ALREADY VERIFIED"),
-        "taf": get_col(col, "TAF/POA"),
-        "remarks": get_col(col, "AGENCY REMARKS"),
-        "magnet": get_col(col, "MAGNET TEST RESULT"),
-        "tampered": get_col(col, "PACKET TAMPERED YES/NO"),
-        "gdr_gross": get_col(col, "GROSS WEIGHT AS PER GDR/PACKET"),
-        "actual_gross": get_col(col, "ACTUAL GROSS WEIGHT AS PER FCU AGENCY VERIFICATION"),
-        "tare": get_col(col, "ACTUAL TARE WEIGHT AS PER FCU AGENCY VERIFICATION"),
-        "gross_diff": get_col(col, "DIFFERENCE IN GROSS WEIGHT"),
-        "gdr_net": get_col(col, "NET WEIGHT AS PER GDR/PACKET"),
-        "actual_net": get_col(col, "ACTUAL NET WEIGHT AS PER FCU AGENCY VERIFICATION"),
-        "net_diff": get_col(col, "DIFFERENCE IN NET WEIGHT"),
-        "spur_count": get_col(col, "TOTAL NO.OF SPURIOUS ORNAMENTS"),
-        "spur_weight": get_col(col, "SPURIOUS ORNAMENTS GROSS WEIGHT"),
-        "spur_pct": get_col(col, "% OF SPURIOUS ORNAMENTS GROSS WEIGHT"),
-        "carat_count": get_col(col, "TOTAL NO.OF ORNAMENTS WITH CARAT MISMATCH"),
-        "uncommon_count": get_col(col, "TOTAL NO.OF UNCOMMON ORNAMENTS"),
-        "sanction_date": get_col(col, "SANCTION DATE"),
-        "verification_date": get_col(col, "AGENCY VERIFICATION DATE"),
-        "sanction_limit": get_col(col, "SANCTION LIMIT"),
-        "gdr_no": get_col(col, "GDR NUMBER"),
-        "ornaments_gdr": get_col(col, "TOTAL NO.OF ORNAMENTS AS PER THE GDR/PACKET"),
-        "ornaments_actual": get_col(col, "ACTUAL AVAILABLE ORNAMENTS AT THE TIME OF FCU VERIFICATION"),
-        "ornaments_diff": get_col(col, "DIFFRENCE IN ACTUAL ORNAMENTS"),
-        "renewal_date": get_col(col, "RENEWAL/CLOSED DATE"),
-    }
+    col_map = build_col_map(col)
 
     all_rows = list(range(data_start, data_end + 1))
 
@@ -440,15 +480,15 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         if c is not None
     )
 
-    # Computed once (not re-derived in every pass): uppercased status and the
-    # closed/top-up classification, both keyed by row.
+    # Computed once (not re-derived in every pass): uppercased status keyed by row.
     row_status_upper = {}
-    row_is_closed_topup = {}
     for r in all_rows:
         rd = rows_data[r]
-        st = rd["status"].upper() if rd["status"] else ""
-        row_status_upper[r] = st
-        row_is_closed_topup[r] = "CLOSED" in st or "TOP UP" in rd["remarks"].upper()
+        row_status_upper[r] = rd["status"].upper() if rd["status"] else ""
+
+    # Rows reset to default values by the Closed/Top-Up cleaning pass; later
+    # passes skip these so cleaned defaults aren't re-flagged as issues.
+    cleaned_rows = set()
 
     # ── Cell helpers (use cache if available, else direct cell access) ──
     def cell(row, c):
@@ -469,8 +509,8 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         if cl is not None:
             cl.value = new_val
 
-    def highlight(row, c, fill, font=None, force=False):
-        if row in resolved_packet_rows and c in _diff_cols_excluded:
+    def highlight(row, c, fill, font=None, force=False, skip_excluded=True):
+        if skip_excluded and row in resolved_packet_rows and c in _diff_cols_excluded:
             return
         cl = cell(row, c)
         if cl is not None:
@@ -480,7 +520,23 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                     return
             cl.fill = copy(fill)
             if font:
-                cl.font = copy(font)
+                # Preserve the cell's original font (family, size, italics…)
+                # and only apply the requested emphasis attributes on top.
+                new_font = copy(cl.font) if cl.font else Font()
+                if font.color is not None:
+                    new_font.color = copy(font.color)
+                if font.bold:
+                    new_font.bold = True
+                cl.font = new_font
+
+    def num_or_none(v):
+        try:
+            s = str(v).strip()
+            if not s or s.upper() in ("NA", "N/A", "N A", "NAN", "NONE", "-"):
+                return None
+            return float(s)
+        except (ValueError, TypeError):
+            return None
 
     def val_data(row, c):
         v = val(row, c)
@@ -506,7 +562,7 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         for pkt, dup_rows in packet_map.items():
             if len(dup_rows) > 1:
                 for r in dup_rows:
-                    is_topup = "TOP UP" in rows_data[r]["remarks"].upper()
+                    is_topup = is_topup_remark(rows_data[r]["remarks"])
                     if is_topup:
                         highlight(r, col_packet, LIGHT_BLUE_FILL)
                         summary["duplicate_packet_topup"].append(f"Row {r}: Packet '{pkt}' (Top-Up)")
@@ -571,7 +627,66 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                 summary["topup_no_match"].append(f"Row {r}: {name} has no matching row with packet")
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 3: Date Outlier Detection (Majority Month/Year Rule)
+    # PASS 3: Reset Closed/Top-Up rows to default values
+    # Verification-result columns are not applicable on these rows: numeric
+    # columns get their default (0.000 for weights, 0 for counts/diffs/%),
+    # the rest are blanked. Identity/loan columns (packet, account, name,
+    # status, TAF/POA, dates, sanction limit, remarks) are kept. Closed rows
+    # keep the Renewal/Closed date — that is the closure date itself.
+    # ══════════════════════════════════════════════════════════════════
+    default_weight_cols = [
+        (col_map.get("gdr_gross"), "GDR Gross"),
+        (col_map.get("actual_gross"), "Actual Gross"),
+        (col_map.get("tare"), "Tare"),
+        (col_map.get("gdr_net"), "GDR Net"),
+        (col_map.get("actual_net"), "Actual Net"),
+        (col_map.get("spur_weight"), "Spurious Weight"),
+    ]
+    default_count_cols = [
+        (col_map.get("gross_diff"), "Gross Diff"),
+        (col_map.get("net_diff"), "Net Diff"),
+        (col_map.get("ornaments_gdr"), "Ornaments GDR"),
+        (col_map.get("ornaments_actual"), "Ornaments Actual"),
+        (col_map.get("ornaments_diff"), "Ornaments Diff"),
+        (col_map.get("spur_count"), "Spurious Count"),
+        (col_map.get("spur_pct"), "Spurious %"),
+        (col_map.get("carat_count"), "Carat Mismatch Count"),
+        (col_map.get("uncommon_count"), "Uncommon Count"),
+    ]
+    blank_cols = [
+        (col_map.get("gdr_no"), "GDR Number"),
+        (col_map.get("magnet"), "Magnet Test"),
+        (col_map.get("tampered"), "Packet Tampered"),
+    ]
+    for r in all_rows:
+        is_closed = "CLOSED" in row_status_upper[r]
+        is_topup = r in resolved_packet_rows or is_topup_remark(rows_data[r]["remarks"])
+        if not (is_closed or is_topup):
+            continue
+        cleaned_rows.add(r)
+        for wc, label in default_weight_cols:
+            if wc and num_or_none(val(r, wc)) != 0.0:
+                set_val(r, wc, 0.000)
+                highlight(r, wc, GREEN_FILL, skip_excluded=False)
+                summary["closed_topup_defaulted"].append(f"Row {r}: {label} → 0.000")
+        for cc, label in default_count_cols:
+            if cc and num_or_none(val(r, cc)) != 0.0:
+                set_val(r, cc, 0)
+                highlight(r, cc, GREEN_FILL, skip_excluded=False)
+                summary["closed_topup_defaulted"].append(f"Row {r}: {label} → 0")
+        clear_cols = list(blank_cols)
+        if not is_closed:
+            clear_cols.append((col_map.get("renewal_date"), "Renewal/Closed Date"))
+        for bc, label in clear_cols:
+            if bc:
+                v = val(r, bc)
+                if v is not None and str(v).strip() != "":
+                    set_val(r, bc, None)
+                    highlight(r, bc, GREEN_FILL, skip_excluded=False)
+                    summary["closed_topup_cleared"].append(f"Row {r}: {label} cleared")
+
+    # ══════════════════════════════════════════════════════════════════
+    # PASS 4: Date Outlier Detection (Majority Month/Year Rule)
     # ══════════════════════════════════════════════════════════════════
     date_cols = [
         (col_map.get("sanction_date"), "Sanction Date"),
@@ -634,121 +749,65 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                             )
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 4: Tampered / Magnet
+    # PASS 5: Tampered / Magnet
     # ══════════════════════════════════════════════════════════════════
     col_tampered = col_map.get("tampered")
     if col_tampered:
         for r in all_rows:
+            if r in cleaned_rows:
+                continue
             if safe_str(val(r, col_tampered)).upper() == "YES":
                 highlight(r, col_tampered, ORANGE_FILL)
                 summary["tampered"].append(f"Row {r}: Packet Tampered = YES")
     col_magnet = col_map.get("magnet")
     if col_magnet:
         for r in all_rows:
+            if r in cleaned_rows:
+                continue
             v = safe_str(val(r, col_magnet))
             if v.upper().strip() != "OK":
                 highlight(r, col_magnet, ORANGE_FILL)
                 summary["magnet_not_ok"].append(f"Row {r}: Magnet = '{v}'")
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 5: NA → 0.000 in weights for Closed/Top-Up
-    # ══════════════════════════════════════════════════════════════════
-    weight_cols = [
-        (col_map.get("gdr_gross"), "GDR Gross"),
-        (col_map.get("actual_gross"), "Actual Gross"),
-        (col_map.get("tare"), "Tare"),
-        (col_map.get("gdr_net"), "GDR Net"),
-        (col_map.get("actual_net"), "Actual Net"),
-    ]
-    col_taf = col_map.get("taf")
-    col_status = col_map.get("status")
-    if col_taf and col_status:
-        for r in all_rows:
-            rd = rows_data[r]
-            status = row_status_upper[r]
-            is_closed_or_topup = row_is_closed_topup[r]
-            if is_closed_or_topup:
-                for wc, label in weight_cols:
-                    if wc:
-                        v = val(r, wc)
-                        if v is not None:
-                            vs = str(v).strip().upper()
-                            if vs in ("NA", "N/A", "N A", ""):
-                                set_val(r, wc, 0.000)
-                                highlight(r, wc, GREEN_FILL)
-                                summary["na_to_zero"].append(f"Row {r}: {label} → 0.000")
-
-    # ══════════════════════════════════════════════════════════════════
     # PASS 6: Fresh accounts with Actual Gross = 0
     # ══════════════════════════════════════════════════════════════════
+    col_taf = col_map.get("taf")
     col_actual_gross = col_map.get("actual_gross")
     if col_actual_gross:
         for r in all_rows:
-            rd = rows_data[r]
+            if r in cleaned_rows:
+                continue
             status = row_status_upper[r]
             if "FRESH" in status:
-                act_g = val(r, col_actual_gross)
-                try:
-                    ag_n = float(act_g) if act_g is not None and str(act_g).strip() not in ("", "NA", "N/A") else None
-                except (ValueError, TypeError):
-                    ag_n = None
-                if ag_n is not None and ag_n == 0 and "TOP UP" not in rd["remarks"].upper():
+                ag_n = num_or_none(val(r, col_actual_gross))
+                if ag_n is not None and ag_n == 0:
                     highlight(r, col_actual_gross, ORANGE_FILL)
                     summary["fresh_zero_actual_gross"].append(f"Row {r}: Fresh account but Actual Gross = 0")
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 7: Zero out difference columns for Closed/Top-Up
-    # ══════════════════════════════════════════════════════════════════
-    if col_taf and col_status:
-        diff_cols = [
-            (col_map.get("gross_diff"), "Gross Diff"),
-            (col_map.get("net_diff"), "Net Diff"),
-            (col_map.get("ornaments_diff"), "Ornaments Diff"),
-        ]
-        for r in all_rows:
-            rd = rows_data[r]
-            status = row_status_upper[r]
-            is_closed_or_topup = row_is_closed_topup[r]
-            if is_closed_or_topup:
-                for dc, label in diff_cols:
-                    if dc:
-                        set_val(r, dc, 0)
-                        highlight(r, dc, GREEN_FILL)
-                        summary["topup_diff_zeroed"].append(f"Row {r}: {label} → 0")
-
-    # ══════════════════════════════════════════════════════════════════
-    # PASS 8: Gross Diff formula check
+    # PASS 7: Gross Diff formula check
     # ══════════════════════════════════════════════════════════════════
     col_gdr_gross = col_map.get("gdr_gross")
     col_gross_diff = col_map.get("gross_diff")
     col_tare = col_map.get("tare")
-    col_taf = col_map.get("taf")
     if col_gross_diff and col_gdr_gross and col_actual_gross and col_tare:
         gdr_g_let = get_column_letter(col_gdr_gross)
         act_g_let = get_column_letter(col_actual_gross)
         tare_let = get_column_letter(col_tare)
         for r in all_rows:
-            rd = rows_data[r]
             status = row_status_upper[r]
-            is_closed_or_topup = row_is_closed_topup[r]
-            if is_closed_or_topup:
+            if r in cleaned_rows:
                 continue
 
-            gdr_g = val(r, col_gdr_gross)
-            act_g = val(r, col_actual_gross)
-            tare = val(r, col_tare)
-            gross_diff = val_data(r, col_gross_diff)
-            
-            try:
-                gdr_g_n = float(gdr_g) if gdr_g is not None and str(gdr_g).strip() not in ("", "NA", "N/A") else None
-                act_g_n = float(act_g) if act_g is not None and str(act_g).strip() not in ("", "NA", "N/A") else None
-                tare_n = float(tare) if tare is not None and str(tare).strip() not in ("", "NA", "N/A") else None
-                gd_n = float(gross_diff) if gross_diff is not None and str(gross_diff).strip() not in ("", "NA", "N/A") else None
-            except (ValueError, TypeError):
-                continue
+            gdr_g_n = num_or_none(val(r, col_gdr_gross))
+            act_g_n = num_or_none(val(r, col_actual_gross))
+            tare_n = num_or_none(val(r, col_tare))
+            raw_gd = val(r, col_gross_diff)
+            gd_n = num_or_none(val_data(r, col_gross_diff))
 
             taf_val = safe_str(val(r, col_taf)).upper().strip() if col_taf else ""
-            
+
             formula = None
             expected = None
             if taf_val == "TAF" and gdr_g_n is not None and tare_n is not None:
@@ -766,16 +825,21 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                     formula = f"={gdr_g_let}{r}-{tare_let}{r}"
                     expected = round(gdr_g_n - tare_n, 1)
 
+            # Only touch the cell when its current value is wrong or missing —
+            # correct cells keep their original content and formatting. A cell
+            # already holding a formula with no cached value can't be verified,
+            # so it is left as-is.
             if formula:
-                set_val(r, col_gross_diff, formula)
-                if gd_n is not None and expected is not None:
-                    actual = round(gd_n, 1)
-                    if abs(expected - actual) > 0.05:
-                        highlight(r, col_gross_diff, YELLOW_FILL)
-                        summary["gross_diff_fixed"].append(f"Row {r}: Gross Diff {actual}→{expected}")
+                if gd_n is None:
+                    if not (isinstance(raw_gd, str) and raw_gd.strip().startswith("=")):
+                        set_val(r, col_gross_diff, formula)
+                elif abs(expected - round(gd_n, 1)) > 0.05:
+                    set_val(r, col_gross_diff, formula)
+                    highlight(r, col_gross_diff, YELLOW_FILL)
+                    summary["gross_diff_fixed"].append(f"Row {r}: Gross Diff {round(gd_n, 1)}→{expected}")
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 9: Net Diff check
+    # PASS 8: Net Diff check
     # ══════════════════════════════════════════════════════════════════
     col_net_diff = col_map.get("net_diff")
     col_gdr_net = col_map.get("gdr_net")
@@ -784,29 +848,21 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         gdr_n_let = get_column_letter(col_gdr_net)
         act_n_let = get_column_letter(col_actual_net)
         for r in all_rows:
-            rd = rows_data[r]
             status = row_status_upper[r]
-            is_closed_or_topup = row_is_closed_topup[r]
-            if is_closed_or_topup:
+            if r in cleaned_rows:
                 continue
 
-            gdr_n = val(r, col_gdr_net)
-            act_n = val(r, col_actual_net)
-            net_diff = val_data(r, col_net_diff)
-
-            try:
-                gdr_n_n = float(gdr_n) if gdr_n is not None and str(gdr_n).strip() not in ("", "NA", "N/A") else None
-                act_n_n = float(act_n) if act_n is not None and str(act_n).strip() not in ("", "NA", "N/A") else None
-                nd_n = float(net_diff) if net_diff is not None and str(net_diff).strip() not in ("", "NA", "N/A") else None
-            except (ValueError, TypeError):
-                continue
+            gdr_n_n = num_or_none(val(r, col_gdr_net))
+            act_n_n = num_or_none(val(r, col_actual_net))
+            raw_nd = val(r, col_net_diff)
+            nd_n = num_or_none(val_data(r, col_net_diff))
 
             taf_val = safe_str(val(r, col_taf)).upper().strip() if col_taf else ""
 
             formula = None
             expected = None
             is_taf = False
-            
+
             if taf_val == "TAF":
                 formula = "=0.000"
                 expected = 0.0
@@ -824,20 +880,23 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                     formula = f"={gdr_n_let}{r}-{act_n_let}{r}"
                     expected = round(gdr_n_n - act_n_n, 1)
 
+            # Only rewrite the cell when its current value is wrong or missing.
             if formula:
-                set_val(r, col_net_diff, formula)
-                if nd_n is not None:
-                    if is_taf and abs(nd_n) > 0.01:
+                if nd_n is None:
+                    if not (isinstance(raw_nd, str) and raw_nd.strip().startswith("=")):
+                        set_val(r, col_net_diff, formula)
+                elif is_taf:
+                    if abs(nd_n) > 0.01:
+                        set_val(r, col_net_diff, formula)
                         highlight(r, col_net_diff, YELLOW_FILL)
                         summary["net_diff_av_not_zero"].append(f"Row {r}: Net Diff = {nd_n} (TAF case)")
-                    elif not is_taf and expected is not None:
-                        actual = round(nd_n, 1)
-                        if abs(expected - actual) > 0.05:
-                            highlight(r, col_net_diff, YELLOW_FILL)
-                            summary["net_diff_fixed"].append(f"Row {r}: Net Diff {actual}→{expected} (POA case)")
+                elif abs(expected - round(nd_n, 1)) > 0.05:
+                    set_val(r, col_net_diff, formula)
+                    highlight(r, col_net_diff, YELLOW_FILL)
+                    summary["net_diff_fixed"].append(f"Row {r}: Net Diff {round(nd_n, 1)}→{expected} (POA case)")
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 10: Spurious % check
+    # PASS 9: Spurious % check
     # ══════════════════════════════════════════════════════════════════
     col_spur_pct = col_map.get("spur_pct")
     col_spur_weight = col_map.get("spur_weight")
@@ -845,26 +904,21 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         spur_w_let = get_column_letter(col_spur_weight)
         gdr_g_let = get_column_letter(col_gdr_gross)
         for r in all_rows:
-            spur_w = val(r, col_spur_weight)
-            spur_pct = val_data(r, col_spur_pct)
-            gdr_g = val(r, col_gdr_gross)
-            if spur_w is not None and gdr_g is not None:
-                try:
-                    sw_n = float(spur_w)
-                    gg_n = float(gdr_g)
-                    sp_n = float(spur_pct) if spur_pct is not None else 0.0
-                    if gg_n > 0:
-                        formula = f"=ROUND(({spur_w_let}{r}/{gdr_g_let}{r})*100,2)"
-                        set_val(r, col_spur_pct, formula)
-                        expected_pct = round((sw_n / gg_n) * 100, 2)
-                        if abs(expected_pct - sp_n) > 0.5:
-                            highlight(r, col_spur_pct, YELLOW_FILL)
-                            summary["spur_pct_mismatch"].append(f"Row {r}: Expected {expected_pct}%, got {sp_n}%")
-                except (ValueError, TypeError):
-                    pass
+            if r in cleaned_rows:
+                continue
+            sw_n = num_or_none(val(r, col_spur_weight))
+            gg_n = num_or_none(val(r, col_gdr_gross))
+            sp_n = num_or_none(val_data(r, col_spur_pct))
+            if sw_n is not None and gg_n is not None and gg_n > 0:
+                expected_pct = round((sw_n / gg_n) * 100, 2)
+                if abs(expected_pct - (sp_n if sp_n is not None else 0.0)) > 0.5:
+                    formula = f"=ROUND(({spur_w_let}{r}/{gdr_g_let}{r})*100,2)"
+                    set_val(r, col_spur_pct, formula)
+                    highlight(r, col_spur_pct, YELLOW_FILL)
+                    summary["spur_pct_mismatch"].append(f"Row {r}: Expected {expected_pct}%, got {sp_n if sp_n is not None else 0.0}%")
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 11: Ornament count diff
+    # PASS 10: Ornament count diff
     # ══════════════════════════════════════════════════════════════════
     col_ornaments_diff = col_map.get("ornaments_diff")
     col_ornaments_gdr = col_map.get("ornaments_gdr")
@@ -873,60 +927,53 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         act_orn_let = get_column_letter(col_ornaments_actual)
         gdr_orn_let = get_column_letter(col_ornaments_gdr)
         for r in all_rows:
-            rd = rows_data[r]
-            status = row_status_upper[r]
-            is_closed_or_topup = row_is_closed_topup[r]
-            if is_closed_or_topup:
+            if r in cleaned_rows:
                 continue
 
             taf_val = safe_str(val(r, col_taf)).upper()
             if taf_val == "TAF":
                 continue
             is_poa = taf_val == "POA"
-            gdr_orn = val_data(r, col_ornaments_gdr)
-            act_orn = val_data(r, col_ornaments_actual)
-            if gdr_orn is not None and act_orn is not None:
-                try:
-                    go_n = int(round(float(gdr_orn)))
-                    ao_n = int(round(float(act_orn)))
-                    expected_diff = ao_n - go_n
-                    
+            go_n = num_or_none(val_data(r, col_ornaments_gdr))
+            ao_n = num_or_none(val_data(r, col_ornaments_actual))
+            if go_n is not None and ao_n is not None:
+                expected_diff = int(round(ao_n)) - int(round(go_n))
+
+                stored = num_or_none(val_data(r, col_ornaments_diff))
+                if stored is None or int(round(stored)) != expected_diff:
                     formula = f"={act_orn_let}{r}-{gdr_orn_let}{r}"
                     set_val(r, col_ornaments_diff, formula)
-                    
-                    if expected_diff != 0:
-                        highlight(r, col_ornaments_diff, YELLOW_FILL)
-                        if not is_poa:
-                            highlight(r, col_ornaments_gdr, YELLOW_FILL)
-                            highlight(r, col_ornaments_actual, YELLOW_FILL)
-                        summary["ornament_diff_fixed"].append(f"Row {r}: Set to {expected_diff}")
-                except (ValueError, TypeError):
-                    pass
+
+                if expected_diff != 0:
+                    highlight(r, col_ornaments_diff, YELLOW_FILL)
+                    if not is_poa:
+                        highlight(r, col_ornaments_gdr, YELLOW_FILL)
+                        highlight(r, col_ornaments_actual, YELLOW_FILL)
+                    summary["ornament_diff_fixed"].append(f"Row {r}: Set to {expected_diff}")
 
     # ── TAF rows: Ornaments Diff = 0 (no highlights) ──
     if col_ornaments_diff and col_taf:
         for r in all_rows:
+            if r in cleaned_rows:
+                continue
             taf_val = safe_str(val(r, col_taf)).upper()
-            if taf_val == "TAF":
+            if taf_val == "TAF" and num_or_none(val_data(r, col_ornaments_diff)) != 0.0:
                 set_val(r, col_ornaments_diff, 0)
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 12: Highlight zero/non-positive ornaments GDR
+    # PASS 11: Highlight zero/non-positive ornaments GDR
     # ══════════════════════════════════════════════════════════════════
     if col_ornaments_gdr:
         for r in all_rows:
-            v = val(r, col_ornaments_gdr)
-            if v is not None:
-                try:
-                    n = float(v)
-                    if n <= 0:
-                        highlight(r, col_ornaments_gdr, YELLOW_FILL)
-                        summary["ornaments_gdr_non_positive"].append(f"Row {r}: Ornaments GDR = {v}")
-                except (ValueError, TypeError):
-                    pass
+            if r in cleaned_rows:
+                continue
+            n = num_or_none(val(r, col_ornaments_gdr))
+            if n is not None and n <= 0:
+                highlight(r, col_ornaments_gdr, YELLOW_FILL)
+                summary["ornaments_gdr_non_positive"].append(f"Row {r}: Ornaments GDR = {val(r, col_ornaments_gdr)}")
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 13: Whitespace normalization
+    # PASS 12: Whitespace normalization
     # ══════════════════════════════════════════════════════════════════
     text_cols = [
         col_map.get("account"), col_map.get("applicant"), col_packet,
@@ -941,7 +988,7 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                     summary["whitespace_fixed"].append(f"Row {r} col {tc}: trimmed")
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 14: Replace NA with 0.000 in Tare column
+    # PASS 13: Replace NA with 0.000 in Tare column
     # ══════════════════════════════════════════════════════════════════
     if col_tare:
         for r in all_rows:
@@ -950,7 +997,7 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                 set_val(r, col_tare, 0.000)
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 15: Weight values - flag suspiciously large/small
+    # PASS 14: Weight values - flag suspiciously large/small
     # ══════════════════════════════════════════════════════════════════
     weight_check_cols = [
         (col_gdr_gross, "GDR Gross"),
@@ -976,7 +1023,7 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                         pass
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 16: Gross weight must not be less than Net weight
+    # PASS 15: Gross weight must not be less than Net weight
     # ══════════════════════════════════════════════════════════════════
     gross_net_pairs = [
         (col_gdr_gross, col_gdr_net, "GDR Gross", "GDR Net"),
@@ -999,6 +1046,34 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                     highlight(r, net_col, YELLOW_FILL)
                     summary["gross_less_than_net"].append(
                         f"Row {r}: {gross_label} ({g_n}) < {net_label} ({n_n})"
+                    )
+
+    # ══════════════════════════════════════════════════════════════════
+    # PASS 16: Tare weight must not be less than GDR Gross/Net weight
+    # The tare (sealed packet incl. packaging) can never weigh less than the
+    # declared contents. Skipped when tare is 0/NA (e.g. POA rows where the
+    # packet was opened) and on cleaned Closed/Top-Up rows.
+    # ══════════════════════════════════════════════════════════════════
+    if col_tare:
+        tare_weight_pairs = [
+            (col_gdr_gross, "GDR Gross"),
+            (col_gdr_net, "GDR Net"),
+        ]
+        for r in all_rows:
+            if r in cleaned_rows:
+                continue
+            t_n = num_or_none(val(r, col_tare))
+            if t_n is None or t_n <= 0:
+                continue
+            for wcol, wlabel in tare_weight_pairs:
+                if not wcol:
+                    continue
+                w_n = num_or_none(val(r, wcol))
+                if w_n is not None and t_n < w_n:
+                    highlight(r, col_tare, YELLOW_FILL)
+                    highlight(r, wcol, YELLOW_FILL)
+                    summary["tare_less_than_weight"].append(
+                        f"Row {r}: Tare ({t_n}) < {wlabel} ({w_n})"
                     )
 
     return summary

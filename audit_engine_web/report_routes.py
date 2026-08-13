@@ -194,36 +194,7 @@ def run_validation_and_extract(filepath, file_id, original_name=None, pdf_path=N
     data_start = 5
     data_end = rv.find_data_end(ws, data_start)
 
-    col_map = {
-        "packet": rv.get_col(col, "PACKET NO."),
-        "account": rv.get_col(col, "ACCOUNT NUMBER"),
-        "applicant": rv.get_col(col, "APPLICANT NAME"),
-        "status": rv.get_col(col, "FRESH/RENEWAL/CLOSED/ALREADY VERIFIED"),
-        "taf": rv.get_col(col, "TAF/POA"),
-        "remarks": rv.get_col(col, "AGENCY REMARKS"),
-        "magnet": rv.get_col(col, "MAGNET TEST RESULT"),
-        "tampered": rv.get_col(col, "PACKET TAMPERED YES/NO"),
-        "gdr_gross": rv.get_col(col, "GROSS WEIGHT AS PER GDR/PACKET"),
-        "actual_gross": rv.get_col(col, "ACTUAL GROSS WEIGHT AS PER FCU AGENCY VERIFICATION"),
-        "tare": rv.get_col(col, "ACTUAL TARE WEIGHT AS PER FCU AGENCY VERIFICATION"),
-        "gross_diff": rv.get_col(col, "DIFFERENCE IN GROSS WEIGHT"),
-        "gdr_net": rv.get_col(col, "NET WEIGHT AS PER GDR/PACKET"),
-        "actual_net": rv.get_col(col, "ACTUAL NET WEIGHT AS PER FCU AGENCY VERIFICATION"),
-        "net_diff": rv.get_col(col, "DIFFERENCE IN NET WEIGHT"),
-        "spur_count": rv.get_col(col, "TOTAL NO.OF SPURIOUS ORNAMENTS"),
-        "spur_weight": rv.get_col(col, "SPURIOUS ORNAMENTS GROSS WEIGHT"),
-        "spur_pct": rv.get_col(col, "% OF SPURIOUS ORNAMENTS GROSS WEIGHT"),
-        "carat_count": rv.get_col(col, "TOTAL NO.OF ORNAMENTS WITH CARAT MISMATCH"),
-        "uncommon_count": rv.get_col(col, "TOTAL NO.OF UNCOMMON ORNAMENTS"),
-        "sanction_date": rv.get_col(col, "SANCTION DATE"),
-        "verification_date": rv.get_col(col, "AGENCY VERIFICATION DATE"),
-        "sanction_limit": rv.get_col(col, "SANCTION LIMIT"),
-        "gdr_no": rv.get_col(col, "GDR NUMBER"),
-        "ornaments_gdr": rv.get_col(col, "TOTAL NO.OF ORNAMENTS AS PER THE GDR/PACKET"),
-        "ornaments_actual": rv.get_col(col, "ACTUAL AVAILABLE ORNAMENTS AT THE TIME OF FCU VERIFICATION"),
-        "ornaments_diff": rv.get_col(col, "DIFFRENCE IN ACTUAL ORNAMENTS"),
-        "renewal_date": rv.get_col(col, "RENEWAL/CLOSED DATE"),
-    }
+    col_map = rv.build_col_map(col)
 
     all_rows = list(range(data_start, data_end + 1))
 
@@ -259,6 +230,13 @@ def run_validation_and_extract(filepath, file_id, original_name=None, pdf_path=N
     report(30, "Running validations…")
     summary = __import__("collections").defaultdict(list)
     rv.run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cache, _data_cache)
+
+    # Validation may have written values into cells that didn't exist before
+    # (e.g. defaults on Closed/Top-Up rows); refresh the cache so the preview
+    # below reflects them.
+    _cell_cache = {}
+    for (_r, _c), _cell in ws._cells.items():
+        _cell_cache[(_r, _c)] = _cell
 
     report(60, "Building preview…")
     column_indices = []
