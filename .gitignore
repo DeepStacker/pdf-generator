@@ -53,7 +53,9 @@ requirements.txt
 .coverage
 
 # Pyodide web app (on web-app-pyodide branch only)
-web/
+# Anchored to the repo root: a bare "web/" also matched src/audit_engine/web/,
+# so new files there were silently skipped by `git add`.
+/web/
 
 # Track build scripts and spec file
 !pdf_generator.spec
