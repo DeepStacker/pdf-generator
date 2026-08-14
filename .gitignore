@@ -33,6 +33,9 @@ generated_pdfs/
 .vscode/
 .idea/
 
+# Claude Code local tooling (dev-server launch config, etc.)
+.claude/
+
 # Legacy directories (removed in refactor)
 app/
 logic/
