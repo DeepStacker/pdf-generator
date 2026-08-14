@@ -1,15 +1,14 @@
 import re
 import sys
+from collections import defaultdict
 from copy import copy
 from datetime import date, datetime
 from datetime import time as time_cls
 from pathlib import Path
 
-
 import openpyxl
-from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from collections import defaultdict
 
 # Highlight fill (ARGB, as openpyxl stores it) → CSS color for the web grid.
 PREVIEW_FILL_MAP = {
@@ -144,8 +143,7 @@ def find_data_end(ws, data_start=5):
             continue
         if isinstance(v, str) and not v.strip():
             continue
-        if r > end:
-            end = r
+        end = max(end, r)
     return end
 
 
@@ -166,18 +164,18 @@ def parse_any_date(v):
     s = str(v).strip()
     if not s or s.upper() in ("NAN", "NONE", "NAT", "-"):
         return None
-    
+
     months_map = {
         "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
         "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12
     }
-    
+
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d.%m.%Y"):
         try:
             return datetime.strptime(s, fmt).date()
         except ValueError:
             pass
-            
+
     for sep in ["-", "/", ".", " "]:
         parts = [p.strip() for p in s.split(sep) if p.strip()]
         if len(parts) == 3:
@@ -210,11 +208,11 @@ def get_custom_output_filename(ws, col, col_map, all_rows, _cell_cache, default_
             if v and str(v).strip():
                 branch_name = str(v).strip().upper()
                 break
-                
+
     import re
     branch_name = re.sub(r'[\/\\\:\*\?\"\<\>\|]', '_', branch_name).strip()
     branch_name = re.sub(r'_+', '_', branch_name)
-    
+
     col_ver_date = col_map.get("verification_date")
     valid_dates = []
     if col_ver_date:
@@ -225,29 +223,27 @@ def get_custom_output_filename(ws, col, col_map, all_rows, _cell_cache, default_
                 parsed_d = parse_any_date(v)
                 if parsed_d:
                     valid_dates.append(parsed_d)
-                    
+
     if valid_dates:
         unique_dates = sorted(list(set(valid_dates)))
         min_date = unique_dates[0]
         max_date = unique_dates[-1]
-        
+
         months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
         def fmt_d(d):
             return f"{d.day:02d}-{months[d.month-1]}-{d.year}"
-            
-        if min_date == max_date:
-            date_str = fmt_d(min_date)
-        else:
-            date_str = f"{fmt_d(min_date)}_to_{fmt_d(max_date)}"
+
+        date_str = fmt_d(min_date) if min_date == max_date else f"{fmt_d(min_date)}_to_{fmt_d(max_date)}"
     else:
         date_str = "UNKNOWN_DATE"
-        
+
     return f"{branch_name}_Audit-MIS_{date_str}.xlsx"
 
 
 def extract_accounts_from_pdf(pdf_path):
-    from pypdf import PdfReader
     import re
+
+    from pypdf import PdfReader
     accounts = []
     try:
         reader = PdfReader(pdf_path)
@@ -265,27 +261,27 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
     col_acct = col_map.get("account")
     if not col_acct:
         return
-        
+
     acct_to_rows = defaultdict(list)
     for r in all_rows:
         acct = safe_str(ws.cell(row=r, column=col_acct).value)
         if acct:
             acct_to_rows[acct].append(r)
-            
+
     new_row_order = []
     used_rows = set()
-    
+
     for acct in pdf_accounts:
         if acct in acct_to_rows:
             for r in acct_to_rows[acct]:
                 if r not in used_rows:
                     new_row_order.append(r)
                     used_rows.add(r)
-                    
+
     for r in all_rows:
         if r not in used_rows:
             new_row_order.append(r)
-            
+
     # Bound the column range to the true data width: the rightmost column that
     # holds an actual value in the header rows or the data rows. This keeps
     # extra columns beyond the mapped ones moving together with their rows
@@ -303,11 +299,11 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
         max_val_col = c
     known_cols = [c for c in col_map.values() if c]
     if known_cols:
-        max_val_col = max(max_val_col, max(known_cols))
+        max_val_col = max(max_val_col, *known_cols)
     max_col = min(ws.max_column, max_val_col + 2) if max_val_col else min(ws.max_column, 150)
     row_data_cache = {}
     row_heights = {}
-    
+
     for r in all_rows:
         row_heights[r] = ws.row_dimensions[r].height
         cells_dict = {}
@@ -332,7 +328,7 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
                     "number_format": cell.number_format,
                 }
         row_data_cache[r] = cells_dict
-        
+
     for new_r, old_r in zip(all_rows, new_row_order):
         ws.row_dimensions[new_r].height = row_heights[old_r]
         cells_dict = row_data_cache[old_r]
@@ -599,7 +595,7 @@ def process_file(filepath: str, output_suffix: str = "_VALIDATED", pdf_path: str
 
 def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cache=None, _data_cache=None):
     """Run all validation passes against a worksheet.
-    
+
     Args:
         ws: openpyxl Worksheet (for writing)
         ws_data: data_only Worksheet (for formula values)
@@ -608,7 +604,7 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         rows_data: dict of row → {packet, account, name, status, taf, remarks, magnet, tampered}
         summary: defaultdict(list) to collect issues
         _cell_cache: optional dict {(row, col): cell} for fast access (app.py), or None
-        
+
     Returns:
         summary (same dict, mutated in place)
     """
@@ -838,7 +834,7 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         (col_map.get("verification_date"), "Agency Verification Date"),
         (col_map.get("renewal_date"), "Renewal/Closed Date"),
     ]
-    
+
     def get_year_month(v):
         if v is None:
             return None
@@ -875,15 +871,15 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                 ym = get_year_month(v)
                 if ym:
                     row_ym[r] = ym
-            
+
             if row_ym:
                 ym_counts = defaultdict(int)
                 for ym in row_ym.values():
                     ym_counts[ym] += 1
-                
+
                 majority_ym = max(ym_counts, key=ym_counts.get)
                 majority_count = ym_counts[majority_ym]
-                
+
                 if len(ym_counts) > 1 and majority_count > len(row_ym) / 2:
                     for r, ym in row_ym.items():
                         if ym != majority_ym:
@@ -1161,7 +1157,7 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                         if nv > 5000:
                             highlight(r, wc, YELLOW_FILL)
                             summary["weight_outlier"].append(f"Row {r}: {label} = {nv} (suspiciously large)")
-                        if nv < 0 and wc != col_gross_diff and wc != col_net_diff:
+                        if nv < 0 and wc not in (col_gross_diff, col_net_diff):
                             highlight(r, wc, YELLOW_FILL)
                             summary["weight_negative"].append(f"Row {r}: {label} = {nv} (negative weight)")
                     except (ValueError, TypeError):
@@ -1259,5 +1255,5 @@ if __name__ == "__main__":
         total = sum(len(v) for v in s.values())
         grand_total += total
         print(f"  {fp}: {total} issues")
-    print(f"  ─────────────────────")
+    print("  ─────────────────────")
     print(f"  TOTAL: {grand_total} issues across {len(all_summaries)} files")

@@ -109,8 +109,21 @@ def log_generation(
         safe_full = full_path if full_path is not None else safe_excel
         safe_out = os.path.basename(output_path) if output_path else "Outputs"
         cursor.execute(
-            "INSERT INTO history (timestamp, excel_name, pdf_count, output_path, audit_type, full_path, total_pay, pt_rows, md_rows, execution_time_sec) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), safe_excel, pdf_count, safe_out, audit_type, safe_full, total_pay, pt_rows, md_rows, execution_time_sec)
+            "INSERT INTO history (timestamp, excel_name, pdf_count, output_path, audit_type, "
+            "full_path, total_pay, pt_rows, md_rows, execution_time_sec) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                safe_excel,
+                pdf_count,
+                safe_out,
+                audit_type,
+                safe_full,
+                total_pay,
+                pt_rows,
+                md_rows,
+                execution_time_sec,
+            )
         )
         conn.commit()
 
@@ -163,7 +176,12 @@ def get_comprehensive_stats() -> dict[str, Any]:
         ]
 
         # Monthly trends (last 6 months)
-        cursor.execute("SELECT strftime('%b', timestamp) as m, COUNT(*), COALESCE(SUM(pdf_count), 0), COALESCE(SUM(total_pay), 0) FROM history GROUP BY strftime('%m', timestamp) ORDER BY timestamp DESC LIMIT 6")
+        cursor.execute(
+            "SELECT strftime('%b', timestamp) as m, COUNT(*), "
+            "COALESCE(SUM(pdf_count), 0), COALESCE(SUM(total_pay), 0) "
+            "FROM history GROUP BY strftime('%m', timestamp) "
+            "ORDER BY timestamp DESC LIMIT 6"
+        )
         monthly_trends = [
             {"month": row[0] or "Mar", "pdfs": max(1, row[2]), "pay": row[3]}
             for row in reversed(cursor.fetchall())

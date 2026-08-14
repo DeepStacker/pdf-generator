@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 
@@ -78,9 +79,7 @@ def _is_summary_row(row: dict[str, Any], headers: list[str]) -> bool:
                 if v is None or (isinstance(v, str) and not v.strip()):
                     empty_id_cols += 1
             elif not is_id and v is not None:
-                if isinstance(v, (int, float)) and v > 0:
-                    has_financial_val = True
-                elif isinstance(v, str) and v.replace(",", "").replace(".", "").isdigit():
+                if isinstance(v, (int, float)) and v > 0 or isinstance(v, str) and v.replace(",", "").replace(".", "").isdigit():
                     has_financial_val = True
 
         # If most identity columns are empty AND financial values exist
@@ -90,10 +89,7 @@ def _is_summary_row(row: dict[str, Any], headers: list[str]) -> bool:
                 return True
 
         # Fallback: sno is None and no identity cols found
-        if total_id_cols == 0 and has_financial_val:
-            return True
-
-        return False
+        return bool(total_id_cols == 0 and has_financial_val)
 
     # Check if S.no value is numeric
     try:

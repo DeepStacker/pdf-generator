@@ -1,14 +1,14 @@
-import pandas as pd
-import openpyxl
-from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
+import argparse
+import io
+import json
 import os
 import re
-import json
-import io
-import argparse
 from difflib import SequenceMatcher
-from collections import defaultdict
+
+import openpyxl
+import pandas as pd
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 try:
     import rapidfuzz
@@ -148,7 +148,6 @@ MD_COLS = [
 IGNORE_SHEETS = {'Summary', 'Auditor Details', 'Sheet6', 'Sheet7'}
 
 
-from difflib import SequenceMatcher
 
 
 def clean_col(col):
@@ -191,12 +190,16 @@ def token_set(s):
 MATCH_CACHE = {}  # (filename, tuple(source_cols), candidate) → match (per-sheet cache cleared per file)
 
 
+# Tokens too generic to identify a column on their own.
+GENERIC_TOKENS = {'date', 'fee', 'fees', 'type', 'no', 'number', 'code', 'name', 'total', 'status', 'charges', 'details'}
+
+
 def find_column(candidates, source_cols, name_hint=None,
                 anchor_col=None, anchor_pos=None,
                 sample_values=None,
                 threshold=0.75):
     """
-    Multi-strategy column matcher with confidence scoring, RapidFuzz fallback, 
+    Multi-strategy column matcher with confidence scoring, RapidFuzz fallback,
     word-overlap safety rules, and positional validation.
     """
     cleaned = {c: clean_col(c).lower() for c in source_cols}
@@ -234,19 +237,22 @@ def find_column(candidates, source_cols, name_hint=None,
 
     # Strategy 4: WORD OVERLAP for ALL candidates (Confidence: 65 - 75)
     # Exclude generic tokens from being sole overlap drivers
-    GENERIC_TOKENS = {'date', 'fee', 'fees', 'type', 'no', 'number', 'code', 'name', 'total', 'status', 'charges', 'details'}
     for candidate in candidates:
         ct = token_set(candidate)
         if ct:
             for c, st in tokens.items():
                 overlap = ct & st
                 non_generic_overlap = overlap - GENERIC_TOKENS
-                
+
                 # Rule 1: Multi-word candidate requires at least 2 tokens overlapping OR 1 non-generic token
                 if len(ct) >= 2:
-                    if len(overlap) >= 2 or (len(overlap) == 1 and len(non_generic_overlap) == 1 and list(non_generic_overlap)[0] not in GENERIC_TOKENS):
-                        if len(overlap) >= max(1, len(ct) * 0.5):
-                            return c
+                    strong_overlap = len(overlap) >= 2 or (
+                        len(overlap) == 1
+                        and len(non_generic_overlap) == 1
+                        and next(iter(non_generic_overlap)) not in GENERIC_TOKENS
+                    )
+                    if strong_overlap and len(overlap) >= max(1, len(ct) * 0.5):
+                        return c
                 # Rule 2: Single-word candidate requires exact token match or non-generic match with single-word source
                 elif len(ct) == 1:
                     token = list(ct)[0]
@@ -263,12 +269,9 @@ def find_column(candidates, source_cols, name_hint=None,
                 continue
             if cl[0] != cn[0]:  # first character must match
                 continue
-            
-            if rapidfuzz:
-                ratio = rapidfuzz.fuzz.ratio(cl, cn) / 100.0
-            else:
-                ratio = SequenceMatcher(None, cl, cn).ratio()
-                
+
+            ratio = rapidfuzz.fuzz.ratio(cl, cn) / 100.0 if rapidfuzz else SequenceMatcher(None, cl, cn).ratio()
+
             if ratio >= threshold:
                 return c
 
@@ -313,7 +316,12 @@ def find_column(candidates, source_cols, name_hint=None,
                     cn = cleaned[c]
                     if 'ifsc' in cn:
                         return c
-            states_set = {'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa', 'gujarat', 'haryana', 'himachal pradesh', 'jharkhand', 'karnataka', 'kerala', 'madhya pradesh', 'maharashtra', 'manipur', 'meghalaya', 'mizoram', 'nagaland', 'odisha', 'orissa', 'punjab', 'rajasthan', 'sikkim', 'tamil nadu', 'telangana', 'tripura', 'uttar pradesh', 'uttarakhand', 'west bengal', 'new delhi', 'delhi', 'chandigarh'}
+            states_set = {
+                'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa', 'gujarat', 'haryana', 'himachal pradesh',
+                'jharkhand', 'karnataka', 'kerala', 'madhya pradesh', 'maharashtra', 'manipur', 'meghalaya', 'mizoram', 'nagaland', 'odisha',
+                'orissa', 'punjab', 'rajasthan', 'sikkim', 'tamil nadu', 'telangana', 'tripura', 'uttar pradesh', 'uttarakhand', 'west bengal',
+                'new delhi', 'delhi', 'chandigarh'
+            }
             state_matches = sum(1 for v in vals[:20] if v.strip().lower().strip() in states_set)
             if state_matches >= max(3, len(vals[:20]) * 0.3):
                 for c in source_cols:
@@ -395,18 +403,21 @@ def build_content_map(df, sample_n=30):
 
         pan_matches = sum(1 for v in vals if re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]$', v.strip()))
         if pan_matches >= max(2, len(vals) * 0.5):
-            if 'pan' not in result: result['pan'] = col
+            if 'pan' not in result:
+                result['pan'] = col
             continue
 
         ifsc_matches = sum(1 for v in vals if re.match(r'^[A-Z]{4}0[A-Z0-9]{6}$', v.strip()))
         if ifsc_matches >= max(2, len(vals) * 0.5):
-            if 'ifsc' not in result: result['ifsc'] = col
+            if 'ifsc' not in result:
+                result['ifsc'] = col
             continue
 
         digits_only = [re.sub(r'\D', '', v) for v in vals]
         phone_matches = sum(1 for d in digits_only if len(d) == 10 and d.isdigit())
         if phone_matches >= max(2, len(vals) * 0.5):
-            if 'phone' not in result: result['phone'] = col
+            if 'phone' not in result:
+                result['phone'] = col
             continue
 
         states_set = {'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh',
@@ -417,18 +428,21 @@ def build_content_map(df, sample_n=30):
                       'uttarakhand', 'west bengal', 'new delhi', 'delhi', 'chandigarh'}
         state_matches = sum(1 for v in vals if v.strip().lower().strip() in states_set)
         if state_matches >= min(3, len(vals) * 0.3):
-            if 'state' not in result: result['state'] = col
+            if 'state' not in result:
+                result['state'] = col
             continue
 
         zones_set = {'north', 'south', 'east', 'west', 'central', 'north east', 'north-east'}
         zone_matches = sum(1 for v in vals if v.strip().lower() in zones_set)
         if zone_matches >= min(2, len(vals) * 0.3):
-            if 'zone' not in result: result['zone'] = col
+            if 'zone' not in result:
+                result['zone'] = col
             continue
 
         sol_matches = sum(1 for v in vals if re.match(r'^\d{4,6}$', v.strip()))
         if sol_matches >= min(3, len(vals) * 0.5):
-            if 'sol_id' not in result: result['sol_id'] = col
+            if 'sol_id' not in result:
+                result['sol_id'] = col
             continue
 
         date_matches = 0
@@ -436,10 +450,11 @@ def build_content_map(df, sample_n=30):
             try:
                 pd.Timestamp(v)
                 date_matches += 1
-            except:
+            except Exception:
                 pass
         if date_matches >= max(2, len(vals[:10]) * 0.5):
-            if 'date' not in result: result['date'] = col
+            if 'date' not in result:
+                result['date'] = col
             continue
 
     return result
@@ -497,7 +512,7 @@ def identify_sheets(xls):
 
         has_total_pay = any('total pay' in c for c in cols_clean)
         has_pan = any(c in ('pan number', 'assayer pan', 'payee pan') for c in cols_clean)
-        has_ifsc = any(c == 'ifsc code' or c == 'ifsc' for c in cols_clean)
+        has_ifsc = any(c in {'ifsc code', 'ifsc'} for c in cols_clean)
         has_bank = any('bank name' in c or 'bank' in c for c in cols_clean)
         has_visits = any('visits' in c or 'audits done' in c for c in cols_clean)
         has_base_fee = any('base audit fee' in c or 'base audit fees' in c for c in cols_clean)
@@ -557,10 +572,9 @@ def identify_sheets(xls):
         else:
             extras.append(s)
 
-    if pt_sheet == md_sheet:
-        if pt_sheet and md_sheet:
-            extras.append(md_sheet)
-            md_sheet = None
+    if pt_sheet == md_sheet and pt_sheet and md_sheet:
+        extras.append(md_sheet)
+        md_sheet = None
 
     if not pt_sheet and not md_sheet and len(sheets) == 1:
         pt_sheet = sheets[0]
@@ -639,7 +653,14 @@ def normalize_pt_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
             continue
 
         # Find columns (primary: gc = multi-strategy, secondary .1/.2: g = exact-only)
-        col_assayer = gc('assayer name', 'name of auditor/assayer', 'name of auditor', 'auditor name', 'name of assayer the money will be credited to', label='Assayer Name')
+        col_assayer = gc(
+            'assayer name',
+            'name of auditor/assayer',
+            'name of auditor',
+            'auditor name',
+            'name of assayer the money will be credited to',
+            label='Assayer Name',
+        )
         col_code = gc('assayer code', 'payee code', 'auditor code', 'auditor/assayer code', label='Assayer Code')
         col_phone = gc('assayer phone', 'assayerphone', 'payee phone', 'phone', intent='phone', label='Assayer Phone')
         col_location = gc('location', label='Location')
@@ -650,7 +671,14 @@ def normalize_pt_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
         col_visits = gc('no of visits', 'no. of visits', 'no of audits done', label='No. of Visits')
         col_base_fee = gc('base audit fee', 'base audit fees', 'base audit fee', label='Base Audit Fee')
         col_total_base = gc('total pay (base)', 'total base fee', 'total base', 'total pay (base)', label='Total pay (Base)')
-        col_travel = gc('travel charges(if any)', 'travel charges  (if any)', 'travel charges(if any)', 'base travel', 'travel fee', label=' Travel charges(If any)')
+        col_travel = gc(
+            'travel charges(if any)',
+            'travel charges  (if any)',
+            'travel charges(if any)',
+            'base travel',
+            'travel fee',
+            label=' Travel charges(If any)',
+        )
         col_cancel_visits = gc('cancelled visits', 'audit cancellation fees', 'cancelled branch ', 'cancelled ', label='Cancelled visits')
         col_branch_cancel = gc('branch cancellation charges', label='Branch Cancellation Charges')
         col_andaman = gc(' andaman & nicobar branch expenses', 'andaman & nicobar branch expenses', label=' Andaman & Nicobar Branch Expenses')
@@ -680,7 +708,7 @@ def normalize_pt_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
             else:
                 try:
                     month = pd.Timestamp(month).strftime("%b'%y")
-                except:
+                except Exception:
                     month = mstr
         else:
             month = ''
@@ -692,10 +720,14 @@ def normalize_pt_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
         col_v2 = g('no of visits.2')
         col_v2b = g('no of visits 2nd branch in day')
         col_vnp = g('no of visits(no payment) 2nd branch')
-        if col_v1: visits += safe_float(row.get(col_v1))
-        if col_v2: visits += safe_float(row.get(col_v2))
-        if col_v2b: visits += safe_float(row.get(col_v2b))
-        if col_vnp: visits += safe_float(row.get(col_vnp))
+        if col_v1:
+            visits += safe_float(row.get(col_v1))
+        if col_v2:
+            visits += safe_float(row.get(col_v2))
+        if col_v2b:
+            visits += safe_float(row.get(col_v2b))
+        if col_vnp:
+            visits += safe_float(row.get(col_vnp))
         visits = round(visits, 0)
 
         base_fee = safe_float(row.get(col_base_fee)) if col_base_fee else 0
@@ -705,8 +737,10 @@ def normalize_pt_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
             total_base = visits * base_fee if base_fee > 0 else 0
         col_tb1 = g('total pay (base).1')
         col_tb2 = g('total pay (base).2')
-        if col_tb1: total_base += safe_float(row.get(col_tb1))
-        if col_tb2: total_base += safe_float(row.get(col_tb2))
+        if col_tb1:
+            total_base += safe_float(row.get(col_tb1))
+        if col_tb2:
+            total_base += safe_float(row.get(col_tb2))
 
         travel = safe_float(row.get(col_travel)) if col_travel else 0
         col_accom = g('accommodation  charges (if any)', 'accommodation charges (if any)')
@@ -719,9 +753,8 @@ def normalize_pt_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
         cancelled_visits = safe_float(row.get(col_cancel_visits)) if col_cancel_visits else 0
         for col_name in cols_orig:
             cn = clean_col(col_name).lower()
-            if 'missed' in cn or 'cancell' in cn:
-                if col_name not in (col_cancel_visits, col_branch_cancel):
-                    cancelled_visits += safe_float(row.get(col_name))
+            if ('missed' in cn or 'cancell' in cn) and col_name not in (col_cancel_visits, col_branch_cancel):
+                cancelled_visits += safe_float(row.get(col_name))
 
         branch_cancel = safe_float(row.get(col_branch_cancel)) if col_branch_cancel else 0
         andaman = safe_float(row.get(col_andaman)) if col_andaman else 0
@@ -800,13 +833,6 @@ def normalize_md_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
         for n in names:
             if n in cols_lower:
                 return cols_lower[n]
-        return None
-
-    def v(*names):
-        for n in names:
-            c = g(n)
-            if c:
-                return c
         return None
 
     def sv(row, col_name, default=''):
@@ -924,10 +950,34 @@ def normalize_md_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
     c_phone = vc('assayerphone', 'assayer phone', 'payee phone', intent='phone', label='AssayerPhone')
     c_pan = vc('assayer pan', 'payee pan', intent='pan', label='Assayer PAN')
     c_contact = vc('contact person', 'conatct person', 'process manager', 'spoc 1', label='Contact Person')
-    c_schedule = vc('schedule date', 'scheduled date', 'schedule dates', 'scheduled dates', 'audit schedule date', 'audit conducted on', 'audit start date', label='Schedule date')
+    c_schedule = vc(
+        'schedule date',
+        'scheduled date',
+        'schedule dates',
+        'scheduled dates',
+        'audit schedule date',
+        'audit conducted on',
+        'audit start date',
+        label='Schedule date',
+    )
     c_status = vc('audit \nstatus', 'audit status', 'status of the activity', label='Audit \nStatus')
-    c_end = vc('audit \ncompletion date', 'audit completion date', 'audit completed date', 'end date', 'activity end date', 'audit end date', label='Audit \ncompletion date')
-    c_days = vc('no of days \naudited ', 'no of days \naudited', 'no of days audited', 'no of days  \naudited', 'no of days \n audited', label='No of days \naudited ')
+    c_end = vc(
+        'audit \ncompletion date',
+        'audit completion date',
+        'audit completed date',
+        'end date',
+        'activity end date',
+        'audit end date',
+        label='Audit \ncompletion date',
+    )
+    c_days = vc(
+        'no of days \naudited ',
+        'no of days \naudited',
+        'no of days audited',
+        'no of days  \naudited',
+        'no of days \n audited',
+        label='No of days \naudited ',
+    )
     c_days_client = vc('no of days \naudited for client', 'no of days \naudited for client', label='No of days \naudited For client')
     c_packets = vc('no of packets \naudited', 'no of packets \n audited', 'no of packets audited', 'account audited', label='No of Packets \naudited')
     c_addl_pkt = vc('additional packet', 'additonal packet', 'additional', label='Additional Packet')
@@ -936,7 +986,16 @@ def normalize_md_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
     c_end_time = vc('audit end time', 'audit end \n time', label='Audit End Time')
     c_client_fee = vc('client fee', 'client fees', 'client billing per audit in inr', label='Client fee')
     c_additional = vc('additional', 'additonal', 'additional amount', 'additional amount in inr', 'additonal travelling(approved amount)', label='Additional')
-    c_final_client = vc('final client fees', 'total client fee', 'total client fees', 'total payable\n amount', 'total fees in inr', 'client billing', 'final amount', label='Final Client Fees')
+    c_final_client = vc(
+        'final client fees',
+        'total client fee',
+        'total client fees',
+        'total payable\n amount',
+        'total fees in inr',
+        'client billing',
+        'final amount',
+        label='Final Client Fees',
+    )
     c_assayer_fee = vc('assayer fee', 'assayer fees', 'auditor payment ', 'sumeru auditor fee', 'base audit fees in inr', 'audit fee', label='Assayer fee')
     c_addl_fee = vc('additional fee', 'additional fees', 'additional amount in inr', label='Additional fee')
     c_distance = vc('distance ', 'distance', 'distance to audit location from auditor place', label='Distance')
@@ -952,7 +1011,11 @@ def normalize_md_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
     c_ac_closed = vc('a/c closed', 'loan closing charge', label='A/C Closed')
     c_ac_auctioned = vc('a/c auctioned', label='A/C Auctioned')
     c_pkt_missing = vc('packet missing', label='Packet Missing')
-    c_actual_audited = vc('actual audited (except already audited & a/c closed) ', 'actual audited', label='Actual Audited (except already audited & A/C closed) ')
+    c_actual_audited = vc(
+        'actual audited (except already audited & a/c closed) ',
+        'actual audited',
+        label='Actual Audited (except already audited & A/C closed) ',
+    )
     c_extra = vc('extra audited pouches', 'extra audited', label='Extra audited pouches')
     c_total_packets = vc('total no.of packets actually audited', 'total no.of packets', label='Total No.of packets actually audited')
 
@@ -991,18 +1054,12 @@ def normalize_md_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
         state = sv(row, c_state)
 
         schedule = row.get(c_schedule) if c_schedule else pd.NaT
-        if pd.notna(schedule):
-            schedule = str(schedule)
-        else:
-            schedule = ''
+        schedule = str(schedule) if pd.notna(schedule) else ''
 
         status_val = sv(row, c_status)
 
         end_date = row.get(c_end) if c_end else pd.NaT
-        if pd.notna(end_date):
-            end_date = str(end_date)
-        else:
-            end_date = ''
+        end_date = str(end_date) if pd.notna(end_date) else ''
 
         days = fv(row, c_days)
         days_client = fv(row, c_days_client)
@@ -1020,32 +1077,20 @@ def normalize_md_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
         # Compute fee.1 = assayer_fee * visit_count or use source if available
         visit_count = fv(row, c_visit_count)
 
-        if c_fee1:
-            fee1 = fv(row, c_fee1)
-        else:
-            fee1 = assayer_fee * visit_count if visit_count > 0 else assayer_fee
+        fee1 = fv(row, c_fee1) if c_fee1 else assayer_fee * visit_count if visit_count > 0 else assayer_fee
 
-        if c_addl_fee1:
-            addl_fee1 = fv(row, c_addl_fee1)
-        else:
-            addl_fee1 = addl_fee * visit_count if visit_count > 0 else addl_fee
+        addl_fee1 = fv(row, c_addl_fee1) if c_addl_fee1 else addl_fee * visit_count if visit_count > 0 else addl_fee
 
         if c_cancelled:
             cancelled = fv(row, c_cancelled)
         elif infer_cancel:
             st = status_val.lower()
-            if 'cancel' in st:
-                cancelled = assayer_fee if assayer_fee > 0 else (visit_count * fv(row, c_client_fee) if c_client_fee else 0)
-            else:
-                cancelled = 0
+            cancelled = (assayer_fee if assayer_fee > 0 else visit_count * fv(row, c_client_fee) if c_client_fee else 0) if 'cancel' in st else 0
         else:
             cancelled = 0
 
         # Client-level cancellation (separate column if available)
-        if c_cancelled_client and c_cancelled_client != c_cancelled:
-            cancelled_client = fv(row, c_cancelled_client)
-        else:
-            cancelled_client = cancelled
+        cancelled_client = fv(row, c_cancelled_client) if c_cancelled_client and c_cancelled_client != c_cancelled else cancelled
 
         total_row = fv(row, c_total)
         error_ded = fv(row, c_error)
@@ -1074,14 +1119,12 @@ def normalize_md_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
                 else:
                     try:
                         month = pd.Timestamp(mval).strftime("%b'%y")
-                    except:
+                    except Exception:
                         month = mstr[:10]
             else:
                 month = "Mar'26"
         else:
             month = "Mar'26"
-
-        sr_num = fv(row, c_sr) if c_sr else 0
 
         r = {
             'Sr No': len(rows) + 1,
@@ -1260,7 +1303,7 @@ def preparse_single_file(fname, source=None):
 def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None):
     """
     Process multiple Excel workbooks purely in-memory.
-    
+
     Parameters
     ----------
     files_dict : dict
@@ -1269,7 +1312,7 @@ def consolidate_in_memory(files_dict, save_mapping=False, progress_callback=None
         Whether to persist column mapping JSON updates.
     progress_callback : callable, optional
         Function callback(pct: float, message: str) for real-time percentage tracking.
-        
+
     Returns
     -------
     tuple: (excel_bytes: bytes, summary: dict)
@@ -1453,7 +1496,7 @@ def main(dry_run=False, exclude_tests=False):
     all_md_rows = []
     flags = []
 
-    files = sorted([f for f in os.listdir(SOURCE_DIR) if f.endswith(('.xlsx', '.XLSX', '.xls')) 
+    files = sorted([f for f in os.listdir(SOURCE_DIR) if f.endswith(('.xlsx', '.XLSX', '.xls'))
                     and not f.startswith('.')
                     and f not in ("Feb'26 consolidated.xlsx", "Mar'26 consolidated.xlsx", "consolidate.py")])
 
@@ -1485,7 +1528,7 @@ def main(dry_run=False, exclude_tests=False):
                 all_pt_rows.extend(pt_rows)
                 print(f"          PT: {pt_sheet} ({len(pt_rows)} rows)")
             else:
-                print(f"          PT: NOT FOUND ❌")
+                print("          PT: NOT FOUND ❌")
                 flags.append(f"{fname}: No PT sheet identified")
 
             if md_sheet:
@@ -1494,7 +1537,7 @@ def main(dry_run=False, exclude_tests=False):
                 all_md_rows.extend(md_rows)
                 print(f"          MD: {md_sheet} ({len(md_rows)} rows)")
             else:
-                print(f"          MD: NOT FOUND ❌")
+                print("          MD: NOT FOUND ❌")
                 flags.append(f"{fname}: No MD sheet identified")
 
             if extras:
@@ -1607,7 +1650,7 @@ def main(dry_run=False, exclude_tests=False):
         print(f"{'='*60}")
     else:
         print(f"\n{'='*60}")
-        print(f"DRY RUN COMPLETE — NO FILE SAVED")
+        print("DRY RUN COMPLETE — NO FILE SAVED")
         print(f"{'='*60}")
 
     print(f"Payment Tracker: {len(pt_df)} rows, {pt_df['client'].nunique()} clients")

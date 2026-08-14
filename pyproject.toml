@@ -63,7 +63,10 @@ exclude = ["bottle.py", "src/audit_engine/ui/static/app.js"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "SIM", "PL"]
-ignore = ["PLR0913", "PLR0915", "PLR0912", "PLR0911", "PLC0415", "PLR2004", "PLW0129"]
+# PLR0917 (too many positional args) is the positional counterpart of PLR0913,
+# which is already ignored — the service/worker entry points intentionally take
+# wide argument lists driven by the UI form.
+ignore = ["PLR0913", "PLR0917", "PLR0915", "PLR0912", "PLR0911", "PLC0415", "PLR2004", "PLW0129"]
 
 [tool.ruff.format]
 quote-style = "double"

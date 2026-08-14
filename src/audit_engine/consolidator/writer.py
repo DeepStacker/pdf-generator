@@ -1,13 +1,13 @@
 from __future__ import annotations
+
 from copy import copy
 from pathlib import Path
 from typing import Any
 
 import openpyxl
-from openpyxl.styles import Border, Side, Font
+from openpyxl.styles import Border, Font, Side
 
-from .config import PT_COLUMNS, MD_COLUMNS
-
+from .config import MD_COLUMNS, PT_COLUMNS
 
 _THIN_BORDER = Border(
     left=Side(style="thin"),
@@ -93,10 +93,14 @@ class ConsolidatedWriter:
             cell = ws.cell(1, c)
             cell.value = col_name
             fmt = header_formats.get(c, {})
-            if fmt.get("font"): cell.font = fmt["font"]
-            if fmt.get("alignment"): cell.alignment = fmt["alignment"]
-            if fmt.get("border"): cell.border = fmt["border"]
-            if fmt.get("fill"): cell.fill = fmt["fill"]
+            if fmt.get("font"):
+                cell.font = fmt["font"]
+            if fmt.get("alignment"):
+                cell.alignment = fmt["alignment"]
+            if fmt.get("border"):
+                cell.border = fmt["border"]
+            if fmt.get("fill"):
+                cell.fill = fmt["fill"]
 
         # Write data rows with thin borders
         for r_idx, row_dict in enumerate(data_rows, 2):

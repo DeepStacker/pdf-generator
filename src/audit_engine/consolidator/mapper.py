@@ -1,19 +1,33 @@
 from __future__ import annotations
+
 import re
 from typing import Any
 
+from .audit import AuditLog
 from .config import (
-    SourceConfig,
-    PT_COLUMNS,
-    MD_COLUMNS,
+    AUTO_COLUMNS,
     DEFAULT_VALUES,
     HEADER_PATTERNS,
-    AUTO_COLUMNS,
+    MD_COLUMNS,
+    PT_COLUMNS,
     ProcessingContext,
+    SourceConfig,
 )
 from .extractor import ExtractedSheet
-from .audit import AuditLog
 from .geography import location_to_state_and_zone, state_to_zone
+
+# Columns treated as financial/numeric when mapping a Master Data sheet.
+FINANCIAL_COLS = {
+    "Base Audit Fee", "Total pay (Base)", " Travel charges(If any)",
+    "Cancelled visits", "Branch Cancellation Charges",
+    " Andaman & Nicobar Branch Expenses", "Error Deduction", "Total pay",
+    "Client fee", "Additional", "Final Client Fees",
+    "Assayer fee", "Additional fee", "Cancelled", "Error Deduciton", "Total",
+    "Total pouches suggested for audit", "Already Audited", "A/C Closed",
+    "A/C Auctioned", "Packet Missing",
+    "Actual Audited (except already audited & A/C closed) ",
+    "Extra audited pouches", "Total No.of packets actually audited"
+}
 
 
 class MappingError(Exception):
@@ -207,17 +221,6 @@ class DataMapper:
             canonical_rows.append(canonical)
 
         # Accumulate financial sums
-        FINANCIAL_COLS = {
-            "Base Audit Fee", "Total pay (Base)", " Travel charges(If any)",
-            "Cancelled visits", "Branch Cancellation Charges",
-            " Andaman & Nicobar Branch Expenses", "Error Deduction", "Total pay",
-            "Client fee", "Additional", "Final Client Fees",
-            "Assayer fee", "Additional fee", "Cancelled", "Error Deduciton", "Total",
-            "Total pouches suggested for audit", "Already Audited", "A/C Closed",
-            "A/C Auctioned", "Packet Missing",
-            "Actual Audited (except already audited & A/C closed) ",
-            "Extra audited pouches", "Total No.of packets actually audited"
-        }
         financials = {}
         for schema_idx, schema_col in enumerate(canonical_schema):
             if schema_col in FINANCIAL_COLS:
@@ -272,7 +275,8 @@ class DataMapper:
         rows: list[dict[int, Any]],
         date_format: str = "%d-%m-%Y",
     ) -> list[dict[int, Any]]:
-        from datetime import datetime, date as date_type
+        from datetime import date as date_type
+        from datetime import datetime
         for row in rows:
             for k, v in row.items():
                 if isinstance(v, (datetime, date_type)):
@@ -298,14 +302,8 @@ class DataMapper:
         derived_count = 0
         for row in rows:
             loc = row.get(loc_idx)
-            if state_idx is not None:
-                state = row.get(state_idx)
-            else:
-                state = None
-            if zone_idx is not None:
-                zone = row.get(zone_idx)
-            else:
-                zone = None
+            state = row.get(state_idx) if state_idx is not None else None
+            zone = row.get(zone_idx) if zone_idx is not None else None
 
             if (state_idx is not None) and (not state) and loc:
                 derived_state, derived_zone = location_to_state_and_zone(loc)

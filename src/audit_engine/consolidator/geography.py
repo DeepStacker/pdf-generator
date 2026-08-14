@@ -104,7 +104,6 @@ CITY_TO_STATE: dict[str, str] = {
     "east delhi": "Delhi",
     "west delhi": "Delhi",
     "central delhi": "Delhi",
-    "new delhi": "Delhi",
     # Gujarat
     "ahmedabad": "Gujarat",
     "surat": "Gujarat",
@@ -263,7 +262,6 @@ CITY_TO_STATE: dict[str, str] = {
     "siliguri": "West Bengal",
     "malda": "West Bengal",
     "english bazar": "West Bengal",
-    "malda": "West Bengal",
     "englishbazar": "West Bengal",
     "bardhaman": "West Bengal",
     "kharagpur": "West Bengal",
@@ -358,8 +356,8 @@ def city_to_state(city: str | None) -> str | None:
     # Handles: "City1/City2", "City1+City2", "City1-City2"
     import re as _re
     segments = _re.split(r"[/+,&\-]", key)
-    for seg in segments:
-        seg = seg.strip()
+    for raw_seg in segments:
+        seg = raw_seg.strip()
         if not seg:
             continue
         # Try full segment

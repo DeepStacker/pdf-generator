@@ -1,14 +1,11 @@
 """Unit tests for the Excel Consolidation handlers and tracking."""
 
-import os
-import tempfile
-import pytest
 from pathlib import Path
-from audit_engine.web.handlers import (
-    handle_consolidate_run,
-    handle_consolidate_progress,
-    consolidation_tracker
-)
+
+import pytest
+
+from audit_engine.web.handlers import consolidation_tracker, handle_consolidate_progress, handle_consolidate_run
+
 
 class TestConsolidationHandlers:
     @pytest.fixture(autouse=True)

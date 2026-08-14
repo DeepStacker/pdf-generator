@@ -14,11 +14,11 @@ import pytest
 def _mock_dialogs(monkeypatch):
     import audit_engine.utils.dialogs
     import audit_engine.web.handlers
-    
+
     monkeypatch.setattr(audit_engine.utils.dialogs, "ask_file_dialog", lambda: "")
     monkeypatch.setattr(audit_engine.utils.dialogs, "ask_files_dialog", lambda: [])
     monkeypatch.setattr(audit_engine.utils.dialogs, "ask_directory_dialog", lambda: "")
-    
+
     monkeypatch.setattr(audit_engine.web.handlers, "ask_file_dialog", lambda: "")
     monkeypatch.setattr(audit_engine.web.handlers, "ask_files_dialog", lambda: [])
     monkeypatch.setattr(audit_engine.web.handlers, "ask_directory_dialog", lambda: "")

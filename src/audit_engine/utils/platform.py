@@ -45,18 +45,18 @@ def open_path(path: str) -> None:
     - Windows: os.startfile() (no elevation needed)
     - macOS: /usr/bin/open (standard user tool)
     - Linux: xdg-open (desktop standard)
-    
+
     Raises RuntimeError if the file cannot be opened.
     """
     try:
         if sys.platform == "win32":
             os.startfile(path)
         elif sys.platform == "darwin":
-            res = subprocess.run(["open", path], capture_output=True, text=True)
+            res = subprocess.run(["open", path], capture_output=True, text=True, check=False)
             if res.returncode != 0:
                 raise RuntimeError(res.stderr.strip() or f"open command failed with code {res.returncode}")
         else:
-            res = subprocess.run(["xdg-open", path], capture_output=True, text=True)
+            res = subprocess.run(["xdg-open", path], capture_output=True, text=True, check=False)
             if res.returncode != 0:
                 raise RuntimeError(res.stderr.strip() or f"xdg-open failed with code {res.returncode}")
     except OSError as e:

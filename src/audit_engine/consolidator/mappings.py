@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from .config import SourceConfig
 
 # ===========================================================================
@@ -117,61 +119,61 @@ def _resolve_settings_path() -> Path:
     """Find settings file, preferring writable user copy for frozen apps."""
     import shutil
     from pathlib import Path
-    
+
     user_copy = Path.home() / ".audit_engine_elite" / "settings" / "mapping_rules.xlsx"
     if user_copy.exists():
         return user_copy
-    
+
     bundled = _get_project_root() / "settings" / "mapping_rules.xlsx"
     if bundled.exists():
         user_copy.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(bundled), str(user_copy))
         return user_copy
-    
+
     return bundled
 
 
 def load_external_source_configs(default_configs: list[SourceConfig]) -> list[SourceConfig]:
-    import openpyxl
     import sys
-    from pathlib import Path
-    
+
+    import openpyxl
+
     rules_path = _resolve_settings_path()
     if not rules_path.exists():
         return default_configs
-        
+
     try:
         wb = openpyxl.load_workbook(rules_path, data_only=True)
         if "Registered_Banks" not in wb.sheetnames or "Column_Mappings" not in wb.sheetnames:
             wb.close()
             return default_configs
-            
+
         ws_reg = wb["Registered_Banks"]
         configs: list[SourceConfig] = []
         config_map: dict[str, SourceConfig] = {}
-        
+
         for r in range(2, ws_reg.max_row + 1):
             client_name = ws_reg.cell(r, 1).value
             pattern = ws_reg.cell(r, 2).value
             if not client_name or not pattern:
                 continue
-                
+
             client_name = str(client_name).strip()
             pattern = str(pattern).strip()
-            
+
             pt_hint = ws_reg.cell(r, 3).value or "Payment Tracker"
             md_hint = ws_reg.cell(r, 4).value or "Master Data"
             hdr_row = ws_reg.cell(r, 5).value or 1
             start_row = ws_reg.cell(r, 6).value or 2
-            
+
             pt_min = ws_reg.cell(r, 7).value
             pt_max = ws_reg.cell(r, 8).value
             md_min = ws_reg.cell(r, 9).value
             md_max = ws_reg.cell(r, 10).value
-            
+
             pt_rows = (int(pt_min), int(pt_max)) if pt_min is not None and pt_max is not None else None
             md_rows = (int(md_min), int(md_max)) if md_min is not None and md_max is not None else None
-            
+
             cfg = SourceConfig(
                 file_pattern=pattern,
                 client_name=client_name,
@@ -184,7 +186,7 @@ def load_external_source_configs(default_configs: list[SourceConfig]) -> list[So
             )
             configs.append(cfg)
             config_map[client_name] = cfg
-            
+
         # Preserve code default overrides before applying external ones
         default_overrides: dict[str, dict[str, str]] = {}
         for default in default_configs:
@@ -194,18 +196,18 @@ def load_external_source_configs(default_configs: list[SourceConfig]) -> list[So
 
         ws_map = wb["Column_Mappings"]
         headers = [str(ws_map.cell(1, col).value).strip() for col in range(1, ws_map.max_column + 1)]
-        
+
         client_cols = {}
         for idx, h in enumerate(headers, 1):
             if h in config_map:
                 client_cols[h] = idx
-                
+
         for r in range(2, ws_map.max_row + 1):
             canonical = ws_map.cell(r, 1).value
             if not canonical:
                 continue
             canonical = str(canonical).strip()
-            
+
             for client_name, col_idx in client_cols.items():
                 cell_val = ws_map.cell(r, col_idx).value
                 if cell_val is not None:
@@ -216,7 +218,7 @@ def load_external_source_configs(default_configs: list[SourceConfig]) -> list[So
                         if cell_val.lower() == canonical.lower():
                             continue
                         config_map[client_name].column_overrides[canonical] = cell_val
-                        
+
         # Merge code default overrides (external non-None overrides win)
         for cfg in configs:
             name_strip = cfg.client_name.strip()
@@ -224,14 +226,14 @@ def load_external_source_configs(default_configs: list[SourceConfig]) -> list[So
                 for k, v in default_overrides[name_strip].items():
                     if k not in cfg.column_overrides:
                         cfg.column_overrides[k] = v
-                        
+
         for default in default_configs:
             name_strip = default.client_name.strip()
             for cfg in configs:
                 if cfg.client_name.strip() == name_strip:
                     cfg.needs_manual_enrichment = default.needs_manual_enrichment
                     cfg.exclude_md_names = default.exclude_md_names
-                    
+
         wb.close()
         return configs if configs else default_configs
     except Exception as e:

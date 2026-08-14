@@ -1,8 +1,8 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Source config: no per-source column rules, just identity
@@ -100,14 +100,10 @@ DEFAULT_VALUES: dict[str, Any] = {
     "Sr No": None,         # auto-increment
     "Client": "",          # enriched from filename
     "Month": "",           # from context
-    "Zone": "",
     "SOL ID": "",
     "BRANCH": "",
     "Location ": "",
-    "State": "",
     "Total No.of A/cs": 1,
-    "Assayer Name": "",
-    "Assayer Code": "",
     "AssayerPhone": "",
     "Assayer PAN": "",
     "Contact Person": "",
@@ -428,38 +424,38 @@ def _resolve_settings_path() -> Path:
     """Find the settings file, preferring a writable user copy."""
     import shutil
     from pathlib import Path
-    
+
     user_copy = Path.home() / ".audit_engine_elite" / "settings" / "mapping_rules.xlsx"
     if user_copy.exists():
         return user_copy
-    
+
     bundled = _get_project_root() / "settings" / "mapping_rules.xlsx"
     if bundled.exists():
         user_copy.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(bundled), str(user_copy))
         return user_copy
-    
+
     return bundled
 
 
 def load_external_header_patterns(default_patterns: dict[str, list[str]]) -> dict[str, list[str]]:
-    import openpyxl
     import sys
-    from pathlib import Path
-    
+
+    import openpyxl
+
     rules_path = _resolve_settings_path()
     if not rules_path.exists():
         return default_patterns
-        
+
     try:
         wb = openpyxl.load_workbook(rules_path, data_only=True)
         if "Column_Mappings" not in wb.sheetnames:
             wb.close()
             return default_patterns
-            
+
         ws = wb["Column_Mappings"]
         patterns: dict[str, list[str]] = {}
-        
+
         # Find backup aliases column by header name (not assuming last column)
         backup_col_idx = None
         for c in range(2, ws.max_column + 1):
@@ -467,7 +463,7 @@ def load_external_header_patterns(default_patterns: dict[str, list[str]]) -> dic
             if h and "backup aliases" in str(h).strip().lower():
                 backup_col_idx = c
                 break
-        
+
         for r in range(2, ws.max_row + 1):
             canonical = ws.cell(r, 1).value
             aliases_str = ws.cell(r, backup_col_idx).value if backup_col_idx else None
@@ -482,13 +478,13 @@ def load_external_header_patterns(default_patterns: dict[str, list[str]]) -> dic
                         for p in parts:
                             if p not in patterns[canonical]:
                                 patterns[canonical].append(p)
-                            
+
         wb.close()
-        
+
         for k, v in default_patterns.items():
             if k not in patterns or not patterns[k]:
                 patterns[k] = v
-                
+
         return patterns
     except Exception as e:
         print(f"Warning: Failed to load external header patterns: {e}. Using fallback default rules.", file=sys.stderr)
