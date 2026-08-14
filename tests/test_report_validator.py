@@ -1,4 +1,4 @@
-"""Tests for the Report Validator (audit_engine_web/report_validator.py).
+"""Tests for the Report Validator (audit_engine.services.report_validator).
 
 Covers:
 - Validation runs without a PDF (PDF upload is optional).
@@ -17,7 +17,7 @@ import openpyxl
 import pytest
 from openpyxl.styles import Font
 
-from audit_engine_web import report_validator as rv
+from audit_engine.services import report_validator as rv
 
 SHEET = "Purity Verification Format"
 

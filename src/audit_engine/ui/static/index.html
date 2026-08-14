@@ -544,6 +544,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     Process
                 </button>
+                <button onclick="switchTab('VALIDATOR')" id="tabBtn-VALIDATOR" class="nav-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    Validator
+                </button>
                 <button onclick="switchTab('STATS')" id="tabBtn-STATS" class="nav-btn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
                     Analytics
@@ -1326,6 +1330,132 @@
                                     </thead>
                                     <tbody id="newConsolSummaryTableBody" class="divide-y divide-slate-800/60"></tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============ REPORT VALIDATOR ============ -->
+                <section id="tab-VALIDATOR" class="space-y-6 hidden tab-content">
+                    <div class="border-b border-brand-borderLine pb-4 flex items-center justify-between">
+                        <div>
+                            <h2 class="text-3xl font-bold tracking-tight text-white font-sans">Report Validator</h2>
+                            <p class="text-xs text-slate-500 mt-1">Validates a Purity Verification Format report and writes a corrected copy beside the source file.</p>
+                        </div>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">OFFLINE / NO NETWORK</span>
+                    </div>
+
+                    <!-- Step 1: inputs -->
+                    <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Step 1: Select Report</span>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">Report Workbook <span class="text-rose-400">*</span></label>
+                            <div class="flex gap-2">
+                                <input type="text" id="validatorFilePath" readonly placeholder="No file selected"
+                                       class="flex-1 bg-brand-termBg border border-brand-borderLine rounded-lg px-3 py-2 text-xs text-slate-200 font-mono truncate">
+                                <button onclick="browseValidatorFile()" id="validatorBtnBrowse"
+                                        class="bg-slate-800 text-slate-300 text-xs font-semibold px-4 py-2 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Browse</button>
+                            </div>
+                            <span class="text-2xs text-slate-500 mt-1 block">.xlsx only — must contain the "Purity Verification Format" sheet.</span>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">Sequence PDF <span class="text-slate-500 font-normal">(optional)</span></label>
+                            <div class="flex gap-2">
+                                <input type="text" id="validatorPdfPath" readonly placeholder="None — row order will be left unchanged"
+                                       class="flex-1 bg-brand-termBg border border-brand-borderLine rounded-lg px-3 py-2 text-xs text-slate-200 font-mono truncate">
+                                <button onclick="browseValidatorPdf()" id="validatorBtnBrowsePdf"
+                                        class="bg-slate-800 text-slate-300 text-xs font-semibold px-4 py-2 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Browse</button>
+                                <button onclick="clearValidatorPdf()" id="validatorBtnClearPdf"
+                                        class="bg-slate-900 text-slate-400 text-xs font-semibold px-3 py-2 rounded-lg border border-brand-borderLine hover:text-white transition">Clear</button>
+                            </div>
+                            <span class="text-2xs text-slate-500 mt-1 block">If supplied, rows are reordered to match the account sequence found in the PDF.</span>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: run -->
+                    <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Step 2: Run Validation</span>
+                            <button onclick="resetValidator()" class="text-2xs text-slate-500 hover:text-white transition">Reset</button>
+                        </div>
+
+                        <button onclick="runValidator()" id="validatorBtnRun"
+                                class="w-full bg-blue-600 text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-blue-500 transition disabled:opacity-40 disabled:pointer-events-none dynamic-accent-bg dynamic-accent-hover-bg">
+                            Validate Report
+                        </button>
+
+                        <div id="validatorProgressContainer" class="hidden bg-slate-950/30 border border-brand-borderLine rounded-lg p-3">
+                            <div class="flex items-center gap-3">
+                                <div class="relative w-12 h-12 flex-shrink-0">
+                                    <svg class="w-full h-full -rotate-90">
+                                        <circle cx="24" cy="24" r="20" stroke-width="4" stroke="#1E293B" fill="transparent"/>
+                                        <circle id="validatorProgressRing" cx="24" cy="24" r="20" stroke-width="4" stroke="#2563EB" fill="transparent" stroke-dasharray="125.6" stroke-dashoffset="125.6" stroke-linecap="round" class="transition-all duration-300 dynamic-accent-stroke"/>
+                                    </svg>
+                                    <span id="validatorProgressPct" class="absolute inset-0 flex items-center justify-center text-2xs font-bold text-white">0%</span>
+                                </div>
+                                <div class="space-y-0.5">
+                                    <span id="validatorProgressText" class="block text-2xs font-bold text-slate-200">Initializing...</span>
+                                    <span id="validatorProgressFile" class="block text-2xs text-slate-500">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
+                            </div>
+                            <div id="validatorConsole" class="bg-brand-termBg border border-brand-borderLine rounded-lg h-20 font-mono text-2xs p-2 overflow-y-auto space-y-0.5">
+                                <div class="text-slate-500">[00:00:00] Ready. Select a report to validate.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: results -->
+                    <div id="validatorResults" class="hidden bg-brand-panelBg border border-brand-borderLine rounded-xl overflow-hidden shadow-md">
+                        <div class="p-6 space-y-4">
+                            <div class="flex items-center justify-between flex-wrap gap-3">
+                                <div>
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Result</span>
+                                    <span id="validatorResultFile" class="text-sm font-bold text-white block mt-0.5 truncate max-w-[420px]">--</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="openValidatorOutput()" id="validatorBtnOpen"
+                                            class="bg-blue-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-blue-500 transition dynamic-accent-bg dynamic-accent-hover-bg">Open Validated File</button>
+                                </div>
+                            </div>
+
+                            <div class="flex gap-2 flex-wrap">
+                                <div class="flex-1 min-w-[130px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Total Issues</span>
+                                    <span id="validatorStat-issues" class="text-sm font-bold mt-0.5 block text-blue-500 dynamic-accent-fg">0</span>
+                                </div>
+                                <div class="flex-1 min-w-[130px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Rows Scanned</span>
+                                    <span id="validatorStat-rows" class="text-sm font-bold mt-0.5 block text-slate-200">0</span>
+                                </div>
+                                <div class="flex-1 min-w-[130px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">PDF Reorder</span>
+                                    <span id="validatorStat-pdf" class="text-xs font-bold mt-0.5 block text-slate-400">Not applied</span>
+                                </div>
+                            </div>
+
+                            <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl overflow-hidden">
+                                <div class="overflow-x-auto max-h-80 overflow-y-auto">
+                                    <table class="w-full text-left border-collapse text-sm sticky-header">
+                                        <thead>
+                                            <tr class="bg-slate-950/60 text-2xs uppercase tracking-wider text-slate-500">
+                                                <th class="py-2.5 px-4 font-bold">Finding</th>
+                                                <th class="py-2.5 px-4 font-bold text-center w-20">Count</th>
+                                                <th class="py-2.5 px-4 font-bold">Examples</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="validatorSummaryBody" class="divide-y divide-slate-800/60"></tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     </div>

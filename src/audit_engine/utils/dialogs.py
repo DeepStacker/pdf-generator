@@ -60,6 +60,43 @@ def ask_file_dialog() -> str:
         return ""
 
 
+def ask_pdf_file_dialog() -> str:
+    """Native picker for a single PDF (the optional Report Validator sequence file)."""
+    try:
+        import webview
+        active_win = webview.active_window()
+        if not active_win and hasattr(webview, "windows") and webview.windows:
+            active_win = webview.windows[0]
+        if active_win:
+            file_types = (
+                'PDF Files (*.pdf;*.PDF)',
+                'All files (*.*)'
+            )
+            open_type = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else getattr(webview, "OPEN_DIALOG", 10)
+            result = active_win.create_file_dialog(
+                dialog_type=open_type,
+                file_types=file_types
+            )
+            if result:
+                return str(result[0]) if isinstance(result, (list, tuple)) else str(result)
+            return ""
+    except Exception as e:
+        file_logger.info(f"PyWebView native PDF dialog not active or not available: {e}")
+
+    try:
+        script = (
+            "import tkinter as tk; from tkinter import filedialog; "
+            "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
+            "path = filedialog.askopenfilename(title='Select Sequence PDF', "
+            "filetypes=[('PDF Files', '*.pdf *.PDF'), ('All Files', '*')]); "
+            "print(path)"
+        )
+        return _run_tkinter_subprocess(script)
+    except Exception as te:
+        file_logger.warning(f"Subprocess Tkinter PDF dialog fallback failed: {te}")
+        return ""
+
+
 def ask_files_dialog() -> list[str]:
     try:
         import webview

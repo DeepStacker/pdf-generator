@@ -131,7 +131,7 @@
         // INITIALIZATION
         function handleHashRouting() {
             let hash = window.location.hash.replace('#', '').toUpperCase();
-            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS', 'CONSOLIDATE'];
+            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS', 'CONSOLIDATE', 'VALIDATOR'];
             if (!validTabs.includes(hash)) hash = 'PROCESS';
             
             if (state.activeTab !== hash) {
@@ -172,7 +172,7 @@
             if (bankName === 'CONSOLIDATION') {
                 // Show consolidation section, hide bank sections
                 document.getElementById('tab-CONSOLIDATE').classList.remove('hidden');
-                ['tab-PROCESS-IDFC','tab-PROCESS-EQUITAS','tab-PROCESS-ARVOG'].forEach(id => {
+                ['tab-PROCESS-IDFC','tab-PROCESS-EQUITAS','tab-PROCESS-ARVOG','tab-VALIDATOR'].forEach(id => {
                     const s = document.getElementById(id);
                     if (s) s.classList.add('hidden');
                 });
@@ -332,6 +332,7 @@
             document.getElementById('tab-HISTORY').classList.add('hidden');
             document.getElementById('tab-SETTINGS').classList.add('hidden');
             document.getElementById('tab-CONSOLIDATE').classList.add('hidden');
+            document.getElementById('tab-VALIDATOR').classList.add('hidden');
 
             // Show active section
             if (tabId === 'PROCESS') {
@@ -2491,4 +2492,226 @@
             if (bytes === 0) return '0 B';
             const k = 1024, i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // REPORT VALIDATOR
+        //
+        // Fully offline / zero-socket: the file never leaves the machine and
+        // is never uploaded. We pass an absolute *path* to Python over the
+        // in-process bridge, it validates in place, writes the corrected copy
+        // beside the source, and we reveal it in the OS file manager.
+        // ═══════════════════════════════════════════════════════════════
+        let validatorPollInterval = null;
+        let validatorOutputPath = '';
+        // How many backend log lines we have already mirrored into the console.
+        let validatorLoggedCount = 0;
+
+        function validatorLog(level, message, timestamp) {
+            const box = document.getElementById('validatorConsole');
+            if (!box) return;
+            const time = timestamp || new Date().toTimeString().split(' ')[0];
+            let color = 'text-sky-400';
+            if (level === 'OK') color = 'text-emerald-400';
+            if (level === 'WARN') color = 'text-amber-500 font-semibold';
+            if (level === 'ERROR') color = 'text-rose-500 font-bold';
+            if (level === 'DEBUG') color = 'text-slate-500';
+            const row = `<div class="font-mono text-[11px]"><span class="text-slate-600">[${time}]</span> <span class="${color}">[${escapeHtml(level)}]</span> <span class="text-slate-200">${escapeHtml(message)}</span></div>`;
+            box.insertAdjacentHTML('beforeend', row);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        async function browseValidatorFile() {
+            try {
+                const resp = await fetch('/api/report/browse');
+                const data = await resp.json();
+                if (data.path) {
+                    document.getElementById('validatorFilePath').value = data.path;
+                    validatorLog('INFO', `Selected ${data.path.split(/[\\/]/).pop()}`);
+                }
+            } catch (e) {
+                console.error('browseValidatorFile failed', e);
+                showToast('Could not open the file dialog', 'error');
+            }
+        }
+
+        async function browseValidatorPdf() {
+            try {
+                const resp = await fetch('/api/report/browse/pdf');
+                const data = await resp.json();
+                if (data.path) {
+                    document.getElementById('validatorPdfPath').value = data.path;
+                    validatorLog('INFO', `Sequence PDF: ${data.path.split(/[\\/]/).pop()}`);
+                }
+            } catch (e) {
+                console.error('browseValidatorPdf failed', e);
+                showToast('Could not open the file dialog', 'error');
+            }
+        }
+
+        function clearValidatorPdf() {
+            document.getElementById('validatorPdfPath').value = '';
+            validatorLog('INFO', 'Sequence PDF cleared - row order will be left unchanged');
+        }
+
+        async function runValidator() {
+            const filepath = document.getElementById('validatorFilePath').value.trim();
+            const pdfPath = document.getElementById('validatorPdfPath').value.trim();
+
+            if (!filepath) {
+                showToast('Select a report workbook first', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('validatorBtnRun');
+            btn.disabled = true;
+            btn.textContent = 'Validating...';
+            document.getElementById('validatorResults').classList.add('hidden');
+            document.getElementById('validatorProgressContainer').classList.remove('hidden');
+            document.getElementById('validatorProgressFile').textContent = filepath.split(/[\\/]/).pop();
+            validatorOutputPath = '';
+            validatorLoggedCount = 0;
+            document.getElementById('validatorConsole').innerHTML = '';
+
+            try {
+                const resp = await fetch('/api/report/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filepath: filepath, pdf_path: pdfPath })
+                });
+                const data = await resp.json();
+                if (!data.success) {
+                    validatorLog('ERROR', data.error || 'Could not start validation');
+                    showToast(data.error || 'Could not start validation', 'error');
+                    finishValidatorRun();
+                    return;
+                }
+                if (validatorPollInterval) clearInterval(validatorPollInterval);
+                validatorPollInterval = setInterval(pollValidatorProgress, 700);
+            } catch (e) {
+                console.error('runValidator failed', e);
+                validatorLog('ERROR', String(e));
+                showToast('Validation failed to start', 'error');
+                finishValidatorRun();
+            }
+        }
+
+        async function pollValidatorProgress() {
+            try {
+                const resp = await fetch('/api/report/progress');
+                const data = await resp.json();
+
+                const pct = data.pct || 0;
+                const circ = 125.6;
+                const ring = document.getElementById('validatorProgressRing');
+                if (ring) ring.style.strokeDashoffset = circ - (circ * pct / 100);
+                document.getElementById('validatorProgressPct').textContent = `${pct}%`;
+                document.getElementById('validatorProgressText').textContent = data.progress_text || 'Working...';
+
+                // Replay only log lines we have not printed yet.
+                const logs = data.logs || [];
+                for (let i = validatorLoggedCount; i < logs.length; i++) {
+                    validatorLog(logs[i].level, logs[i].message, logs[i].timestamp);
+                }
+                validatorLoggedCount = logs.length;
+
+                if (!data.is_running) {
+                    clearInterval(validatorPollInterval);
+                    validatorPollInterval = null;
+                    if (data.error) {
+                        showToast(data.error, 'error');
+                    } else if (data.summary) {
+                        renderValidatorSummary(data.summary);
+                        const n = data.summary.total_issues || 0;
+                        showToast(n > 0 ? `${n} issue(s) flagged` : 'No issues found', n > 0 ? 'info' : 'success');
+                    }
+                    finishValidatorRun();
+                }
+            } catch (e) {
+                console.error('pollValidatorProgress failed', e);
+                clearInterval(validatorPollInterval);
+                validatorPollInterval = null;
+                finishValidatorRun();
+            }
+        }
+
+        function finishValidatorRun() {
+            const btn = document.getElementById('validatorBtnRun');
+            btn.disabled = false;
+            btn.textContent = 'Validate Report';
+        }
+
+        function renderValidatorSummary(summary) {
+            validatorOutputPath = summary.output_path || '';
+            document.getElementById('validatorResultFile').textContent = summary.custom_filename || '--';
+            document.getElementById('validatorStat-issues').textContent = summary.total_issues || 0;
+            document.getElementById('validatorStat-rows').textContent = summary.rows_scanned || 0;
+            document.getElementById('validatorStat-pdf').textContent = summary.pdf_applied ? 'Applied' : 'Not applied';
+
+            const counts = summary.summary || {};
+            const details = summary.summary_details || {};
+            const keys = Object.keys(counts).filter(k => counts[k] > 0).sort((a, b) => counts[b] - counts[a]);
+
+            const body = document.getElementById('validatorSummaryBody');
+            if (!keys.length) {
+                body.innerHTML = '<tr><td colspan="3" class="py-8 text-center text-emerald-400 italic">No issues found — the report is clean.</td></tr>';
+                document.getElementById('validatorResults').classList.remove('hidden');
+                return;
+            }
+
+            let html = '';
+            keys.forEach(key => {
+                const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                let tone = 'text-sky-400';
+                if (/duplicate|outlier|mismatch|error|negative|less_than|tampered/.test(key)) tone = 'text-rose-400';
+                else if (/defaulted|cleared|resolved|fixed|zero/.test(key)) tone = 'text-emerald-400';
+                else if (/warning|multiple|unexpected|no_match|not_ok/.test(key)) tone = 'text-amber-500';
+
+                const examples = (details[key] || []).slice(0, 2).join(' · ');
+                const extra = (details[key] || []).length > 2 ? ` (+${details[key].length - 2} more)` : '';
+
+                html += `
+                    <tr class="hover:bg-slate-900/30 transition text-xs border-b border-brand-borderLine">
+                        <td class="py-2.5 px-4 font-semibold ${tone}">${escapeHtml(label)}</td>
+                        <td class="py-2.5 px-4 text-center font-bold text-slate-200">${counts[key]}</td>
+                        <td class="py-2.5 px-4 text-slate-500 font-mono text-[11px] truncate max-w-[420px]" title="${escapeHtml(examples)}">${escapeHtml(examples)}${extra}</td>
+                    </tr>`;
+            });
+            body.innerHTML = html;
+            document.getElementById('validatorResults').classList.remove('hidden');
+            updateThemeBranding();
+        }
+
+        async function openValidatorOutput() {
+            if (!validatorOutputPath) {
+                showToast('Nothing to open yet', 'error');
+                return;
+            }
+            try {
+                const resp = await fetch('/api/report/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: validatorOutputPath })
+                });
+                const data = await resp.json();
+                if (!data.success) showToast(data.error || 'Could not open the file', 'error');
+            } catch (e) {
+                console.error('openValidatorOutput failed', e);
+                showToast('Could not open the file', 'error');
+            }
+        }
+
+        function resetValidator() {
+            if (validatorPollInterval) {
+                clearInterval(validatorPollInterval);
+                validatorPollInterval = null;
+            }
+            validatorLoggedCount = 0;
+            validatorOutputPath = '';
+            document.getElementById('validatorFilePath').value = '';
+            document.getElementById('validatorPdfPath').value = '';
+            document.getElementById('validatorResults').classList.add('hidden');
+            document.getElementById('validatorProgressContainer').classList.add('hidden');
+            document.getElementById('validatorConsole').innerHTML = '<div class="text-slate-500">[00:00:00] Ready. Select a report to validate.</div>';
+            finishValidatorRun();
         }

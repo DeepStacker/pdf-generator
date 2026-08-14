@@ -95,11 +95,13 @@ a = Analysis(
         # --- Web layer ---
         'audit_engine.web',
         'audit_engine.web.routes',
+        'audit_engine.web.report_handlers',
         # --- Services ---
         'audit_engine.services',
         'audit_engine.services.idfc',
         'audit_engine.services.equitas',
         'audit_engine.services.arvog',
+        'audit_engine.services.report_validator',
         # --- Consolidation ---
         'audit_engine.consolidator',
         'audit_engine.consolidator.config',
@@ -137,6 +139,8 @@ a = Analysis(
         'tkinter.messagebox',
         # --- Core Excel / PDF ---
         'openpyxl',
+        # Report Validator: optional PDF row-resequencing
+        'pypdf',
         'openpyxl.styles',
         'pandas',
         'numpy',

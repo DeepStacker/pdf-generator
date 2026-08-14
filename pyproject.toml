@@ -16,6 +16,9 @@ dependencies = [
     "pandas>=2.0",
     "Pillow>=10.0",
     "certifi>=2024.0",
+    # Report Validator PDF row-resequencing — needed by the desktop build too,
+    # so it belongs in the base deps rather than the [web] extra.
+    "pypdf>=5.0",
 ]
 
 [project.optional-dependencies]
@@ -29,9 +32,7 @@ dev = [
     "certifi",
 ]
 gui = ["pywebview>=5.0"]
-web = [
-    "pypdf>=5.0",
-]
+web = []
 all = ["audit-engine[dev,gui,web]"]
 
 [project.scripts]

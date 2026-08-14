@@ -1,7 +1,8 @@
 import re
 import sys
 from copy import copy
-from datetime import datetime, date
+from datetime import date, datetime
+from datetime import time as time_cls
 from pathlib import Path
 
 
@@ -9,6 +10,16 @@ import openpyxl
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from openpyxl.utils import get_column_letter
 from collections import defaultdict
+
+# Highlight fill (ARGB, as openpyxl stores it) → CSS color for the web grid.
+PREVIEW_FILL_MAP = {
+    "8B0000": "#8B0000",
+    "FFC7CE": "#FFC7CE",
+    "FF8C00": "#FF8C00",
+    "FFFF00": "#FFFF00",
+    "C6EFCE": "#C6EFCE",
+    "BDD7EE": "#BDD7EE",
+}
 
 # ─── Highlight Colors ─────────────────────────────────────────────────
 DARK_RED_FILL = PatternFill(start_color="8B0000", end_color="8B0000", fill_type="solid")
@@ -352,104 +363,238 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
             cell.number_format = data["number_format"]
 
 
-def process_file(filepath: str, output_suffix: str = "_VALIDATED", pdf_path: str = None):
-    """Process a single report file."""
-    filepath = Path(filepath)
-    if not filepath.exists():
-        print(f"ERROR: File not found: {filepath}")
-        return
+def _json_safe(val):
+    """Convert cell values that json can't serialize (dates/times) to strings."""
+    if isinstance(val, (datetime, date)):
+        return val.isoformat()
+    if isinstance(val, time_cls):
+        return val.isoformat()
+    return val
 
+
+def validate_workbook(
+    src_path,
+    output_path=None,
+    pdf_path=None,
+    on_progress=None,
+    build_preview=False,
+):
+    """Validate one "Purity Verification Format" workbook, file in → file out.
+
+    This is the single entry point shared by the desktop app (called in-process
+    over the zero-socket JS bridge) and the web server (called from its upload
+    worker). It is entirely offline: it opens a path, writes a path, and never
+    touches the network — which is what lets the desktop build run in fully
+    restricted environments.
+
+    Args:
+        src_path: workbook to validate.
+        output_path: where to write the validated copy. Defaults to the
+            generated "<BRANCH>_Audit-MIS_<dates>.xlsx" beside src_path.
+        pdf_path: optional PDF whose account sequence reorders the rows. When
+            omitted, row order is left untouched and no PDF is parsed.
+        on_progress: optional callback(pct: int, message: str) for live UI.
+        build_preview: also return per-cell values/highlights for an in-app
+            grid. The desktop UI does not need this; the web UI does.
+
+    Returns:
+        A JSON-serializable dict (safe to hand straight to the bridge).
+
+    Raises:
+        FileNotFoundError: src_path does not exist.
+        KeyError: the workbook has no "Purity Verification Format" sheet.
+    """
+    def report(pct, msg=None):
+        if on_progress:
+            on_progress(pct, msg)
+
+    src_path = Path(src_path)
+    if not src_path.exists():
+        raise FileNotFoundError(f"File not found: {src_path}")
+
+    report(5, "Reading workbook…")
+    wb = openpyxl.load_workbook(src_path, keep_vba=False, keep_links=False)
+    wb_data = openpyxl.load_workbook(src_path, data_only=True, keep_vba=False, keep_links=False)
+    sheet_name = "Purity Verification Format"
+    if sheet_name not in wb.sheetnames:
+        available = wb.sheetnames
+        wb.close()
+        wb_data.close()
+        raise KeyError(f"Sheet '{sheet_name}' not found. Available sheets: {available}")
+    ws = wb[sheet_name]
+    ws_data = wb_data[sheet_name]
+
+    try:
+        report(12, "Mapping columns…")
+        col = map_columns(ws)
+        data_start = 5
+        data_end = find_data_end(ws, data_start)
+        col_map = build_col_map(col)
+        all_rows = list(range(data_start, data_end + 1))
+
+        # PDF is optional: without one, row order is left exactly as-is.
+        if pdf_path:
+            report(15, "Parsing PDF sequence…")
+            pdf_accounts = extract_accounts_from_pdf(pdf_path)
+            if pdf_accounts:
+                report(20, "Rearranging rows by PDF…")
+                rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts)
+                rearrange_rows_by_pdf(ws_data, col_map, all_rows, pdf_accounts)
+
+        _cell_cache = dict(ws._cells)
+        rows_data = _build_rows_data(all_rows, col_map, _cell_cache)
+        _data_cache = dict(ws_data._cells)
+
+        report(30, "Running validations…")
+        summary = defaultdict(list)
+        run_validation(
+            ws, ws_data, col_map, all_rows, rows_data, summary,
+            _cell_cache=_cell_cache, _data_cache=_data_cache,
+        )
+
+        # Validation can write into cells that did not exist before (defaults
+        # on Closed/Top-Up rows), so refresh the cache before reading back.
+        _cell_cache = dict(ws._cells)
+
+        custom_filename = get_custom_output_filename(ws, col, col_map, all_rows, _cell_cache, src_path.name)
+        out_path = Path(output_path) if output_path else src_path.parent / custom_filename
+
+        result = {
+            "file_name": src_path.name,
+            "custom_filename": custom_filename,
+            "summary": {k: len(v) for k, v in sorted(summary.items())},
+            "summary_details": {k: list(v) for k, v in sorted(summary.items())},
+            "total_issues": sum(len(v) for v in summary.values()),
+            "rows_scanned": len(all_rows),
+            "pdf_applied": bool(pdf_path),
+        }
+
+        if build_preview:
+            report(60, "Building preview…")
+            result.update(_build_preview(all_rows, _cell_cache, _data_cache))
+
+        report(85, "Saving validated workbook…")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        wb.save(str(out_path))
+        result["output_path"] = str(out_path)
+    finally:
+        wb.close()
+        wb_data.close()
+
+    report(100, "Complete")
+    return result
+
+
+def _build_rows_data(all_rows, col_map, cell_cache):
+    """Extract the text fields the validation passes key off, per row."""
+    fields = (
+        ("packet", "packet"), ("account", "account"), ("name", "applicant"),
+        ("status", "status"), ("taf", "taf"), ("remarks", "remarks"),
+        ("magnet", "magnet"), ("tampered", "tampered"),
+    )
+    rows_data = {}
+    for r in all_rows:
+        row = {}
+        for key, col_key in fields:
+            c = col_map.get(col_key)
+            cell = cell_cache.get((r, c)) if c else None
+            row[key] = safe_str(cell.value if cell is not None else None)
+        rows_data[r] = row
+    return rows_data
+
+
+def _build_preview(all_rows, cell_cache, data_cache):
+    """Build the cell/highlight payload the web grid renders."""
+    column_indices, column_letters, column_headers = [], [], []
+    for c in range(1, 101):
+        cell = cell_cache.get((2, c))
+        header_val = cell.value if cell else None
+        if header_val and str(header_val).strip():
+            column_indices.append(c)
+            column_letters.append(get_column_letter(c))
+            column_headers.append(str(header_val).strip())
+
+    col_letter_map = {c: get_column_letter(c) for c in column_indices}
+    rows_json, highlights, issues = [], {}, []
+
+    for r in all_rows:
+        row_data = {"row": r, "cells": {}}
+        for c in column_indices:
+            cell_obj = cell_cache.get((r, c))
+            if cell_obj is None:
+                continue
+            col_letter = col_letter_map[c]
+            raw = cell_obj.value
+            if raw is None or (isinstance(raw, str) and raw.startswith("=")):
+                dc = data_cache.get((r, c))
+                if dc is not None:
+                    raw = dc.value
+            row_data["cells"][col_letter] = _json_safe(raw)
+            fill = cell_obj.fill
+            if fill and fill.start_color and fill.start_color.rgb:
+                rgb = str(fill.start_color.rgb)
+                if rgb.startswith("00"):
+                    rgb = rgb[2:]
+                if rgb in PREVIEW_FILL_MAP and rgb != "00000000":
+                    key = f"{col_letter}{r}"
+                    highlights[key] = PREVIEW_FILL_MAP[rgb]
+                    issues.append({"ref": key, "row": r, "col": col_letter, "color": PREVIEW_FILL_MAP[rgb]})
+        rows_json.append(row_data)
+
+    return {
+        "columns": column_headers,
+        "column_letters": column_letters,
+        "rows": rows_json,
+        "highlights": highlights,
+        "issues": issues,
+    }
+
+
+def process_file(filepath: str, output_suffix: str = "_VALIDATED", pdf_path: str = None):
+    """Validate one file and print a CLI report. Thin wrapper over validate_workbook()."""
     print(f"\n{'='*80}")
-    print(f"PROCESSING: {filepath.name}")
+    print(f"PROCESSING: {Path(filepath).name}")
     if pdf_path:
         print(f"USING PDF SEQUENCE: {Path(pdf_path).name}")
     print(f"{'='*80}")
 
-    wb = openpyxl.load_workbook(filepath, keep_vba=False, keep_links=False)
-    wb_data = openpyxl.load_workbook(filepath, data_only=True, keep_vba=False, keep_links=False)
-    sheet_name = "Purity Verification Format"
-    if sheet_name not in wb.sheetnames:
-        print(f"ERROR: Sheet '{sheet_name}' not found. Available sheets: {wb.sheetnames}")
+    try:
+        result = validate_workbook(filepath, pdf_path=pdf_path)
+    except FileNotFoundError:
+        print(f"ERROR: File not found: {filepath}")
         return
-    ws = wb[sheet_name]
-    ws_data = wb_data[sheet_name]
+    except KeyError as e:
+        print(f"ERROR: {e}")
+        return
 
-    col = map_columns(ws)
-    data_start = 5
-    data_end = find_data_end(ws, data_start)
+    details = result["summary_details"]
+    print(f"\n{'-'*60}")
+    print(f"PROCESSING COMPLETE: {Path(result['output_path']).name}")
+    print(f"{'-'*60}")
 
-    col_map = build_col_map(col)
+    for key, items in sorted(details.items()):
+        if not items:
+            continue
+        color = ""
+        reset = ""
+        if any(kw in key for kw in ["duplicate", "outlier", "mismatch", "error", "negative"]):
+            color = "\033[91m"  # Red
+        elif any(kw in key for kw in ["found", "updated", "fixed", "copied", "defaulted", "cleared"]):
+            color = "\033[92m"  # Green
+        elif any(kw in key for kw in ["warning", "multiple", "unexpected", "no_match"]):
+            color = "\033[93m"  # Yellow
 
-    all_rows = list(range(data_start, data_end + 1))
+        label = key.replace("_", " ").title()
+        print(f"\n  {color}{label}: {len(items)}{reset}")
+        for item in items[:10]:
+            print(f"    - {item}")
+        if len(items) > 10:
+            print(f"    ... and {len(items)-10} more")
 
-    if pdf_path:
-        pdf_accounts = extract_accounts_from_pdf(pdf_path)
-        if pdf_accounts:
-            rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts)
-            rearrange_rows_by_pdf(ws_data, col_map, all_rows, pdf_accounts)
-
-    _cell_cache = {}
-    for (_r, _c), _cell in list(ws._cells.items()):
-        _cell_cache[(_r, _c)] = _cell
-
-    rows_data = {}
-    for r in all_rows:
-        rows_data[r] = {
-            "packet": safe_str(_cell_cache.get((r, col_map["packet"])).value if col_map["packet"] and (r, col_map["packet"]) in _cell_cache else None),
-            "account": safe_str(_cell_cache.get((r, col_map["account"])).value if col_map["account"] and (r, col_map["account"]) in _cell_cache else None),
-            "name": safe_str(_cell_cache.get((r, col_map["applicant"])).value if col_map["applicant"] and (r, col_map["applicant"]) in _cell_cache else None),
-            "status": safe_str(_cell_cache.get((r, col_map["status"])).value if col_map["status"] and (r, col_map["status"]) in _cell_cache else None),
-            "taf": safe_str(_cell_cache.get((r, col_map["taf"])).value if col_map["taf"] and (r, col_map["taf"]) in _cell_cache else None),
-            "remarks": safe_str(_cell_cache.get((r, col_map["remarks"])).value if col_map["remarks"] and (r, col_map["remarks"]) in _cell_cache else None),
-            "magnet": safe_str(_cell_cache.get((r, col_map["magnet"])).value if col_map["magnet"] and (r, col_map["magnet"]) in _cell_cache else None),
-            "tampered": safe_str(_cell_cache.get((r, col_map["tampered"])).value if col_map["tampered"] and (r, col_map["tampered"]) in _cell_cache else None),
-        }
-
-    _data_cache = {}
-    for (_r, _c), _cell in ws_data._cells.items():
-        _data_cache[(_r, _c)] = _cell
-
-    summary = defaultdict(list)
-    run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cache=_cell_cache, _data_cache=_data_cache)
-
-    # ══════════════════════════════════════════════════════════════════
-    # SAVE & REPORT
-    # ══════════════════════════════════════════════════════════════════
-    custom_filename = get_custom_output_filename(ws, col, col_map, all_rows, _cell_cache, filepath.name)
-    output_path = filepath.parent / custom_filename
-    wb.save(output_path)
-
-    print(f"\n{'─'*60}")
-    print(f"PROCESSING COMPLETE: {output_path.name}")
-    print(f"{'─'*60}")
-
-    for key, items in sorted(summary.items()):
-        if items:
-            color = ""
-            reset = ""
-            if any(
-                kw in key
-                for kw in ["duplicate", "outlier", "mismatch", "error", "negative"]
-            ):
-                color = "\033[91m"  # Red
-            elif any(kw in key for kw in ["found", "updated", "fixed", "copied"]):
-                color = "\033[92m"  # Green
-            elif any(kw in key for kw in ["warning", "multiple", "unexpected", "no_match"]):
-                color = "\033[93m"  # Yellow
-
-            label = key.replace("_", " ").title()
-            print(f"\n  {color}{label}: {len(items)}{reset}")
-            for item in items[:10]:  # Limit display
-                print(f"    • {item}")
-            if len(items) > 10:
-                print(f"    ... and {len(items)-10} more")
-
-    total_issues = sum(len(v) for v in summary.values())
-    print(f"\n  TOTAL ISSUES FOUND: {total_issues}")
-    print(f"  Saved to: {output_path}")
-
-    wb.close()
-    return summary
+    print(f"\n  TOTAL ISSUES FOUND: {result['total_issues']}")
+    print(f"  Saved to: {result['output_path']}")
+    # defaultdict so callers can probe categories that produced no findings.
+    return defaultdict(list, details)
 
 
 def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cache=None, _data_cache=None):

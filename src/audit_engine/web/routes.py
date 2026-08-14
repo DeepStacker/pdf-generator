@@ -33,6 +33,13 @@ from audit_engine.web.handlers import (
     handle_update_progress,
     handle_validate,
 )
+from audit_engine.web.report_handlers import (
+    handle_report_browse,
+    handle_report_browse_pdf,
+    handle_report_open,
+    handle_report_progress,
+    handle_report_run,
+)
 
 
 @route("/")
@@ -160,4 +167,33 @@ def api_consolidate_banks() -> dict:
 @route("/api/consolidate/progress")
 def api_consolidate_progress() -> dict:
     return handle_consolidate_progress()
+
+
+# ---- Report Validator (desktop, path-based / zero-socket) ----
+# Distinct from the web server's /api/report/upload|status|download, which move
+# file *bytes* over HTTP. These move file *paths* only, so they work over the
+# in-process bridge with no network of any kind.
+@route("/api/report/browse")
+def api_report_browse() -> dict:
+    return handle_report_browse()
+
+
+@route("/api/report/browse/pdf")
+def api_report_browse_pdf() -> dict:
+    return handle_report_browse_pdf()
+
+
+@route("/api/report/run", method="POST")
+def api_report_run() -> dict:
+    return handle_report_run(request.json)
+
+
+@route("/api/report/progress")
+def api_report_progress() -> dict:
+    return handle_report_progress()
+
+
+@route("/api/report/open", method="POST")
+def api_report_open() -> dict:
+    return handle_report_open(request.json)
 

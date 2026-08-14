@@ -29,7 +29,7 @@ from openpyxl.utils import get_column_letter
 
 from audit_engine.lib.bottle import route, request, response, static_file, HTTPError
 
-from audit_engine_web import report_validator as rv
+from audit_engine.services import report_validator as rv
 
 # ── Storage ───────────────────────────────────────────────────────────
 # REPORT_STORAGE_DIR is meant to live on a persistent disk in production so
@@ -168,148 +168,22 @@ def _job_state(file_id):
 
 
 def run_validation_and_extract(filepath, file_id, original_name=None, pdf_path=None, on_progress=None):
-    """Load, validate (optionally reorder by PDF) and persist the workbook.
+    """Validate an uploaded workbook and return the payload the web grid renders.
 
-    Calls on_progress(pct, msg) periodically so the caller can surface live
-    progress while this runs in a worker thread.
+    Thin wrapper over the shared, offline validation core
+    (audit_engine.services.report_validator.validate_workbook) so the web
+    server and the desktop app run byte-for-byte the same passes.
     """
-    def report(pct, msg=None):
-        if on_progress:
-            on_progress(pct, msg)
-
-    report(5, "Reading workbook…")
-    wb = openpyxl.load_workbook(filepath, keep_vba=False, keep_links=False)
-    wb_data = openpyxl.load_workbook(filepath, data_only=True, keep_vba=False, keep_links=False)
-    sheet_name = "Purity Verification Format"
-    if sheet_name not in wb.sheetnames:
-        available = wb.sheetnames
-        wb.close()
-        wb_data.close()
-        raise KeyError(f"Sheet '{sheet_name}' not found. Available sheets: {available}")
-    ws = wb[sheet_name]
-    ws_data = wb_data[sheet_name]
-
-    report(12, "Mapping columns…")
-    col = rv.map_columns(ws)
-    data_start = 5
-    data_end = rv.find_data_end(ws, data_start)
-
-    col_map = rv.build_col_map(col)
-
-    all_rows = list(range(data_start, data_end + 1))
-
-    if pdf_path:
-        report(15, "Parsing PDF sequence…")
-        pdf_accounts = rv.extract_accounts_from_pdf(pdf_path)
-        if pdf_accounts:
-            report(20, "Rearranging rows by PDF…")
-            rv.rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts)
-            rv.rearrange_rows_by_pdf(ws_data, col_map, all_rows, pdf_accounts)
-
-    _cell_cache = {}
-    for (_r, _c), _cell in list(ws._cells.items()):
-        _cell_cache[(_r, _c)] = _cell
-
-    rows_data = {}
-    for r in all_rows:
-        rows_data[r] = {
-            "packet": rv.safe_str(_cell_cache.get((r, col_map["packet"])).value if col_map["packet"] and (r, col_map["packet"]) in _cell_cache else None),
-            "account": rv.safe_str(_cell_cache.get((r, col_map["account"])).value if col_map["account"] and (r, col_map["account"]) in _cell_cache else None),
-            "name": rv.safe_str(_cell_cache.get((r, col_map["applicant"])).value if col_map["applicant"] and (r, col_map["applicant"]) in _cell_cache else None),
-            "status": rv.safe_str(_cell_cache.get((r, col_map["status"])).value if col_map["status"] and (r, col_map["status"]) in _cell_cache else None),
-            "taf": rv.safe_str(_cell_cache.get((r, col_map["taf"])).value if col_map["taf"] and (r, col_map["taf"]) in _cell_cache else None),
-            "remarks": rv.safe_str(_cell_cache.get((r, col_map["remarks"])).value if col_map["remarks"] and (r, col_map["remarks"]) in _cell_cache else None),
-            "magnet": rv.safe_str(_cell_cache.get((r, col_map["magnet"])).value if col_map["magnet"] and (r, col_map["magnet"]) in _cell_cache else None),
-            "tampered": rv.safe_str(_cell_cache.get((r, col_map["tampered"])).value if col_map["tampered"] and (r, col_map["tampered"]) in _cell_cache else None),
-        }
-
-    _data_cache = {}
-    for (_r, _c), _cell in ws_data._cells.items():
-        _data_cache[(_r, _c)] = _cell
-
-    report(30, "Running validations…")
-    summary = __import__("collections").defaultdict(list)
-    rv.run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cache, _data_cache)
-
-    # Validation may have written values into cells that didn't exist before
-    # (e.g. defaults on Closed/Top-Up rows); refresh the cache so the preview
-    # below reflects them.
-    _cell_cache = {}
-    for (_r, _c), _cell in ws._cells.items():
-        _cell_cache[(_r, _c)] = _cell
-
-    report(60, "Building preview…")
-    column_indices = []
-    column_letters = []
-    column_headers = []
-    for c in range(1, 101):
-        cell = _cell_cache.get((2, c))
-        header_val = cell.value if cell else None
-        if header_val and str(header_val).strip():
-            column_indices.append(c)
-            column_letters.append(get_column_letter(c))
-            column_headers.append(str(header_val).strip())
-
-    col_letter_map = {c: get_column_letter(c) for c in column_indices}
-
-    rows_json = []
-    highlights = {}
-    issues = []
-
-    for r in all_rows:
-        row_data = {"row": r, "cells": {}}
-        for c in column_indices:
-            col_letter = col_letter_map[c]
-            cell_obj = _cell_cache.get((r, c))
-            if cell_obj is None:
-                continue
-            raw = cell_obj.value
-            if raw is None or (isinstance(raw, str) and raw.startswith("=")):
-                dc = _data_cache.get((r, c))
-                if dc is not None:
-                    raw = dc.value
-            row_data["cells"][col_letter] = json_safe(raw)
-            fill = cell_obj.fill
-            if fill and fill.start_color and fill.start_color.rgb:
-                rgb = str(fill.start_color.rgb)
-                if rgb.startswith("00"):
-                    rgb = rgb[2:]
-                if rgb in FILL_MAP and rgb != "00000000":
-                    key = cell_ref(r, c)
-                    highlights[key] = FILL_MAP[rgb]
-                    issues.append({
-                        "ref": key,
-                        "row": r,
-                        "col": col_letter,
-                        "color": FILL_MAP[rgb],
-                    })
-        rows_json.append(row_data)
-
-    total_issues = sum(len(v) for v in summary.values())
-
-    custom_filename = rv.get_custom_output_filename(ws, col, col_map, all_rows, _cell_cache, original_name)
-
-    report(85, "Saving validated workbook…")
-    output_path = REPORT_UPLOAD_DIR / f"{file_id}.xlsx"
-    wb.save(str(output_path))
-
-    result = {
-        "file_id": file_id,
-        "file_name": original_name or Path(filepath).name,
-        "custom_filename": custom_filename,
-        "columns": column_headers,
-        "column_letters": column_letters,
-        "rows": rows_json,
-        "highlights": highlights,
-        "issues": issues,
-        "summary": {k: len(v) for k, v in sorted(summary.items())},
-        "summary_details": {k: v for k, v in sorted(summary.items())},
-        "total_issues": total_issues,
-    }
-
-    wb.close()
-    wb_data.close()
-    report(100, "Complete")
+    result = rv.validate_workbook(
+        filepath,
+        output_path=REPORT_UPLOAD_DIR / f"{file_id}.xlsx",
+        pdf_path=pdf_path,
+        on_progress=on_progress,
+        build_preview=True,
+    )
+    result["file_id"] = file_id
+    if original_name:
+        result["file_name"] = original_name
     return result
 
 
