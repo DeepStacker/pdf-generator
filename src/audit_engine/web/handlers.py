@@ -382,9 +382,9 @@ def handle_open(data: dict) -> dict:
     rel_path = data.get("path", "")
     if not rel_path:
         return {"success": False, "error": "No path provided."}
-    
+
     abs_path = _resolve_writable_path(rel_path)
-    
+
     if not os.path.exists(abs_path):
         return {"success": False, "error": f"File not found: {abs_path}"}
     try:
@@ -451,17 +451,20 @@ consolidation_tracker = _ConsolidationTracker()
 
 def _reload_runtime_configs() -> list:
     """Reload source configs from mapping_rules.xlsx at runtime.
-    
+
     Returns the merged list of source configs. Also updates the module-level
     HEADER_PATTERNS so the mapper picks up external alias changes immediately.
     """
-    from audit_engine.consolidator.mappings import (
-        AXIS_POA, AXIS_COLLECTION, SCB, VISTAAR,
-        load_external_source_configs,
-    )
     import audit_engine.consolidator.config as _cfg_mod
     import audit_engine.consolidator.mapper as _mapper_mod
-    
+    from audit_engine.consolidator.mappings import (
+        AXIS_COLLECTION,
+        AXIS_POA,
+        SCB,
+        VISTAAR,
+        load_external_source_configs,
+    )
+
     defaults_cfg = [AXIS_POA, AXIS_COLLECTION, SCB, VISTAAR]
     fresh = load_external_source_configs(defaults_cfg)
     if fresh and fresh is not defaults_cfg:
@@ -474,106 +477,16 @@ def _reload_runtime_configs() -> list:
         configs = fresh
     else:
         configs = defaults_cfg
-    
+
     fresh_patterns = _cfg_mod.load_external_header_patterns(_cfg_mod.HEADER_PATTERNS)
     _cfg_mod.HEADER_PATTERNS.clear()
     _cfg_mod.HEADER_PATTERNS.update(fresh_patterns)
     _mapper_mod.HEADER_PATTERNS.clear()
     _mapper_mod.HEADER_PATTERNS.update(fresh_patterns)
-    
+
     return configs
 
 
-def worker_consolidation_thread(selected_files: list[str], month: str, merge_mode: bool = False, output_dir: str = ""):
-    import shutil
-    import json
-    from pathlib import Path
-    from audit_engine.consolidator.config import ProcessingContext
-    from audit_engine.consolidator.consolidate import Consolidator
-    
-    source_configs = _reload_runtime_configs()
-    
-    project_root = _get_project_root()
-    upload_dir = project_root / "temp_uploads"
-    template_path = project_root / "templates" / "Feb'26 consolidated.xlsx"
-    
-    output_path = Path(output_dir) / "Consolidated_Report" / "consolidated_output.xlsx" if output_dir else project_root / "output" / "consolidated_output.xlsx"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    audit_dir = project_root / "audit_logs"
-    
-    try:
-        if upload_dir.exists():
-            shutil.rmtree(upload_dir)
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        
-        for f in selected_files:
-            src_path = Path(f)
-            if src_path.exists():
-                shutil.copy(src_path, upload_dir / src_path.name)
-                
-        context = ProcessingContext(audit_month=month)
-        consolidator = Consolidator(
-            template_path=template_path,
-            source_dir=upload_dir,
-            output_path=output_path,
-            audit_dir=audit_dir,
-            context=context,
-            merge_mode=merge_mode,
-        )
-        
-        exit_code = consolidator.run(source_configs)
-        
-        audit_log_path = audit_dir / "consolidation_audit.json"
-        summary = {}
-        if audit_log_path.exists():
-            with open(audit_log_path, "r") as json_f:
-                summary = json.load(json_f)
-                
-        if upload_dir.exists():
-            shutil.rmtree(upload_dir)
-            
-        summary["merge_mode"] = merge_mode
-        summary["output_path"] = str(output_path)
-        if merge_mode and hasattr(consolidator, "merge_stats"):
-            summary["new_rows"] = consolidator.merge_stats.get("new_rows", 0)
-            summary["new_sources"] = consolidator.merge_stats.get("new_sources", 0)
-            summary["merged_rows"] = consolidator.merge_stats.get("existing_rows", 0)
-        
-        # Verify output file was actually written
-        output_exists = output_path.exists() and output_path.stat().st_size > 0
-        summary["output_exists"] = output_exists
-        
-        # Check for specific write error from consolidator
-        write_error = getattr(consolidator, "_write_error", None)
-        
-        if exit_code != 0 or not output_exists:
-            parts = []
-            if not output_exists:
-                parts.append("Output file was not created")
-            if write_error:
-                parts.append(write_error)
-            elif summary.get("errors"):
-                parts.extend(summary["errors"][:3])  # first 3 errors max
-            elif consolidation_tracker.error_msg:
-                parts.append(consolidation_tracker.error_msg)
-            error_msg = "; ".join(parts) if parts else "Consolidation completed with errors. Check audit log."
-            consolidation_tracker.is_running = False
-            consolidation_tracker.progress_text = "Consolidation completed with warnings."
-            consolidation_tracker.exit_code = exit_code
-            consolidation_tracker.summary = summary
-            consolidation_tracker.error_msg = error_msg
-        else:
-            consolidation_tracker.is_running = False
-            consolidation_tracker.progress_text = "Consolidation Completed Successfully!"
-            consolidation_tracker.exit_code = exit_code
-            consolidation_tracker.summary = summary
-        
-    except Exception as e:
-        if upload_dir.exists():
-            shutil.rmtree(upload_dir)
-        consolidation_tracker.is_running = False
-        consolidation_tracker.progress_text = "Pipeline execution failed."
-        consolidation_tracker.error_msg = str(e)
 
 
 def handle_consolidate_banks() -> dict:
@@ -660,8 +573,9 @@ def handle_consolidate_run(data: dict) -> dict:
 
     output_dir = data.get("output_dir", "")
     if not output_dir:
-        from audit_engine.database.legacy import get_config
         import tempfile
+
+        from audit_engine.database.legacy import get_config
         output_dir = get_config("out_path") or tempfile.gettempdir()
 
     os.makedirs(output_dir, exist_ok=True)
@@ -694,13 +608,12 @@ def handle_consolidate_run(data: dict) -> dict:
 def handle_consolidate_progress() -> dict:
     summary = consolidation_tracker.summary
     if not summary and not consolidation_tracker.is_running:
-        from pathlib import Path
         import json
         project_root = _get_project_root()
         audit_log_path = project_root / "audit_logs" / "consolidation_audit.json"
         if audit_log_path.exists():
             try:
-                with open(audit_log_path, "r") as json_f:
+                with open(audit_log_path) as json_f:
                     summary = json.load(json_f)
             except Exception:
                 pass
