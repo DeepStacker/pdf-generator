@@ -38,9 +38,39 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # The macOS build is ad-hoc signed, not Developer-ID signed or
+          # notarised, so Gatekeeper blocks it after a browser download
+          # ("damaged and can't be opened"). Ship the unquarantine step in the
+          # notes until a paid Apple Developer ID is available.
+          cat > /tmp/notes.md <<'NOTES'
+          ## Install
+
+          ### Windows
+          Unzip and run `Audit_Engine_Elite.exe`. If SmartScreen appears, choose
+          **More info → Run anyway**.
+
+          ### macOS (Apple Silicon)
+          macOS blocks this app on first launch because it is not signed with a
+          paid Apple Developer ID. Unzip it, then run this once in Terminal:
+
+          ```
+          xattr -dr com.apple.quarantine /path/to/Audit_Engine_Elite.app
+          ```
+
+          Then open the app normally. (Double-clicking before this step shows
+          "damaged and can't be opened" — the download is fine, it is Gatekeeper.)
+
+          ### Linux
+          Extract the tarball and run the `Audit_Engine_Elite` binary
+          (`chmod +x` it first if needed).
+
+          ---
+          Verify a download with the matching `.sha256` file.
+          NOTES
+          sed -i 's/^          //' /tmp/notes.md
           gh release create "${{ steps.extract.outputs.tag }}" \
             --title "${{ steps.extract.outputs.tag }}" \
-            --notes "" 2>/dev/null || true
+            --notes-file /tmp/notes.md 2>/dev/null || true
 
   windows:
     needs: setup
