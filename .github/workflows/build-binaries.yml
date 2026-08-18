@@ -91,6 +91,12 @@ jobs:
           key: pyi-win-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-win-
       - run: pip install pyinstaller pywebview comtypes reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
+      # Install the project last so every runtime dep in pyproject.toml
+      # (e.g. pypdf) is present for PyInstaller to bundle. The pins above
+      # are already satisfied, so this does not upgrade them.
+      - run: pip install -e .
+      - name: Verify runtime deps are importable
+        run: python -c "import bottle, openpyxl, reportlab, pandas, PIL, certifi, pypdf; print('runtime deps OK')"
       - name: Verify Tcl/Tk environment
         run: |
           python -c "import sys; print('Python:', sys.executable)"
@@ -145,6 +151,9 @@ jobs:
           key: pyi-macos-${{ hashFiles('pdf_generator.spec') }}
           restore-keys: pyi-macos-
       - run: pip install pyinstaller pywebview reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
+      - run: pip install -e .
+      - name: Verify runtime deps are importable
+        run: python -c "import bottle, openpyxl, reportlab, pandas, PIL, certifi, pypdf; print('runtime deps OK')"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - name: Ad-hoc code sign
         run: |
@@ -195,6 +204,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y patchelf libgirepository-2.0-dev libcairo2-dev pkg-config gobject-introspection libgtk-3-dev libgdk-pixbuf-2.0-dev libgtk-3-bin libglib2.0-bin libwebkit2gtk-4.1-dev gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-girepository-3.0 gir1.2-soup-3.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav
       - run: PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}" pip install pyinstaller pywebview pygobject reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk" staticx
+      - run: pip install -e .
+      - name: Verify runtime deps are importable
+        run: python -c "import bottle, openpyxl, reportlab, pandas, PIL, certifi, pypdf; print('runtime deps OK')"
       - name: Query GI modules to seed PyInstaller cache
         run: |
           python3 -c "

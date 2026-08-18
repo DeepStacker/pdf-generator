@@ -95,6 +95,10 @@ def worker_report_thread(filepath: str, pdf_path: str | None) -> None:
         result = validate_workbook(filepath, pdf_path=pdf_path or None, on_progress=on_progress)
 
         total = result.get("total_issues", 0)
+        if result.get("pdf_warning"):
+            report_tracker.log("WARN", result["pdf_warning"])
+        elif pdf_path and result.get("pdf_applied"):
+            report_tracker.log("OK", "Rows resequenced to match the PDF")
         report_tracker.log("OK", f"Validation complete - {total} issue(s) flagged")
         report_tracker.log("OK", f"Saved: {result.get('output_path', '')}")
 

@@ -1,3 +1,4 @@
+import logging
 import re
 import sys
 from collections import defaultdict
@@ -9,6 +10,8 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+
+logger = logging.getLogger(__name__)
 
 # Highlight fill (ARGB, as openpyxl stores it) → CSS color for the web grid.
 PREVIEW_FILL_MAP = {
@@ -241,19 +244,31 @@ def get_custom_output_filename(ws, col, col_map, all_rows, _cell_cache, default_
 
 
 def extract_accounts_from_pdf(pdf_path):
-    import re
+    """Return the 15-digit account numbers found in a PDF, in page order.
 
-    from pypdf import PdfReader
+    Never raises. The PDF is an optional convenience — it only controls row
+    order — so an unreadable PDF, or a build without pypdf bundled, must
+    degrade to "no resequencing" rather than failing the whole validation and
+    denying the user their validated workbook.
+    """
     accounts = []
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        logger.warning(
+            "pypdf is unavailable, so PDF row resequencing was skipped. "
+            "The workbook is still validated; row order is left unchanged."
+        )
+        return accounts
+
     try:
         reader = PdfReader(pdf_path)
         for page in reader.pages:
             text = page.extract_text()
             if text:
-                found = re.findall(r'\b\d{15}\b', text)
-                accounts.extend(found)
-    except Exception as e:
-        print(f"Error parsing PDF: {e}")
+                accounts.extend(re.findall(r"\b\d{15}\b", text))
+    except Exception as e:  # noqa: BLE001 - any malformed PDF must not be fatal
+        logger.warning("Could not read PDF %s: %s", pdf_path, e)
     return accounts
 
 
@@ -429,6 +444,8 @@ def validate_workbook(
         all_rows = list(range(data_start, data_end + 1))
 
         # PDF is optional: without one, row order is left exactly as-is.
+        pdf_applied = False
+        pdf_warning = None
         if pdf_path:
             report(15, "Parsing PDF sequence…")
             pdf_accounts = extract_accounts_from_pdf(pdf_path)
@@ -436,6 +453,14 @@ def validate_workbook(
                 report(20, "Rearranging rows by PDF…")
                 rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts)
                 rearrange_rows_by_pdf(ws_data, col_map, all_rows, pdf_accounts)
+                pdf_applied = True
+            else:
+                # Reported rather than raised: the validation itself is fine.
+                pdf_warning = (
+                    "No account numbers could be read from the PDF, so row order "
+                    "was left unchanged. The workbook was still validated."
+                )
+                logger.warning(pdf_warning)
 
         _cell_cache = dict(ws._cells)
         rows_data = _build_rows_data(all_rows, col_map, _cell_cache)
@@ -462,7 +487,8 @@ def validate_workbook(
             "summary_details": {k: list(v) for k, v in sorted(summary.items())},
             "total_issues": sum(len(v) for v in summary.values()),
             "rows_scanned": len(all_rows),
-            "pdf_applied": bool(pdf_path),
+            "pdf_applied": pdf_applied,
+            "pdf_warning": pdf_warning,
         }
 
         if build_preview:

@@ -198,3 +198,66 @@ class TestZeroSocketBridge:
         rh.handle_report_run({"filepath": str(src)})
         assert _wait_idle()
         json.dumps(rh.handle_report_progress())  # must not raise
+
+
+class TestPdfIsTrulyOptional:
+    """A missing/unreadable PDF must never cost the user their validated file.
+
+    The packaged Windows build shipped without pypdf bundled, and because the
+    import sat outside the try block a ModuleNotFoundError aborted the whole
+    run — the user got no output at all for an optional convenience feature.
+    """
+
+    def test_missing_pypdf_degrades_instead_of_failing(self, tmp_path, monkeypatch):
+        import builtins
+
+        real_import = builtins.__import__
+
+        def no_pypdf(name, *args, **kwargs):
+            if name == "pypdf" or name.startswith("pypdf."):
+                raise ImportError("No module named 'pypdf'")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", no_pypdf)
+
+        pdf = tmp_path / "seq.pdf"
+        pdf.write_bytes(b"%PDF-1.4 not really a pdf")
+        src = tmp_path / "in.xlsx"
+        make_workbook(src, [good_row("P01"), good_row("P02")])
+
+        # Must not raise, and must still produce the validated workbook.
+        result = rv.validate_workbook(src, pdf_path=str(pdf))
+
+        assert result["pdf_applied"] is False
+        assert result["pdf_warning"]
+        assert (tmp_path / "TESTBR_Audit-MIS_UNKNOWN_DATE.xlsx").exists()
+
+    def test_extract_accounts_never_raises(self, tmp_path):
+        junk = tmp_path / "junk.pdf"
+        junk.write_bytes(b"definitely not a pdf")
+        assert rv.extract_accounts_from_pdf(str(junk)) == []
+        assert rv.extract_accounts_from_pdf(str(tmp_path / "nonexistent.pdf")) == []
+
+    def test_pdf_applied_reflects_reality_not_just_presence(self, tmp_path):
+        """A supplied-but-unusable PDF must report pdf_applied=False."""
+        pdf = tmp_path / "empty.pdf"
+        pdf.write_bytes(b"not a pdf")
+        src = tmp_path / "in.xlsx"
+        make_workbook(src, [good_row("P01")])
+
+        result = rv.validate_workbook(src, pdf_path=str(pdf))
+        assert result["pdf_applied"] is False, "must not claim the PDF was applied"
+        assert result["pdf_warning"]
+
+    def test_desktop_worker_surfaces_the_warning(self, tmp_path):
+        pdf = tmp_path / "bad.pdf"
+        pdf.write_bytes(b"not a pdf")
+        src = tmp_path / "in.xlsx"
+        make_workbook(src, [good_row("P01")])
+
+        rh.handle_report_run({"filepath": str(src), "pdf_path": str(pdf)})
+        assert _wait_idle()
+
+        p = rh.handle_report_progress()
+        assert p["error"] is None, "an unusable PDF must not fail the run"
+        assert any(log["level"] == "WARN" for log in p["logs"]), "user must be told the PDF was ignored"
