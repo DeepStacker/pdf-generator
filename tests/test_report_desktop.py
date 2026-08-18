@@ -261,3 +261,129 @@ class TestPdfIsTrulyOptional:
         p = rh.handle_report_progress()
         assert p["error"] is None, "an unusable PDF must not fail the run"
         assert any(log["level"] == "WARN" for log in p["logs"]), "user must be told the PDF was ignored"
+
+
+def _make_pdf(path, lines):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(str(path), pagesize=A4)
+    y = 750
+    for line in lines:
+        c.drawString(60, y, line)
+        y -= 30
+    c.save()
+
+
+class TestPdfResequencingIsRobust:
+    """PDF row resequencing must work for real reports, not just one format.
+
+    It previously looked for exactly 15 digits and compared raw cell strings,
+    so any other account length — or an account stored as a number by Excel —
+    matched nothing and the reorder silently did not happen.
+    """
+
+    @pytest.mark.parametrize(
+        "accounts,render,label",
+        [
+            (["999888777666501", "999888777666502", "999888777666503"],
+             lambda a: f"Account: {a}", "15-digit"),
+            (["100200300401", "100200300402", "100200300403"],
+             lambda a: f"A/c {a}", "12-digit"),
+            (["1002003004010011", "1002003004010022", "1002003004010033"],
+             lambda a: f"AcNo {a}", "16-digit"),
+            (["999888777666501", "999888777666502", "999888777666503"],
+             lambda a: f"Acct {a[:4]} {a[4:8]} {a[8:]}", "spaced"),
+            (["100200300401", "100200300402", "100200300403"],
+             lambda a: f"{a[:4]}-{a[4:8]}-{a[8:]}", "hyphenated"),
+            (["100200300401", "100200300402", "100200300403"],
+             lambda a: f"Ref#77{a}X  Loan", "embedded in text"),
+            (["100200300401", "100200300402", "100200300403"],
+             lambda a: f"row | {a} | NAME | 12.5", "table row"),
+        ],
+    )
+    def test_reorders_regardless_of_format(self, tmp_path, accounts, render, label):
+        rows = []
+        for i, acct in enumerate(accounts, 1):
+            row = good_row(f"P{i:02d}")
+            row["account"] = acct
+            rows.append(row)
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        pdf = tmp_path / "seq.pdf"
+        _make_pdf(pdf, [render(a) for a in reversed(accounts)])
+
+        result = rv.validate_workbook(src, pdf_path=str(pdf))
+
+        assert result["pdf_applied"] is True, f"{label}: reorder did not run"
+        assert result["pdf_matched_rows"] == len(accounts), f"{label}: partial match"
+        assert result["pdf_warning"] is None
+
+        wb = openpyxl.load_workbook(result["output_path"])
+        ws = wb[SHEET]
+        got = [str(ws.cell(row=r, column=KEY_TO_COL["account"]).value)
+               for r in range(5, 5 + len(accounts))]
+        assert got == list(reversed(accounts)), f"{label}: wrong order"
+
+    def test_account_stored_as_number_by_excel(self, tmp_path):
+        """openpyxl returns ints/floats for numeric cells; matching must survive that."""
+        accounts = [100200300401, 100200300402, 100200300403]
+        rows = []
+        for i, acct in enumerate(accounts, 1):
+            row = good_row(f"P{i:02d}")
+            row["account"] = acct
+            rows.append(row)
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+        pdf = tmp_path / "seq.pdf"
+        _make_pdf(pdf, [f"A/c {a}" for a in reversed(accounts)])
+
+        result = rv.validate_workbook(src, pdf_path=str(pdf))
+        assert result["pdf_matched_rows"] == 3
+
+    def test_separate_lines_do_not_fuse_into_one_number(self, tmp_path):
+        """A newline between two accounts must not merge them into one blob."""
+        text = "100200300401\n100200300402\n100200300403"
+        assert rv.normalize_account("1002 0030 0401") == "100200300401"
+        pdf = tmp_path / "p.pdf"
+        _make_pdf(pdf, text.split("\n"))
+        found = rv.extract_accounts_from_pdf(
+            str(pdf), known_accounts=["100200300401", "100200300402", "100200300403"]
+        )
+        assert found == ["100200300401", "100200300402", "100200300403"]
+
+    def test_partial_match_is_reported_not_silent(self, tmp_path):
+        accounts = ["100200300401", "100200300402", "100200300403"]
+        rows = []
+        for i, acct in enumerate(accounts, 1):
+            row = good_row(f"P{i:02d}")
+            row["account"] = acct
+            rows.append(row)
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+        pdf = tmp_path / "seq.pdf"
+        _make_pdf(pdf, ["A/c 100200300403"])  # only one of three
+
+        result = rv.validate_workbook(src, pdf_path=str(pdf))
+        assert result["pdf_applied"] is True
+        assert result["pdf_matched_rows"] == 1
+        assert "1 of 3" in result["pdf_warning"]
+
+
+class TestNormalizeAccount:
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("123456789012345", "123456789012345"),
+            (123456789012345, "123456789012345"),
+            ("123456789012345.0", "123456789012345"),
+            ("1234 5678 9012 345", "123456789012345"),
+            ("1234-5678-9012-345", "123456789012345"),
+            ("  123456789012345  ", "123456789012345"),
+            ("", ""),
+            (None, ""),
+        ],
+    )
+    def test_forms_that_must_compare_equal(self, raw, expected):
+        assert rv.normalize_account(raw) == expected

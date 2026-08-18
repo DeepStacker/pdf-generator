@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import re
 import sys
@@ -243,15 +244,38 @@ def get_custom_output_filename(ws, col, col_map, all_rows, _cell_cache, default_
     return f"{branch_name}_Audit-MIS_{date_str}.xlsx"
 
 
-def extract_accounts_from_pdf(pdf_path):
-    """Return the 15-digit account numbers found in a PDF, in page order.
+def normalize_account(value):
+    """Digits-only comparison form for an account number.
 
-    Never raises. The PDF is an optional convenience — it only controls row
-    order — so an unreadable PDF, or a build without pypdf bundled, must
-    degrade to "no resequencing" rather than failing the whole validation and
-    denying the user their validated workbook.
+    The same account reaches us in several shapes: as text in the PDF
+    ("1234 5678 9012 345"), and from openpyxl as a float or in scientific
+    notation when the cell is numeric ("123456789012345.0", "1.23457E+14").
+    Comparing raw strings therefore misses matches that are plainly the same
+    account, which is what made resequencing silently do nothing.
     """
-    accounts = []
+    s = safe_str(value)
+    if not s:
+        return ""
+    if re.fullmatch(r"\d+\.0+", s):                      # 123....0 from a float cell
+        s = s.split(".", 1)[0]
+    elif re.fullmatch(r"\d+(?:\.\d+)?[eE][+-]?\d+", s):  # 1.23457E+14
+        with contextlib.suppress(ValueError, OverflowError):
+            s = format(int(float(s)), "d")
+    return re.sub(r"\D", "", s)
+
+
+def extract_accounts_from_pdf(pdf_path, known_accounts=None):
+    """Return account numbers in the order they appear in the PDF.
+
+    ``known_accounts`` should be the accounts actually present in the
+    workbook. Given those, the PDF is searched for *them* rather than for a
+    guessed digit count — account numbers are not universally 15 digits, and
+    the previous fixed ``\\d{15}`` pattern matched nothing at all on any other
+    format, so resequencing quietly did nothing.
+
+    Never raises: the PDF only controls row order, so an unreadable file must
+    not cost the user their validated workbook.
+    """
     try:
         from pypdf import PdfReader
     except ImportError:
@@ -259,27 +283,88 @@ def extract_accounts_from_pdf(pdf_path):
             "pypdf is unavailable, so PDF row resequencing was skipped. "
             "The workbook is still validated; row order is left unchanged."
         )
-        return accounts
+        return []
 
+    text = ""
     try:
         reader = PdfReader(pdf_path)
-        for page in reader.pages:
-            text = page.extract_text()
-            if text:
-                accounts.extend(re.findall(r"\b\d{15}\b", text))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
     except Exception as e:  # noqa: BLE001 - any malformed PDF must not be fatal
         logger.warning("Could not read PDF %s: %s", pdf_path, e)
-    return accounts
+        return []
+
+    if not text.strip():
+        logger.warning("No extractable text in %s (a scanned/image PDF needs OCR).", pdf_path)
+        return []
+
+    if not known_accounts:
+        # No workbook context: fall back to plain digit runs, one line at a
+        # time so separate numbers on separate lines never merge.
+        runs = []
+        for line in text.splitlines():
+            for raw in re.findall(r"\d[\d \t\-]{4,}\d", line):
+                digits = re.sub(r"\D", "", raw)
+                if len(digits) >= 6:
+                    runs.append(digits)
+        return runs
+
+    known = {a for a in (normalize_account(k) for k in known_accounts) if a}
+    if not known:
+        return []
+
+    # Scan each line's digits for the known accounts, left to right, longest
+    # first. Working per line (and on digits only) means the account is found
+    # whether the PDF prints it plain, spaced, or hyphenated, while a line
+    # break can never fuse two different numbers into one unmatchable blob.
+    lengths = sorted({len(a) for a in known}, reverse=True)
+    ordered, seen = [], set()
+    for line in text.splitlines():
+        digits = re.sub(r"\D", "", line)
+        i, n = 0, len(digits)
+        while i < n:
+            hit = None
+            for length in lengths:
+                if i + length <= n and digits[i:i + length] in known:
+                    hit = digits[i:i + length]
+                    break
+            if hit:
+                if hit not in seen:
+                    ordered.append(hit)
+                    seen.add(hit)
+                i += len(hit)
+            else:
+                i += 1
+    return ordered
+
+
+def sheet_accounts(ws, col_map, all_rows):
+    """Every account number present in the data rows, normalized."""
+    col_acct = col_map.get("account")
+    if not col_acct:
+        return []
+    out = []
+    for r in all_rows:
+        acct = normalize_account(ws.cell(row=r, column=col_acct).value)
+        if acct:
+            out.append(acct)
+    return out
 
 
 def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
+    """Reorder data rows to match the PDF's account sequence.
+
+    Returns the number of rows placed by the PDF, so the caller can tell full
+    resequencing from partial (and report it) instead of assuming success.
+    """
     col_acct = col_map.get("account")
     if not col_acct:
-        return
+        return 0
 
+    # Normalized on both sides so a numeric Excel cell still matches the
+    # text printed in the PDF.
     acct_to_rows = defaultdict(list)
     for r in all_rows:
-        acct = safe_str(ws.cell(row=r, column=col_acct).value)
+        acct = normalize_account(ws.cell(row=r, column=col_acct).value)
         if acct:
             acct_to_rows[acct].append(r)
 
@@ -293,6 +378,7 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
                     new_row_order.append(r)
                     used_rows.add(r)
 
+    matched_rows = len(used_rows)
     for r in all_rows:
         if r not in used_rows:
             new_row_order.append(r)
@@ -374,6 +460,8 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
             cell.number_format = data["number_format"]
 
 
+    return matched_rows
+
 def _json_safe(val):
     """Convert cell values that json can't serialize (dates/times) to strings."""
     if isinstance(val, (datetime, date)):
@@ -446,19 +534,29 @@ def validate_workbook(
         # PDF is optional: without one, row order is left exactly as-is.
         pdf_applied = False
         pdf_warning = None
+        pdf_matched_rows = 0
         if pdf_path:
             report(15, "Parsing PDF sequence…")
-            pdf_accounts = extract_accounts_from_pdf(pdf_path)
+            # Search the PDF for the accounts this workbook actually contains,
+            # rather than for a guessed digit pattern.
+            wanted = sheet_accounts(ws, col_map, all_rows)
+            pdf_accounts = extract_accounts_from_pdf(pdf_path, known_accounts=wanted)
             if pdf_accounts:
                 report(20, "Rearranging rows by PDF…")
-                rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts)
+                pdf_matched_rows = rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts)
                 rearrange_rows_by_pdf(ws_data, col_map, all_rows, pdf_accounts)
-                pdf_applied = True
-            else:
-                # Reported rather than raised: the validation itself is fine.
+                pdf_applied = pdf_matched_rows > 0
+                if 0 < pdf_matched_rows < len(all_rows):
+                    # Partial matches used to pass silently; say so explicitly.
+                    pdf_warning = (
+                        f"{pdf_matched_rows} of {len(all_rows)} rows were matched to the PDF. "
+                        "Unmatched rows keep their original order."
+                    )
+                    logger.warning(pdf_warning)
+            if not pdf_applied:
                 pdf_warning = (
-                    "No account numbers could be read from the PDF, so row order "
-                    "was left unchanged. The workbook was still validated."
+                    "None of this workbook's account numbers were found in the PDF, so "
+                    "row order was left unchanged. The workbook was still validated."
                 )
                 logger.warning(pdf_warning)
 
@@ -488,6 +586,7 @@ def validate_workbook(
             "total_issues": sum(len(v) for v in summary.values()),
             "rows_scanned": len(all_rows),
             "pdf_applied": pdf_applied,
+            "pdf_matched_rows": pdf_matched_rows,
             "pdf_warning": pdf_warning,
         }
 
