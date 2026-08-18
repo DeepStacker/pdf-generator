@@ -292,8 +292,11 @@ class TestClosedTopupClean:
             "ornaments_diff", "spur_count", "spur_pct", "carat_count", "uncommon_count",
         ):
             assert cell_of(ws, r, key).value == 0, key
-        for key in ("gdr_no", "magnet", "tampered", "renewal_date"):
+        for key in ("gdr_no", "magnet", "tampered"):
             assert cell_of(ws, r, key).value is None, key
+        # The Renewal/Closed date is real loan data and must survive on a
+        # top-up row, not just on a closed one.
+        assert cell_of(ws, r, "renewal_date").value == "01-05-2026"
         # Identity/loan columns untouched
         assert cell_of(ws, r, "packet").value == "P02"
         assert cell_of(ws, r, "status").value == "FRESH"

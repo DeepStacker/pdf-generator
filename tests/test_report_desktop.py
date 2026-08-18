@@ -387,3 +387,205 @@ class TestNormalizeAccount:
     )
     def test_forms_that_must_compare_equal(self, raw, expected):
         assert rv.normalize_account(raw) == expected
+
+
+class TestFormulasFollowTheirRow:
+    """A moved row's formulas must compute from the row it now occupies.
+
+    Reordering used to copy formula text verbatim, so a row that moved to 46
+    still carried "=I26-J26" — the sheet showed another loan's arithmetic, and
+    the cells read blank once the referenced row changed.
+    """
+
+    @pytest.mark.parametrize(
+        "formula,old,new,expected",
+        [
+            ("=I26-J26", 26, 46, "=I46-J46"),
+            ("=ROUND((Q26/I26)*100,2)", 26, 46, "=ROUND((Q46/I46)*100,2)"),
+            ("=I$26-J26", 26, 46, "=I$26-J46"),      # absolute row pinned
+            ("=SUM(I2:I5)+I26", 26, 46, "=SUM(I2:I5)+I46"),  # other rows untouched
+            ("=0.000", 26, 46, "=0.000"),
+            ("=I26-J26", 26, 26, "=I26-J26"),        # no move, no change
+        ],
+    )
+    def test_retarget_rules(self, formula, old, new, expected):
+        assert rv.retarget_formula(formula, old, new) == expected
+
+    def test_non_formula_values_are_untouched(self):
+        for value in (0.5, None, "TEXT", 12, "=notaref"):
+            assert rv.retarget_formula(value, 1, 9) == value
+
+    def test_formulas_are_repointed_when_rows_move(self, tmp_path):
+        from openpyxl.utils import get_column_letter
+
+        accounts = ["100200300401", "100200300402", "100200300403"]
+        rows = []
+        for i, acct in enumerate(accounts, 1):
+            row = good_row(f"P{i:02d}")
+            row["account"] = acct
+            rows.append(row)
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        gd = KEY_TO_COL["gross_diff"]
+        gg = get_column_letter(KEY_TO_COL["gdr_gross"])
+        ag = get_column_letter(KEY_TO_COL["actual_gross"])
+        wb = openpyxl.load_workbook(src)
+        ws = wb[SHEET]
+        for r in (5, 6, 7):
+            ws.cell(row=r, column=gd).value = f"={gg}{r}-{ag}{r}"
+        wb.save(src)
+        wb.close()
+
+        wb = openpyxl.load_workbook(src)
+        ws = wb[SHEET]
+        col_map = rv.build_col_map(rv.map_columns(ws))
+        rv.rearrange_rows_by_pdf(ws, col_map, [5, 6, 7], list(reversed(accounts)))
+
+        for r in (5, 6, 7):
+            assert ws.cell(row=r, column=gd).value == f"={gg}{r}-{ag}{r}", (
+                f"row {r} formula points at the wrong row"
+            )
+
+    def test_saved_file_asks_excel_to_recalculate(self, tmp_path):
+        """openpyxl drops cached results, so formula cells open blank without this."""
+        import re as _re
+        import zipfile
+
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [good_row("P01", gross_diff=9.9)])
+        result = rv.validate_workbook(src)
+
+        with zipfile.ZipFile(result["output_path"]) as z:
+            workbook_xml = z.read("xl/workbook.xml").decode()
+        calc = _re.search(r"<calcPr[^>]*/>", workbook_xml)
+        assert calc and 'fullCalcOnLoad="1"' in calc.group(0)
+
+
+class TestSequenceGapsArePreserved:
+    """The PDF is the master order: a missing entry leaves an empty slot."""
+
+    def _run(self, tmp_path, workbook_accounts, pdf_accounts):
+        rows = []
+        for i, acct in enumerate(workbook_accounts, 1):
+            row = good_row(f"P{i:03d}")
+            row["account"] = acct
+            rows.append(row)
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+        pdf = tmp_path / "seq.pdf"
+        _make_pdf(pdf, [f"A/c {a}" for a in pdf_accounts])
+        result = rv.validate_workbook(src, pdf_path=str(pdf))
+        wb = openpyxl.load_workbook(result["output_path"])
+        return result, wb[SHEET]
+
+    def test_missing_entries_leave_blank_rows_in_position(self, tmp_path):
+        pdf_accounts = [f"9002003004{i:05d}" for i in range(1, 21)]
+        missing = set(pdf_accounts[10:15])                       # entries 11-15
+        workbook = [a for a in pdf_accounts if a not in missing]
+
+        result, ws = self._run(tmp_path, workbook, pdf_accounts)
+
+        assert result["pdf_gap_rows"] == 5
+        assert result["pdf_matched_rows"] == len(workbook)
+
+        acct_col = KEY_TO_COL["account"]
+        laid_out = [ws.cell(row=5 + i, column=acct_col).value for i in range(len(pdf_accounts))]
+        for i, expected in enumerate(pdf_accounts):
+            if expected in missing:
+                assert laid_out[i] is None, f"sequence {i+1} should be blank"
+            else:
+                assert str(laid_out[i]) == expected, f"sequence {i+1} out of position"
+
+    def test_rows_after_a_gap_keep_their_pdf_position(self, tmp_path):
+        """The whole point: later rows must not shift up by the missing count."""
+        pdf_accounts = [f"9002003004{i:05d}" for i in range(1, 11)]
+        workbook = [a for i, a in enumerate(pdf_accounts) if i != 3]
+
+        _result, ws = self._run(tmp_path, workbook, pdf_accounts)
+
+        acct_col = KEY_TO_COL["account"]
+        # sequence 5 (index 4) must still land on its own row, not move up
+        assert str(ws.cell(row=5 + 4, column=acct_col).value) == pdf_accounts[4]
+
+    def test_gap_row_is_empty_but_keeps_borders(self, tmp_path):
+        from copy import copy as _copy
+
+        pdf_accounts = ["100200300401", "100200300499", "100200300402"]
+        workbook = ["100200300401", "100200300402"]
+
+        rows = []
+        for i, acct in enumerate(workbook, 1):
+            row = good_row(f"P{i:02d}")
+            row["account"] = acct
+            rows.append(row)
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+        wb = openpyxl.load_workbook(src)
+        ws = wb[SHEET]
+        for r in (5, 6):
+            for c in range(1, 30):
+                ws.cell(row=r, column=c).border = _copy(rv.THIN_BORDER)
+        wb.save(src)
+        wb.close()
+
+        pdf = tmp_path / "seq.pdf"
+        _make_pdf(pdf, [f"A/c {a}" for a in pdf_accounts])
+        result = rv.validate_workbook(src, pdf_path=str(pdf))
+
+        wb = openpyxl.load_workbook(result["output_path"])
+        ws = wb[SHEET]
+        gap = ws.cell(row=6, column=KEY_TO_COL["account"])
+        assert gap.value is None
+        assert gap.border.left.style, "gap row lost the table border"
+
+    def test_rows_absent_from_the_pdf_go_after_the_sequence(self, tmp_path):
+        pdf_accounts = ["100200300401", "100200300402"]
+        workbook = ["100200300401", "100200300402", "100200300477"]
+
+        result, ws = self._run(tmp_path, workbook, pdf_accounts)
+
+        acct_col = KEY_TO_COL["account"]
+        laid_out = [str(ws.cell(row=5 + i, column=acct_col).value) for i in range(3)]
+        assert laid_out == ["100200300401", "100200300402", "100200300477"]
+        assert result["pdf_gap_rows"] == 0
+
+    def test_blank_rows_are_not_validated_or_flagged(self, tmp_path):
+        """A gap row holds no data and must not raise findings of its own."""
+        pdf_accounts = [f"9002003004{i:05d}" for i in range(1, 6)]
+        workbook = [a for i, a in enumerate(pdf_accounts) if i != 2]
+
+        result, _ws = self._run(tmp_path, workbook, pdf_accounts)
+
+        assert result["pdf_gap_rows"] == 1
+        # a blank row would otherwise trip magnet/tampered/ornament checks
+        assert result["summary"].get("magnet_not_ok", 0) == 0
+        assert result["summary"].get("ornaments_gdr_non_positive", 0) == 0
+
+
+class TestTopUpKeepsItsDate:
+    def test_renewal_date_survives_on_a_top_up_row(self, tmp_path):
+        rows = [
+            good_row("P01"),
+            good_row("P02", remarks="Top Up of account 123", renewal_date="01-05-2026"),
+        ]
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        rv.validate_workbook(src)
+        wb = openpyxl.load_workbook(tmp_path / "TESTBR_Audit-MIS_UNKNOWN_DATE.xlsx")
+        ws = wb[SHEET]
+        assert ws.cell(row=6, column=KEY_TO_COL["renewal_date"]).value == "01-05-2026"
+
+    def test_resolved_top_up_keeps_its_date_too(self, tmp_path):
+        """Pass 2 resolves an empty packet by name; it must not wipe the date."""
+        first = good_row("P01", applicant="SHARED NAME")
+        second = good_row("P02", applicant="SHARED NAME", renewal_date="01-05-2026")
+        second["packet"] = None
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [first, second])
+
+        rv.validate_workbook(src)
+        wb = openpyxl.load_workbook(tmp_path / "TESTBR_Audit-MIS_UNKNOWN_DATE.xlsx")
+        ws = wb[SHEET]
+        assert ws.cell(row=6, column=KEY_TO_COL["renewal_date"]).value == "01-05-2026"

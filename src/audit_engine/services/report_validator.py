@@ -297,44 +297,73 @@ def extract_accounts_from_pdf(pdf_path, known_accounts=None):
         logger.warning("No extractable text in %s (a scanned/image PDF needs OCR).", pdf_path)
         return []
 
-    if not known_accounts:
-        # No workbook context: fall back to plain digit runs, one line at a
-        # time so separate numbers on separate lines never merge.
-        runs = []
-        for line in text.splitlines():
-            for raw in re.findall(r"\d[\d \t\-]{4,}\d", line):
-                digits = re.sub(r"\D", "", raw)
-                if len(digits) >= 6:
-                    runs.append(digits)
-        return runs
+    known = {a for a in (normalize_account(k) for k in (known_accounts or ())) if a}
 
-    known = {a for a in (normalize_account(k) for k in known_accounts) if a}
+    # The workbook's own accounts define the account *shape* (how many digits);
+    # every entry of that shape is then found in the PDF, including ones the
+    # workbook does not contain — those are exactly the sequence positions that
+    # must be left blank. With no workbook context (direct/CLI use), accept the
+    # common account lengths instead.
+    lengths = sorted({len(a) for a in known}, reverse=True) if known else list(range(18, 7, -1))
+
+    # Exactly L digits, tolerating a single separator between them, and not
+    # butted against further digits — so "1002-0030-0401 100200300402" reads
+    # as two entries and a longer number is not mistaken for an account.
+    pattern = "|".join(rf"(?<!\d)(?:\d[\s\-]?){{{length - 1}}}\d(?!\d)" for length in lengths)
+
+    found = []
+    for m in re.finditer(pattern, text):
+        digits = re.sub(r"\D", "", m.group(0))
+        if digits:
+            found.append((m.start(), digits))
+
     if not known:
-        return []
+        return [d for _pos, d in found]
 
-    # Scan each line's digits for the known accounts, left to right, longest
-    # first. Working per line (and on digits only) means the account is found
-    # whether the PDF prints it plain, spaced, or hyphenated, while a line
-    # break can never fuse two different numbers into one unmatchable blob.
-    lengths = sorted({len(a) for a in known}, reverse=True)
+    # The strict boundary above is what makes discovering *unknown* entries
+    # safe, but it also skips a known account printed inside a longer digit
+    # run ("Ref#77<account>X"). Those are known to be real accounts, so look
+    # for any that the scan missed and slot them in at their position.
+    seen_digits = {d for _pos, d in found}
+    for acct in known - seen_digits:
+        m = re.search(r"[\s\-]?".join(acct), text)
+        if m:
+            found.append((m.start(), acct))
+
+    found.sort(key=lambda pair: pair[0])
+
+    # Keep PDF order; drop repeats so a summary line cannot duplicate a slot.
     ordered, seen = [], set()
-    for line in text.splitlines():
-        digits = re.sub(r"\D", "", line)
-        i, n = 0, len(digits)
-        while i < n:
-            hit = None
-            for length in lengths:
-                if i + length <= n and digits[i:i + length] in known:
-                    hit = digits[i:i + length]
-                    break
-            if hit:
-                if hit not in seen:
-                    ordered.append(hit)
-                    seen.add(hit)
-                i += len(hit)
-            else:
-                i += 1
+    for _pos, acct in found:
+        if acct not in seen:
+            ordered.append(acct)
+            seen.add(acct)
     return ordered
+
+
+# A1-style reference: optional $ before the column and/or the row.
+_CELL_REF_RE = re.compile(r"(\$?)([A-Z]{1,3})(\$?)(\d+)")
+
+
+def retarget_formula(formula, old_row, new_row):
+    """Repoint a moved row's own-row references at the row it now occupies.
+
+    These sheets use same-row arithmetic (``=I26-J26`` on row 26). Copying that
+    text to row 46 as-is leaves it computing from row 26 — the row shows a
+    formula for a different loan, or blanks once the referenced row changes.
+    Only relative references to the row's *own* row are shifted; absolute rows
+    ($26) and references to other rows are left exactly as written.
+    """
+    if old_row == new_row or not isinstance(formula, str) or not formula.startswith("="):
+        return formula
+
+    def _sub(m):
+        dollar_col, col, dollar_row, row = m.groups()
+        if not dollar_row and int(row) == old_row:
+            return f"{dollar_col}{col}{dollar_row}{new_row}"
+        return m.group(0)
+
+    return _CELL_REF_RE.sub(_sub, formula)
 
 
 def sheet_accounts(ws, col_map, all_rows):
@@ -351,37 +380,45 @@ def sheet_accounts(ws, col_map, all_rows):
 
 
 def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
-    """Reorder data rows to match the PDF's account sequence.
+    """Lay the data rows out in the PDF's account order.
 
-    Returns the number of rows placed by the PDF, so the caller can tell full
-    resequencing from partial (and report it) instead of assuming success.
+    The PDF is the master sequence. Every entry in it gets a slot: if the
+    workbook has that account the row moves there, and if it does not the slot
+    is left as an empty (but still bordered) row, so every later row keeps
+    lining up with the PDF's position instead of shifting up by the number of
+    missing entries. Rows whose account never appears in the PDF are placed
+    after the sequence rather than being interleaved.
+
+    Returns {"matched": rows placed from the PDF, "blank_rows": [row numbers
+    left empty], "last_row": last row written}.
     """
     col_acct = col_map.get("account")
-    if not col_acct:
-        return 0
+    if not col_acct or not all_rows:
+        return {"matched": 0, "blank_rows": [], "last_row": all_rows[-1] if all_rows else 0}
 
-    # Normalized on both sides so a numeric Excel cell still matches the
-    # text printed in the PDF.
+    # Normalized on both sides so a numeric Excel cell still matches the text
+    # printed in the PDF.
     acct_to_rows = defaultdict(list)
     for r in all_rows:
         acct = normalize_account(ws.cell(row=r, column=col_acct).value)
         if acct:
             acct_to_rows[acct].append(r)
 
-    new_row_order = []
+    # One slot per PDF entry; None means "no such row in the workbook".
+    slots = []
     used_rows = set()
-
     for acct in pdf_accounts:
-        if acct in acct_to_rows:
-            for r in acct_to_rows[acct]:
-                if r not in used_rows:
-                    new_row_order.append(r)
-                    used_rows.add(r)
+        rows_for_acct = [r for r in acct_to_rows.get(acct, ()) if r not in used_rows]
+        if rows_for_acct:
+            for r in rows_for_acct:
+                slots.append(r)
+                used_rows.add(r)
+        else:
+            slots.append(None)
 
     matched_rows = len(used_rows)
-    for r in all_rows:
-        if r not in used_rows:
-            new_row_order.append(r)
+    # Rows the PDF never mentions follow the sequence.
+    slots.extend(r for r in all_rows if r not in used_rows)
 
     # Bound the column range to the true data width: the rightmost column that
     # holds an actual value in the header rows or the data rows. This keeps
@@ -402,37 +439,48 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
     if known_cols:
         max_val_col = max(max_val_col, *known_cols)
     max_col = min(ws.max_column, max_val_col + 2) if max_val_col else min(ws.max_column, 150)
-    row_data_cache = {}
-    row_heights = {}
 
-    for r in all_rows:
-        row_heights[r] = ws.row_dimensions[r].height
-        cells_dict = {}
+    def _snapshot(r):
+        cells = {}
         for c in range(1, max_col + 1):
             cell = ws.cell(row=r, column=c)
-            if cell.has_style:
-                cells_dict[c] = {
-                    "value": cell.value,
-                    "font": copy(cell.font) if cell.font else None,
-                    "fill": copy(cell.fill) if cell.fill else None,
-                    "border": copy(cell.border) if cell.border else None,
-                    "alignment": copy(cell.alignment) if cell.alignment else None,
-                    "number_format": cell.number_format,
-                }
-            else:
-                cells_dict[c] = {
-                    "value": cell.value,
-                    "font": None,
-                    "fill": None,
-                    "border": None,
-                    "alignment": None,
-                    "number_format": cell.number_format,
-                }
-        row_data_cache[r] = cells_dict
+            styled = cell.has_style
+            cells[c] = {
+                "value": cell.value,
+                "font": copy(cell.font) if styled and cell.font else None,
+                "fill": copy(cell.fill) if styled and cell.fill else None,
+                "border": copy(cell.border) if styled and cell.border else None,
+                "alignment": copy(cell.alignment) if styled and cell.alignment else None,
+                "number_format": cell.number_format,
+            }
+        return cells
 
-    for new_r, old_r in zip(all_rows, new_row_order):
-        ws.row_dimensions[new_r].height = row_heights[old_r]
-        cells_dict = row_data_cache[old_r]
+    row_data_cache = {r: _snapshot(r) for r in all_rows}
+    row_heights = {r: ws.row_dimensions[r].height for r in all_rows}
+
+    # Borders for a gap row are taken from the first data row so the table
+    # stays visually continuous where an entry is missing.
+    template = row_data_cache[all_rows[0]]
+
+    first_row = all_rows[0]
+    blank_rows = []
+    for offset, src in enumerate(slots):
+        new_r = first_row + offset
+        if src is None:
+            blank_rows.append(new_r)
+            ws.row_dimensions[new_r].height = row_heights[all_rows[0]]
+            for c in range(1, max_col + 1):
+                cell = ws.cell(row=new_r, column=c)
+                cell.value = None
+                cell.font = Font()
+                cell.fill = PatternFill()
+                cell.border = copy(template[c]["border"]) if template[c]["border"] else Border()
+                cell.alignment = copy(template[c]["alignment"]) if template[c]["alignment"] else Alignment()
+                cell.number_format = template[c]["number_format"]
+            continue
+
+        ws.row_dimensions[new_r].height = row_heights[src]
+        cells_dict = row_data_cache[src]
         for c in range(1, max_col + 1):
             cell = ws.cell(row=new_r, column=c)
             data = cells_dict[c]
@@ -440,7 +488,9 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
             # reset to defaults — otherwise the moved row keeps the previous
             # occupant's formatting.
             target_had_style = cell.has_style
-            cell.value = data["value"]
+            # A formula must follow the row it belongs to, not keep pointing
+            # at the row number it was written for.
+            cell.value = retarget_formula(data["value"], src, new_r)
             if data["font"]:
                 cell.font = data["font"]
             elif target_had_style:
@@ -459,8 +509,18 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
                 cell.alignment = Alignment()
             cell.number_format = data["number_format"]
 
+    last_row = first_row + len(slots) - 1
+    # The layout can be shorter than the original block (duplicate accounts
+    # collapse); wipe anything left over so stale rows are not orphaned below.
+    for r in range(last_row + 1, all_rows[-1] + 1):
+        for c in range(1, max_col + 1):
+            cell = ws.cell(row=r, column=c)
+            cell.value = None
+            cell.fill = PatternFill()
+            cell.border = Border()
 
-    return matched_rows
+    return {"matched": matched_rows, "blank_rows": blank_rows, "last_row": last_row}
+
 
 def _json_safe(val):
     """Convert cell values that json can't serialize (dates/times) to strings."""
@@ -535,6 +595,7 @@ def validate_workbook(
         pdf_applied = False
         pdf_warning = None
         pdf_matched_rows = 0
+        pdf_gap_rows = 0
         if pdf_path:
             report(15, "Parsing PDF sequence…")
             # Search the PDF for the accounts this workbook actually contains,
@@ -543,15 +604,33 @@ def validate_workbook(
             pdf_accounts = extract_accounts_from_pdf(pdf_path, known_accounts=wanted)
             if pdf_accounts:
                 report(20, "Rearranging rows by PDF…")
-                pdf_matched_rows = rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts)
+                original_count = len(all_rows)
+                layout = rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts)
                 rearrange_rows_by_pdf(ws_data, col_map, all_rows, pdf_accounts)
+                pdf_matched_rows = layout["matched"]
                 pdf_applied = pdf_matched_rows > 0
-                if 0 < pdf_matched_rows < len(all_rows):
-                    # Partial matches used to pass silently; say so explicitly.
-                    pdf_warning = (
-                        f"{pdf_matched_rows} of {len(all_rows)} rows were matched to the PDF. "
-                        "Unmatched rows keep their original order."
+                pdf_gap_rows = len(layout["blank_rows"])
+
+                # The layout may be longer than the source block (a gap row is
+                # added wherever the PDF lists an account the workbook lacks),
+                # so the row range has to be re-derived. Gap rows are excluded:
+                # they hold no data and must not be validated or flagged.
+                blanks = set(layout["blank_rows"])
+                all_rows = [r for r in range(all_rows[0], layout["last_row"] + 1) if r not in blanks]
+
+                notes = []
+                if pdf_matched_rows < original_count:
+                    notes.append(
+                        f"{pdf_matched_rows} of {original_count} rows were matched to the PDF; "
+                        "unmatched rows were placed after the sequence"
                     )
+                if pdf_gap_rows:
+                    notes.append(
+                        f"{pdf_gap_rows} row(s) left blank where the PDF lists an account "
+                        "this workbook does not contain"
+                    )
+                if notes:
+                    pdf_warning = ". ".join(notes) + "."
                     logger.warning(pdf_warning)
             if not pdf_applied:
                 pdf_warning = (
@@ -587,6 +666,7 @@ def validate_workbook(
             "rows_scanned": len(all_rows),
             "pdf_applied": pdf_applied,
             "pdf_matched_rows": pdf_matched_rows,
+            "pdf_gap_rows": pdf_gap_rows,
             "pdf_warning": pdf_warning,
         }
 
@@ -596,6 +676,11 @@ def validate_workbook(
 
         report(85, "Saving validated workbook…")
         out_path.parent.mkdir(parents=True, exist_ok=True)
+        # openpyxl does not carry cached formula results into the saved file, so
+        # every formula cell would open blank until something recalculates it.
+        # Ask Excel to do a full recalculation on load.
+        with contextlib.suppress(AttributeError):
+            wb.calculation.fullCalcOnLoad = True
         wb.save(str(out_path))
         result["output_path"] = str(out_path)
     finally:
@@ -878,9 +963,6 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                 col_gdr_no = col_map.get("gdr_no")
                 if col_gdr_no:
                     set_val(r, col_gdr_no, None)
-                col_renewal_date = col_map.get("renewal_date")
-                if col_renewal_date:
-                    set_val(r, col_renewal_date, None)
                 expected_remark = f"This Account No is Topup of Account no {source_acct}, with Same Paket No"
                 set_val(r, col_remarks, expected_remark)
                 summary["topup_resolved"].append(f"Row {r}: {name} → matched row {sr} (pkt {source_packet})")
@@ -940,10 +1022,9 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                 set_val(r, cc, 0)
                 highlight(r, cc, GREEN_FILL, skip_excluded=False)
                 summary["closed_topup_defaulted"].append(f"Row {r}: {label} → 0")
-        clear_cols = list(blank_cols)
-        if not is_closed:
-            clear_cols.append((col_map.get("renewal_date"), "Renewal/Closed Date"))
-        for bc, label in clear_cols:
+        # The Renewal/Closed date is real loan data on both closed and top-up
+        # rows, so it is preserved rather than blanked.
+        for bc, label in blank_cols:
             if bc:
                 v = val(r, bc)
                 if v is not None and str(v).strip() != "":
