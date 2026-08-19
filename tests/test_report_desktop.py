@@ -1020,3 +1020,53 @@ class TestAmendDiscrepancyRemark:
     )
     def test_rules(self, remark, fixed_gross, fixed_net, expected):
         assert rv.amend_discrepancy_remark(remark, fixed_gross, fixed_net) == expected
+
+
+class TestTafRowsSkipTheDifferenceColumns:
+    """A weight difference does not apply to a TAF row.
+
+    The gross/net difference columns are left exactly as the source has them
+    — no formula written, no value corrected, nothing flagged.
+    """
+
+    def _run(self, tmp_path, **over):
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [good_row("P01", **over)])
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+        return result, ws
+
+    def test_wrong_looking_diffs_are_left_alone(self, tmp_path):
+        result, ws = self._run(
+            tmp_path, taf="TAF", gdr_gross=20.5, actual_gross=20.0, tare=21.0,
+            gdr_net=19.0, actual_net=18.0, gross_diff=99.9, net_diff=88.8,
+        )
+        assert ws.cell(row=5, column=KEY_TO_COL["gross_diff"]).value == 99.9
+        assert ws.cell(row=5, column=KEY_TO_COL["net_diff"]).value == 88.8
+        assert "gross_diff_fixed" not in result["summary"]
+        assert "net_diff_fixed" not in result["summary"]
+        assert "net_diff_av_not_zero" not in result["summary"]
+
+    def test_empty_diffs_stay_empty(self, tmp_path):
+        _result, ws = self._run(tmp_path, taf="TAF", gross_diff=None, net_diff=None)
+        assert ws.cell(row=5, column=KEY_TO_COL["gross_diff"]).value is None
+        assert ws.cell(row=5, column=KEY_TO_COL["net_diff"]).value is None
+
+    def test_poa_rows_are_still_corrected(self, tmp_path):
+        """The skip must be TAF-only, not a blanket disable."""
+        result, ws = self._run(
+            tmp_path, taf="POA", gdr_gross=20.5, actual_gross=19.0,
+            gdr_net=19.0, actual_net=19.0, gross_diff=99.9, net_diff=0.0,
+        )
+        value = ws.cell(row=5, column=KEY_TO_COL["gross_diff"]).value
+        assert isinstance(value, str) and value.startswith("=")
+        assert result["summary"].get("gross_diff_fixed") == 1
+
+    def test_taf_row_is_not_weight_aligned_either(self, tmp_path):
+        """The ±0.200 absorption is POA-only and must stay that way."""
+        result, ws = self._run(
+            tmp_path, taf="TAF", gdr_gross=20.5, actual_gross=20.35,
+            gdr_net=19.0, actual_net=19.0, remarks="Gross Weight Difference",
+        )
+        assert ws.cell(row=5, column=KEY_TO_COL["actual_gross"]).value == 20.35
+        assert "weight_aligned_to_gdr" not in result["summary"]

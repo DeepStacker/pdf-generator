@@ -1370,13 +1370,14 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
             gd_n = num_or_none(val_data(r, col_gross_diff))
 
             taf_val = safe_str(val(r, col_taf)).upper().strip() if col_taf else ""
+            # A weight difference does not apply to a TAF row, so the column
+            # is left exactly as the source has it.
+            if taf_val == "TAF":
+                continue
 
             formula = None
             expected = None
-            if taf_val == "TAF" and gdr_g_n is not None and tare_n is not None:
-                formula = f"={gdr_g_let}{r}-{tare_let}{r}"
-                expected = round(gdr_g_n - tare_n, 1)
-            elif taf_val == "POA" and gdr_g_n is not None and act_g_n is not None:
+            if taf_val == "POA" and gdr_g_n is not None and act_g_n is not None:
                 formula = f"={gdr_g_let}{r}-{act_g_let}{r}"
                 expected = round(gdr_g_n - act_g_n, 1)
             # Fallback if TAF/POA is empty
@@ -1421,16 +1422,16 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
             nd_n = num_or_none(val_data(r, col_net_diff))
 
             taf_val = safe_str(val(r, col_taf)).upper().strip() if col_taf else ""
+            # A weight difference does not apply to a TAF row, so the column
+            # is left exactly as the source has it.
+            if taf_val == "TAF":
+                continue
 
             formula = None
             expected = None
             is_taf = False
 
-            if taf_val == "TAF":
-                formula = "=0.000"
-                expected = 0.0
-                is_taf = True
-            elif taf_val == "POA" and gdr_n_n is not None and act_n_n is not None:
+            if taf_val == "POA" and gdr_n_n is not None and act_n_n is not None:
                 formula = f"={gdr_n_let}{r}-{act_n_let}{r}"
                 expected = round(gdr_n_n - act_n_n, 1)
             # Fallback if TAF/POA is empty
