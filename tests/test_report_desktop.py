@@ -902,3 +902,121 @@ class TestAutoUpdate:
 
         c.update_state.staged_version = "v9.9.9"
         assert h.handle_update_check()["staged"] is True
+
+
+class TestSmallPoaWeightDifferences:
+    """A POA gross/net difference within ±0.200 is weighing noise.
+
+    The FCU figure is aligned to the GDR figure and the row's discrepancy
+    remark is reduced to whatever is still outstanding.
+    """
+
+    def _run(self, tmp_path, **over):
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [good_row("P01", **over)])
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+        return result, ws
+
+    def _cell(self, ws, key):
+        return ws.cell(row=5, column=KEY_TO_COL[key])
+
+    def test_gross_within_tolerance_is_aligned_and_remark_cleared(self, tmp_path):
+        _r, ws = self._run(
+            tmp_path, taf="POA", gdr_gross=20.5, actual_gross=20.35,
+            gdr_net=19.0, actual_net=19.0, remarks="Gross Weight Difference",
+        )
+        assert self._cell(ws, "actual_gross").value == 20.5
+        assert self._cell(ws, "remarks").value == "Ok - No Discrepancy"
+
+    def test_net_within_tolerance_is_aligned_and_remark_cleared(self, tmp_path):
+        _r, ws = self._run(
+            tmp_path, taf="POA", gdr_gross=20.5, actual_gross=20.5,
+            gdr_net=19.0, actual_net=18.9, remarks="Net Weight Difference",
+        )
+        assert self._cell(ws, "actual_net").value == 19.0
+        assert self._cell(ws, "remarks").value == "Ok - No Discrepancy"
+
+    @pytest.mark.parametrize("delta", [0.2, -0.2])
+    def test_the_boundary_is_inclusive(self, tmp_path, delta):
+        _r, ws = self._run(
+            tmp_path, taf="POA", gdr_gross=20.5, actual_gross=round(20.5 - delta, 3),
+            gdr_net=19.0, actual_net=19.0, remarks="Gross Weight Difference",
+        )
+        assert self._cell(ws, "actual_gross").value == 20.5
+
+    def test_just_outside_the_tolerance_is_left_alone(self, tmp_path):
+        _r, ws = self._run(
+            tmp_path, taf="POA", gdr_gross=20.5, actual_gross=20.299,
+            gdr_net=19.0, actual_net=19.0, remarks="Gross Weight Difference",
+        )
+        assert self._cell(ws, "actual_gross").value == 20.299
+        assert self._cell(ws, "remarks").value == "Gross Weight Difference"
+
+    def test_fixing_one_of_two_leaves_the_other_remark(self, tmp_path):
+        """Gross is absorbed, net is a real 0.5 shortfall — say so."""
+        _r, ws = self._run(
+            tmp_path, taf="POA", gdr_gross=20.5, actual_gross=20.35,
+            gdr_net=19.0, actual_net=18.5,
+            remarks="Gross Weight and Net Weight Difference",
+        )
+        assert self._cell(ws, "actual_gross").value == 20.5
+        assert self._cell(ws, "actual_net").value == 18.5, "a real difference must stand"
+        assert self._cell(ws, "remarks").value == "Net Weight Difference"
+
+    def test_fixing_both_clears_the_combined_remark(self, tmp_path):
+        _r, ws = self._run(
+            tmp_path, taf="POA", gdr_gross=20.5, actual_gross=20.35,
+            gdr_net=19.0, actual_net=18.85,
+            remarks="Gross Weight and Net Weight Difference",
+        )
+        assert self._cell(ws, "actual_gross").value == 20.5
+        assert self._cell(ws, "actual_net").value == 19.0
+        assert self._cell(ws, "remarks").value == "Ok - No Discrepancy"
+
+    def test_does_not_apply_to_taf_rows(self, tmp_path):
+        _r, ws = self._run(
+            tmp_path, taf="TAF", gdr_gross=20.5, actual_gross=20.35,
+            gdr_net=19.0, actual_net=19.0, remarks="Gross Weight Difference",
+        )
+        assert self._cell(ws, "actual_gross").value == 20.35
+        assert self._cell(ws, "remarks").value == "Gross Weight Difference"
+
+    def test_an_unrelated_remark_is_not_rewritten(self, tmp_path):
+        _r, ws = self._run(
+            tmp_path, taf="POA", gdr_gross=20.5, actual_gross=20.35,
+            gdr_net=19.0, actual_net=19.0, remarks="Customer not available",
+        )
+        assert self._cell(ws, "actual_gross").value == 20.5, "the weight is still corrected"
+        assert self._cell(ws, "remarks").value == "Customer not available"
+
+    def test_alignment_is_reported(self, tmp_path):
+        result, _ws = self._run(
+            tmp_path, taf="POA", gdr_gross=20.5, actual_gross=20.35,
+            gdr_net=19.0, actual_net=19.0, remarks="Gross Weight Difference",
+        )
+        assert result["summary"].get("weight_aligned_to_gdr") == 1
+        assert result["summary"].get("discrepancy_remark_amended") == 1
+
+
+class TestAmendDiscrepancyRemark:
+    @pytest.mark.parametrize(
+        "remark,fixed_gross,fixed_net,expected",
+        [
+            ("Gross Weight and Net Weight Difference", True, False, "Net Weight Difference"),
+            ("Gross Weight and Net Weight Difference", False, True, "Gross Weight Difference"),
+            ("Gross Weight and Net Weight Difference", True, True, "Ok - No Discrepancy"),
+            ("Gross Weight Difference", True, False, "Ok - No Discrepancy"),
+            ("Net Weight Difference", False, True, "Ok - No Discrepancy"),
+            # fixing the other column leaves this one's remark as it was
+            ("Gross Weight Difference", False, True, "Gross Weight Difference"),
+            ("Net Weight Difference", True, False, "Net Weight Difference"),
+            # spacing/case in the source must not matter
+            ("gross weight  and net weight difference", True, False, "Net Weight Difference"),
+            # anything else is left to the humans
+            ("Customer not available", True, True, None),
+            ("", True, True, None),
+        ],
+    )
+    def test_rules(self, remark, fixed_gross, fixed_net, expected):
+        assert rv.amend_discrepancy_remark(remark, fixed_gross, fixed_net) == expected

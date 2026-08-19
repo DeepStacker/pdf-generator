@@ -114,6 +114,48 @@ def build_col_map(col):
     }
 
 
+# The weight-discrepancy remarks the report uses, and the text that replaces
+# them once nothing is outstanding.
+GROSS_DIFF_REMARK = "Gross Weight Difference"
+NET_DIFF_REMARK = "Net Weight Difference"
+BOTH_DIFF_REMARK = "Gross Weight and Net Weight Difference"
+NO_DISCREPANCY_REMARK = "Ok - No Discrepancy"
+
+# A gross/net difference no larger than this is measurement noise rather than
+# a real discrepancy.
+WEIGHT_MATCH_TOLERANCE = 0.200
+
+
+def amend_discrepancy_remark(remark, fixed_gross, fixed_net):
+    """Rewrite a weight-discrepancy remark to name only what is still outstanding.
+
+    Returns the replacement text, or None when the remark is not one of the
+    discrepancy remarks and should be left exactly as it is.
+    """
+    normalized = re.sub(r"\s+", " ", str(remark or "")).strip().upper()
+    if not normalized:
+        return None
+
+    # Check the combined wording first: it contains "NET WEIGHT DIFFERENCE"
+    # as a substring, so testing the single-column wording first would
+    # misread it.
+    both = "GROSS WEIGHT AND NET WEIGHT DIFFERENCE" in normalized
+    has_gross = both or "GROSS WEIGHT DIFFERENCE" in normalized
+    has_net = both or "NET WEIGHT DIFFERENCE" in normalized
+    if not (has_gross or has_net):
+        return None
+
+    still_gross = has_gross and not fixed_gross
+    still_net = has_net and not fixed_net
+    if still_gross and still_net:
+        return BOTH_DIFF_REMARK
+    if still_gross:
+        return GROSS_DIFF_REMARK
+    if still_net:
+        return NET_DIFF_REMARK
+    return NO_DISCREPANCY_REMARK
+
+
 def is_topup_remark(remarks):
     """True if the remarks text marks the row as a top-up ("Top Up", "Top-up",
     "Topup of account ..." and similar spellings).
@@ -1251,6 +1293,60 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                 if ag_n is not None and ag_n == 0:
                     highlight(r, col_actual_gross, ORANGE_FILL)
                     summary["fresh_zero_actual_gross"].append(f"Row {r}: Fresh account but Actual Gross = 0")
+
+    # ══════════════════════════════════════════════════════════════════
+    # PASS 6b: Absorb small POA weight differences
+    # On a POA row a gross/net difference within ±0.200 is weighing noise, not
+    # a real shortfall, so the FCU figure is aligned to the GDR figure and the
+    # row's discrepancy remark is reduced to whatever is still outstanding.
+    # Runs before the diff columns are checked so those see the corrected
+    # weights.
+    # ══════════════════════════════════════════════════════════════════
+    col_gdr_gross_a = col_map.get("gdr_gross")
+    col_actual_gross_a = col_map.get("actual_gross")
+    col_gdr_net_a = col_map.get("gdr_net")
+    col_actual_net_a = col_map.get("actual_net")
+    col_taf_a = col_map.get("taf")
+    col_remarks_a = col_map.get("remarks")
+    if col_taf_a and col_gdr_gross_a and col_actual_gross_a and col_gdr_net_a and col_actual_net_a:
+        for r in all_rows:
+            if r in cleaned_rows:
+                continue
+            if safe_str(val(r, col_taf_a)).upper() != "POA":
+                continue
+
+            fixed_gross = False
+            fixed_net = False
+
+            for gdr_col, actual_col, label, flag in (
+                (col_gdr_gross_a, col_actual_gross_a, "Actual Gross", "gross"),
+                (col_gdr_net_a, col_actual_net_a, "Actual Net", "net"),
+            ):
+                gdr_v = num_or_none(val(r, gdr_col))
+                actual_v = num_or_none(val(r, actual_col))
+                if gdr_v is None or actual_v is None:
+                    continue
+                difference = gdr_v - actual_v
+                if difference == 0 or abs(difference) > WEIGHT_MATCH_TOLERANCE + 1e-9:
+                    continue
+                set_val(r, actual_col, gdr_v)
+                highlight(r, actual_col, GREEN_FILL)
+                summary["weight_aligned_to_gdr"].append(
+                    f"Row {r}: {label} {actual_v} → {gdr_v} (difference {difference:+.3f})"
+                )
+                if flag == "gross":
+                    fixed_gross = True
+                else:
+                    fixed_net = True
+
+            if (fixed_gross or fixed_net) and col_remarks_a:
+                current = safe_str(val(r, col_remarks_a))
+                amended = amend_discrepancy_remark(current, fixed_gross, fixed_net)
+                if amended is not None and amended != current:
+                    set_val(r, col_remarks_a, amended)
+                    summary["discrepancy_remark_amended"].append(
+                        f"Row {r}: '{current}' → '{amended}'"
+                    )
 
     # ══════════════════════════════════════════════════════════════════
     # PASS 7: Gross Diff formula check

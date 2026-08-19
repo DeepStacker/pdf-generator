@@ -99,8 +99,8 @@ def good_row(packet, **over):
         "tare": 21.0,
         "gross_diff": 0.5,
         "gdr_net": 19.0,
-        "actual_net": 18.8,
-        "net_diff": 0.2,
+        "actual_net": 19.0,
+        "net_diff": 0.0,
         "spur_count": 0,
         "spur_weight": 0,
         "spur_pct": 0,
@@ -183,7 +183,7 @@ class TestFormatPreservation:
         _summary, ws = run_file(tmp_path, [good_row("P01")])
         # Values were correct → still static numbers, not formulas
         assert cell_of(ws, 5, "gross_diff").value == 0.5
-        assert cell_of(ws, 5, "net_diff").value == 0.2
+        assert cell_of(ws, 5, "net_diff").value == 0.0
         assert cell_of(ws, 5, "ornaments_diff").value == 0
 
     def test_wrong_gross_diff_rewritten_and_flagged(self, tmp_path):
