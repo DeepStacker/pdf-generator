@@ -240,6 +240,7 @@ class TestTopupRemarkMatching:
             ("TopUp", True),
             ("Top  up", True),
             ("This Account No is Topup of Account no 123, with Same Paket No", True),
+            ("This Account is Top Up of Account No.123 , With Same Packet No", True),
             ("", False),
             ("Normal remark", False),
             ("Desktop Update pending", False),
@@ -333,7 +334,9 @@ class TestClosedTopupClean:
         assert summary["topup_resolved"]
         # Packet copied from the matching row, remark written
         assert cell_of(ws, 6, "packet").value == "P01"
-        assert "Topup" in str(cell_of(ws, 6, "remarks").value)
+        assert str(cell_of(ws, 6, "remarks").value) == (
+            f"This Account is Top Up of Account No.{rows[0]['account']} , With Same Packet No"
+        )
         # And the row was reset to defaults
         assert cell_of(ws, 6, "gdr_gross").value == 0
         assert cell_of(ws, 6, "gdr_no").value is None

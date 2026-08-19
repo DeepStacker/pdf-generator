@@ -1008,7 +1008,7 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                 col_gdr_no = col_map.get("gdr_no")
                 if col_gdr_no:
                     set_val(r, col_gdr_no, None)
-                expected_remark = f"This Account No is Topup of Account no {source_acct}, with Same Paket No"
+                expected_remark = f"This Account is Top Up of Account No.{source_acct} , With Same Packet No"
                 set_val(r, col_remarks, expected_remark)
                 summary["topup_resolved"].append(f"Row {r}: {name} → matched row {sr} (pkt {source_packet})")
                 resolved_packet_rows.add(r)
