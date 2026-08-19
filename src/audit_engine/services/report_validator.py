@@ -110,6 +110,7 @@ def build_col_map(col):
         "ornaments_actual": get_col(col, "ACTUAL AVAILABLE ORNAMENTS AT THE TIME OF FCU VERIFICATION"),
         "ornaments_diff": get_col(col, "DIFFRENCE IN ACTUAL ORNAMENTS"),
         "renewal_date": get_col(col, "RENEWAL/CLOSED DATE"),
+        "state": get_col(col, "STATE", "STATE NAME", "BRANCH STATE"),
     }
 
 
@@ -1089,13 +1090,15 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                     summary["closed_topup_cleared"].append(f"Row {r}: {label} cleared")
 
     # ══════════════════════════════════════════════════════════════════
-    # PASS 3b: Normalize every date to dd/mm/yyyy
+    # PASS 3b: Normalize dates to dd/mm/yyyy
     # Dates arrive as text in half a dozen spellings. Store them as real
     # dates with one display format so the sheet is consistent and anything
     # reading them back (the output filename, the outlier check) can parse
     # them without guessing.
+    # SANCTION DATE is deliberately excluded — it comes from the bank's own
+    # record and is left exactly as the source has it.
     # ══════════════════════════════════════════════════════════════════
-    for date_key in ("sanction_date", "verification_date", "renewal_date"):
+    for date_key in ("verification_date", "renewal_date"):
         dc = col_map.get(date_key)
         if not dc:
             continue
@@ -1197,6 +1200,20 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                             summary["date_outlier"].append(
                                 f"Row {r}: {label} '{val_str}' deviates from majority month/year {majority_ym[1]}/{majority_ym[0]}"
                             )
+
+    # ══════════════════════════════════════════════════════════════════
+    # PASS 4b: State not resolved
+    # An "Unknown" state means the branch could not be placed, so the row
+    # needs a human to fill it in — flag it wherever it appears, including on
+    # closed/top-up rows, since the branch's state applies regardless.
+    # ══════════════════════════════════════════════════════════════════
+    col_state = col_map.get("state")
+    if col_state:
+        for r in all_rows:
+            v = safe_str(val(r, col_state))
+            if v and "UNKNOWN" in v.upper():
+                highlight(r, col_state, ORANGE_FILL, skip_excluded=False)
+                summary["state_unknown"].append(f"Row {r}: State = '{v}'")
 
     # ══════════════════════════════════════════════════════════════════
     # PASS 5: Tampered / Magnet

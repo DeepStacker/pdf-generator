@@ -682,12 +682,25 @@ class TestDateHandling:
         for row, key, expected in [
             (5, "verification_date", datetime.datetime(2026, 5, 5)),
             (6, "verification_date", datetime.datetime(2026, 5, 6)),
-            (5, "sanction_date", datetime.datetime(2026, 1, 31)),
-            (6, "sanction_date", datetime.datetime(2026, 2, 1)),
         ]:
             cell = ws.cell(row=row, column=KEY_TO_COL[key])
             assert cell.value == expected, f"{key} on row {row}"
             assert cell.number_format == rv.DATE_NUMBER_FORMAT, f"{key} on row {row}"
+
+    def test_sanction_date_is_left_exactly_as_the_source_has_it(self, tmp_path):
+        """SANCTION DATE comes from the bank's record and must not be touched."""
+        rows = [
+            good_row("P01", sanction_date="2026-01-31"),
+            good_row("P02", sanction_date="01.02.2026"),
+        ]
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+
+        assert ws.cell(row=5, column=KEY_TO_COL["sanction_date"]).value == "2026-01-31"
+        assert ws.cell(row=6, column=KEY_TO_COL["sanction_date"]).value == "01.02.2026"
 
     def test_poa_rows_have_no_renewal_closed_date(self, tmp_path):
         rows = [good_row("P01", taf="POA", renewal_date="21-05-2026")]
@@ -750,3 +763,58 @@ class TestOutputFilename:
 
         result = rv.validate_workbook(src)
         assert result["custom_filename"].startswith("TESTBR_")
+
+
+class TestStateColumn:
+    """An unresolved state needs a human to fill it in, so flag it."""
+
+    @pytest.mark.parametrize("value", ["Unknown", "UNKNOWN", "unknown", "Unknown State"])
+    def test_unknown_state_is_highlighted(self, tmp_path, value):
+        rows = [good_row("P01"), good_row("P02", state=value)]
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+
+        flagged = ws.cell(row=6, column=KEY_TO_COL["state"])
+        assert str(flagged.fill.start_color.rgb).endswith("FF8C00"), "state cell not highlighted"
+        assert result["summary"].get("state_unknown") == 1
+
+    def test_a_real_state_is_left_alone(self, tmp_path):
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [good_row("P01", state="KARNATAKA")])
+
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+
+        cell = ws.cell(row=5, column=KEY_TO_COL["state"])
+        assert cell.value == "KARNATAKA"
+        assert not str(cell.fill.start_color.rgb).endswith("FF8C00")
+        assert "state_unknown" not in result["summary"]
+
+    def test_flagged_even_on_a_top_up_row(self, tmp_path):
+        """The branch's state applies regardless of the row's status."""
+        rows = [
+            good_row("P01"),
+            good_row("P02", state="Unknown", remarks="Top Up of account 999"),
+        ]
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        result = rv.validate_workbook(src)
+        assert result["summary"].get("state_unknown") == 1
+
+    def test_missing_state_column_is_not_an_error(self, tmp_path):
+        """Sheets without a STATE column must still validate."""
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [good_row("P01")])
+        wb = openpyxl.load_workbook(src)
+        ws = wb[SHEET]
+        ws.cell(row=2, column=KEY_TO_COL["state"]).value = None
+        ws.cell(row=5, column=KEY_TO_COL["state"]).value = None
+        wb.save(src)
+        wb.close()
+
+        result = rv.validate_workbook(src)
+        assert "state_unknown" not in result["summary"]

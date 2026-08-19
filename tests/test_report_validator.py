@@ -52,6 +52,7 @@ HEADERS = [
     ("ornaments_diff", "DIFFRENCE IN ACTUAL ORNAMENTS"),
     ("renewal_date", "RENEWAL/CLOSED DATE"),
     ("branch", "BRANCH NAME"),
+    ("state", "STATE"),
 ]
 
 KEY_TO_COL = {k: i for i, (k, _h) in enumerate(HEADERS, start=1)}
@@ -110,6 +111,7 @@ def good_row(packet, **over):
         "ornaments_actual": 5,
         "ornaments_diff": 0,
         "branch": "TESTBR",
+        "state": "MAHARASHTRA",
     }
     row.update(over)
     return row
