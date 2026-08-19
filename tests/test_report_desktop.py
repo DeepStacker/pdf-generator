@@ -5,6 +5,7 @@ any kind: the UI talks to Python through the in-process WebViewBridge, passing
 JSON strings only. These tests drive that exact path.
 """
 
+import datetime
 import json
 import time
 
@@ -572,10 +573,9 @@ class TestTopUpKeepsItsDate:
         src = tmp_path / "B.xlsx"
         make_workbook(src, rows)
 
-        rv.validate_workbook(src)
-        wb = openpyxl.load_workbook(tmp_path / "TESTBR_Audit-MIS_UNKNOWN_DATE.xlsx")
-        ws = wb[SHEET]
-        assert ws.cell(row=6, column=KEY_TO_COL["renewal_date"]).value == "01-05-2026"
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+        assert ws.cell(row=6, column=KEY_TO_COL["renewal_date"]).value == datetime.datetime(2026, 5, 1)
 
     def test_resolved_top_up_keeps_its_date_too(self, tmp_path):
         """Pass 2 resolves an empty packet by name; it must not wipe the date."""
@@ -585,7 +585,168 @@ class TestTopUpKeepsItsDate:
         src = tmp_path / "B.xlsx"
         make_workbook(src, [first, second])
 
-        rv.validate_workbook(src)
-        wb = openpyxl.load_workbook(tmp_path / "TESTBR_Audit-MIS_UNKNOWN_DATE.xlsx")
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+        assert ws.cell(row=6, column=KEY_TO_COL["renewal_date"]).value == datetime.datetime(2026, 5, 1)
+
+
+def _styled_workbook(path, rows, size=10, horizontal="center"):
+    """Write a workbook whose data cells carry the document's own styling."""
+    from copy import copy as _copy
+
+    from openpyxl.styles import Alignment, Font
+
+    make_workbook(path, rows)
+    wb = openpyxl.load_workbook(path)
+    ws = wb[SHEET]
+    font = Font(name="Calibri", size=size)
+    align = Alignment(horizontal=horizontal, vertical="center")
+    for r in range(5, 5 + len(rows)):
+        for c in range(1, len(KEY_TO_COL) + 1):
+            cell = ws.cell(row=r, column=c)
+            cell.font = _copy(font)
+            cell.alignment = _copy(align)
+    wb.save(path)
+    wb.close()
+
+
+class TestWrittenCellsMatchTheDocument:
+    """Values we write must adopt the sheet's own font/alignment.
+
+    A value written into a previously empty cell otherwise lands with Excel's
+    defaults (left-aligned, Calibri 11) — which is how a resolved packet
+    number came out neither centred nor at the document's font size.
+    """
+
+    def test_resolved_packet_adopts_column_font_and_alignment(self, tmp_path):
+        first = good_row("P01", applicant="SHARED NAME")
+        second = good_row("P02", applicant="SHARED NAME")
+        second["packet"] = None
+        src = tmp_path / "B.xlsx"
+        _styled_workbook(src, [first, second])
+
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+
+        packet = ws.cell(row=6, column=KEY_TO_COL["packet"])
+        assert packet.value == "P01", "packet was not resolved"
+        assert packet.alignment.horizontal == "center"
+        assert packet.font.size == 10
+        assert packet.font.name == "Calibri"
+
+    def test_existing_cells_are_never_restyled(self, tmp_path):
+        """We only fill blanks — populated cells keep exactly what they had."""
+        src = tmp_path / "B.xlsx"
+        _styled_workbook(src, [good_row("P01"), good_row("P02")], size=10, horizontal="right")
+
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+
+        for key in ("applicant", "account", "status", "gdr_gross"):
+            cell = ws.cell(row=5, column=KEY_TO_COL[key])
+            assert cell.alignment.horizontal == "right", key
+            assert cell.font.size == 10, key
+            assert cell.font.name == "Calibri", key
+
+
+class TestTopUpKeepsExpectedReadings:
+    def test_magnet_and_tampered_carry_their_defaults(self, tmp_path):
+        rows = [
+            good_row("P01"),
+            good_row("P02", remarks="Top Up of account 999", magnet="NOT OK", tampered="YES"),
+        ]
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+
+        assert ws.cell(row=6, column=KEY_TO_COL["magnet"]).value == "OK"
+        assert ws.cell(row=6, column=KEY_TO_COL["tampered"]).value == "NO"
+        # a top-up has no GDR of its own
+        assert ws.cell(row=6, column=KEY_TO_COL["gdr_no"]).value is None
+
+
+class TestDateHandling:
+    def test_all_dates_become_real_dates_shown_dd_mm_yyyy(self, tmp_path):
+        rows = [
+            good_row("P01", verification_date="05/05/2026", sanction_date="2026-01-31"),
+            good_row("P02", verification_date="6-5-2026", sanction_date="01.02.2026"),
+        ]
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+
+        for row, key, expected in [
+            (5, "verification_date", datetime.datetime(2026, 5, 5)),
+            (6, "verification_date", datetime.datetime(2026, 5, 6)),
+            (5, "sanction_date", datetime.datetime(2026, 1, 31)),
+            (6, "sanction_date", datetime.datetime(2026, 2, 1)),
+        ]:
+            cell = ws.cell(row=row, column=KEY_TO_COL[key])
+            assert cell.value == expected, f"{key} on row {row}"
+            assert cell.number_format == rv.DATE_NUMBER_FORMAT, f"{key} on row {row}"
+
+    def test_poa_rows_have_no_renewal_closed_date(self, tmp_path):
+        rows = [good_row("P01", taf="POA", renewal_date="21-05-2026")]
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+        assert ws.cell(row=5, column=KEY_TO_COL["renewal_date"]).value is None
+
+    def test_taf_rows_keep_their_renewal_date(self, tmp_path):
+        rows = [good_row("P01", taf="TAF", renewal_date="21-05-2026")]
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+        assert ws.cell(row=5, column=KEY_TO_COL["renewal_date"]).value == datetime.datetime(2026, 5, 21)
+
+
+class TestOutputFilename:
+    def test_uses_branch_and_verification_date_range(self, tmp_path):
+        rows = [
+            good_row("P01", verification_date="05/05/2026"),
+            good_row("P02", verification_date="10/05/2026"),
+        ]
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        result = rv.validate_workbook(src)
+        assert result["custom_filename"] == "TESTBR_Audit-MIS_05-MAY-2026_to_10-MAY-2026.xlsx"
+
+    def test_single_date_is_not_rendered_as_a_range(self, tmp_path):
+        rows = [good_row("P01", verification_date="05/05/2026")]
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+
+        result = rv.validate_workbook(src)
+        assert result["custom_filename"] == "TESTBR_Audit-MIS_05-MAY-2026.xlsx"
+
+    def test_falls_back_to_other_date_columns(self, tmp_path):
+        """No verification date must not mean UNKNOWN_DATE when other dates exist."""
+        row = good_row("P01", taf="TAF", sanction_date="03/03/2026")
+        row["verification_date"] = None
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [row])
+
+        result = rv.validate_workbook(src)
+        assert "UNKNOWN_DATE" not in result["custom_filename"]
+        assert "03-MAR-2026" in result["custom_filename"]
+
+    def test_branch_header_variants_are_recognised(self, tmp_path):
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [good_row("P01", verification_date="05/05/2026")])
+        wb = openpyxl.load_workbook(src)
         ws = wb[SHEET]
-        assert ws.cell(row=6, column=KEY_TO_COL["renewal_date"]).value == "01-05-2026"
+        ws.cell(row=2, column=KEY_TO_COL["branch"]).value = "BRANCH"   # not "BRANCH NAME"
+        wb.save(src)
+        wb.close()
+
+        result = rv.validate_workbook(src)
+        assert result["custom_filename"].startswith("TESTBR_")

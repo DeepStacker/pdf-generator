@@ -14,6 +14,9 @@ from openpyxl.utils import get_column_letter
 
 logger = logging.getLogger(__name__)
 
+# Every date in the report is displayed this way.
+DATE_NUMBER_FORMAT = "DD/MM/YYYY"
+
 # Highlight fill (ARGB, as openpyxl stores it) → CSS color for the web grid.
 PREVIEW_FILL_MAP = {
     "8B0000": "#8B0000",
@@ -203,7 +206,7 @@ def parse_any_date(v):
 
 
 def get_custom_output_filename(ws, col, col_map, all_rows, _cell_cache, default_filename):
-    col_branch = col.get("BRANCH NAME")
+    col_branch = get_col(col, "BRANCH NAME", "BRANCH", "BRANCH_NAME", "NAME OF BRANCH", "BRANCH NAME ")
     branch_name = "UNKNOWN"
     if col_branch:
         for r in all_rows:
@@ -217,16 +220,22 @@ def get_custom_output_filename(ws, col, col_map, all_rows, _cell_cache, default_
     branch_name = re.sub(r'[\/\\\:\*\?\"\<\>\|]', '_', branch_name).strip()
     branch_name = re.sub(r'_+', '_', branch_name)
 
-    col_ver_date = col_map.get("verification_date")
+    # Prefer the agency verification date, but fall back to the other date
+    # columns rather than giving up and naming the file UNKNOWN_DATE.
     valid_dates = []
-    if col_ver_date:
+    for date_key in ("verification_date", "sanction_date", "renewal_date"):
+        date_col = col_map.get(date_key)
+        if not date_col:
+            continue
         for r in all_rows:
-            cell_obj = _cell_cache.get((r, col_ver_date))
+            cell_obj = _cell_cache.get((r, date_col))
             v = cell_obj.value if cell_obj else None
             if v:
                 parsed_d = parse_any_date(v)
                 if parsed_d:
                     valid_dates.append(parsed_d)
+        if valid_dates:
+            break
 
     if valid_dates:
         unique_dates = sorted(list(set(valid_dates)))
@@ -855,10 +864,46 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         cl = cell(row, c)
         return cl.value if cl is not None else None
 
-    def set_val(row, c, new_val):
+    _column_style = {}
+
+    def column_style(c):
+        """Font/alignment/number format this column's populated cells use.
+
+        A value written into a cell that was empty would otherwise land with
+        Excel's defaults (left-aligned, Calibri 11) instead of the document's
+        own styling — which is how resolved packet numbers ended up neither
+        centred nor at the sheet's font size.
+        """
+        if c in _column_style:
+            return _column_style[c]
+        style = None
+        for r in all_rows:
+            cl = cell(r, c)
+            if cl is None or not cl.has_style:
+                continue
+            v = cl.value
+            if v is None or (isinstance(v, str) and not v.strip()):
+                continue
+            style = (copy(cl.font), copy(cl.alignment), cl.number_format)
+            break
+        _column_style[c] = style
+        return style
+
+    def set_val(row, c, new_val, inherit_style=True):
         cl = cell(row, c)
-        if cl is not None:
-            cl.value = new_val
+        if cl is None:
+            return
+        prev = cl.value
+        was_empty = prev is None or (isinstance(prev, str) and not prev.strip())
+        cl.value = new_val
+        if inherit_style and was_empty and new_val is not None:
+            style = column_style(c)
+            if style:
+                font, alignment, number_format = style
+                cl.font = copy(font)
+                cl.alignment = copy(alignment)
+                if cl.number_format == "General":
+                    cl.number_format = number_format
 
     def highlight(row, c, fill, font=None, force=False, skip_excluded=True):
         if skip_excluded and row in resolved_packet_rows and c in _diff_cols_excluded:
@@ -1001,10 +1046,16 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         (col_map.get("carat_count"), "Carat Mismatch Count"),
         (col_map.get("uncommon_count"), "Uncommon Count"),
     ]
+    # These are not "not applicable" on a closed/top-up row — the expected
+    # reading is simply the clean one, so they carry their default value
+    # rather than being emptied.
+    default_text_cols = [
+        (col_map.get("magnet"), "Magnet Test", "OK"),
+        (col_map.get("tampered"), "Packet Tampered", "NO"),
+    ]
+    # A top-up has no GDR of its own, so this one genuinely blanks.
     blank_cols = [
         (col_map.get("gdr_no"), "GDR Number"),
-        (col_map.get("magnet"), "Magnet Test"),
-        (col_map.get("tampered"), "Packet Tampered"),
     ]
     for r in all_rows:
         is_closed = "CLOSED" in row_status_upper[r]
@@ -1024,6 +1075,11 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                 summary["closed_topup_defaulted"].append(f"Row {r}: {label} → 0")
         # The Renewal/Closed date is real loan data on both closed and top-up
         # rows, so it is preserved rather than blanked.
+        for tc, label, default in default_text_cols:
+            if tc and safe_str(val(r, tc)).upper() != default:
+                set_val(r, tc, default)
+                highlight(r, tc, GREEN_FILL, skip_excluded=False)
+                summary["closed_topup_defaulted"].append(f"Row {r}: {label} → {default}")
         for bc, label in blank_cols:
             if bc:
                 v = val(r, bc)
@@ -1031,6 +1087,53 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                     set_val(r, bc, None)
                     highlight(r, bc, GREEN_FILL, skip_excluded=False)
                     summary["closed_topup_cleared"].append(f"Row {r}: {label} cleared")
+
+    # ══════════════════════════════════════════════════════════════════
+    # PASS 3b: Normalize every date to dd/mm/yyyy
+    # Dates arrive as text in half a dozen spellings. Store them as real
+    # dates with one display format so the sheet is consistent and anything
+    # reading them back (the output filename, the outlier check) can parse
+    # them without guessing.
+    # ══════════════════════════════════════════════════════════════════
+    for date_key in ("sanction_date", "verification_date", "renewal_date"):
+        dc = col_map.get(date_key)
+        if not dc:
+            continue
+        for r in all_rows:
+            cl = cell(r, dc)
+            if cl is None:
+                continue
+            v = cl.value
+            if v is None or (isinstance(v, str) and not v.strip()):
+                continue
+            if isinstance(v, str) and v.startswith("="):
+                continue
+            parsed = parse_any_date(v)
+            if parsed is None:
+                continue
+            if not isinstance(v, (datetime, date)):
+                cl.value = parsed
+                summary["date_reformatted"].append(f"Row {r}: {date_key} '{v}' → {parsed:%d/%m/%Y}")
+            cl.number_format = DATE_NUMBER_FORMAT
+
+    # ══════════════════════════════════════════════════════════════════
+    # PASS 3c: POA rows carry no Renewal/Closed date
+    # An ordinary POA row is an active loan being physically verified, so it
+    # has no renewal or closure date. Closed and top-up rows are excluded:
+    # there the date is real loan data and must survive (see PASS 3).
+    # ══════════════════════════════════════════════════════════════════
+    col_renewal = col_map.get("renewal_date")
+    col_taf_early = col_map.get("taf")
+    if col_renewal and col_taf_early:
+        for r in all_rows:
+            if r in cleaned_rows:
+                continue
+            if safe_str(val(r, col_taf_early)).upper() != "POA":
+                continue
+            v = val(r, col_renewal)
+            if v is not None and str(v).strip() != "":
+                set_val(r, col_renewal, None)
+                summary["poa_renewal_date_cleared"].append(f"Row {r}: Renewal/Closed Date cleared (POA)")
 
     # ══════════════════════════════════════════════════════════════════
     # PASS 4: Date Outlier Detection (Majority Month/Year Rule)

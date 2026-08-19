@@ -10,6 +10,7 @@ Covers:
 - PDF row reordering moves the full row (including far-right columns).
 """
 
+import datetime
 import importlib
 from copy import copy
 
@@ -118,9 +119,11 @@ def run_file(tmp_path, rows, pdf_path=None):
     src = tmp_path / "input.xlsx"
     make_workbook(src, rows)
     summary = rv.process_file(str(src), pdf_path=pdf_path)
-    out = tmp_path / "TESTBR_Audit-MIS_UNKNOWN_DATE.xlsx"
-    assert out.exists(), f"expected output workbook at {out}"
-    wb = openpyxl.load_workbook(out)
+    # The output name embeds the branch and the report's date range, so find
+    # it rather than hard-coding one spelling of it.
+    produced = [p for p in tmp_path.glob("*.xlsx") if p.name != "input.xlsx"]
+    assert len(produced) == 1, f"expected exactly one output workbook, got {produced}"
+    wb = openpyxl.load_workbook(produced[0])
     return summary, wb[SHEET]
 
 
@@ -292,11 +295,14 @@ class TestClosedTopupClean:
             "ornaments_diff", "spur_count", "spur_pct", "carat_count", "uncommon_count",
         ):
             assert cell_of(ws, r, key).value == 0, key
-        for key in ("gdr_no", "magnet", "tampered"):
-            assert cell_of(ws, r, key).value is None, key
+        # No GDR exists for a top-up, so that one blanks…
+        assert cell_of(ws, r, "gdr_no").value is None
+        # …but these carry their clean default rather than being emptied.
+        assert cell_of(ws, r, "magnet").value == "OK"
+        assert cell_of(ws, r, "tampered").value == "NO"
         # The Renewal/Closed date is real loan data and must survive on a
         # top-up row, not just on a closed one.
-        assert cell_of(ws, r, "renewal_date").value == "01-05-2026"
+        assert cell_of(ws, r, "renewal_date").value == datetime.datetime(2026, 5, 1)
         # Identity/loan columns untouched
         assert cell_of(ws, r, "packet").value == "P02"
         assert cell_of(ws, r, "status").value == "FRESH"
@@ -311,9 +317,10 @@ class TestClosedTopupClean:
     def test_closed_row_keeps_renewal_date(self, tmp_path):
         rows = [good_row("P01", status="CLOSED", renewal_date="01-05-2026", magnet="NA")]
         _summary, ws = run_file(tmp_path, rows)
-        assert cell_of(ws, 5, "renewal_date").value == "01-05-2026"
+        assert cell_of(ws, 5, "renewal_date").value == datetime.datetime(2026, 5, 1)
+        assert cell_of(ws, 5, "renewal_date").number_format == rv.DATE_NUMBER_FORMAT
         assert cell_of(ws, 5, "gdr_gross").value == 0
-        assert cell_of(ws, 5, "magnet").value is None
+        assert cell_of(ws, 5, "magnet").value == "OK"
 
     def test_resolved_topup_row_also_cleaned(self, tmp_path):
         empty_pkt = good_row("P02", applicant="SHARED NAME", gdr_gross=12.5)
