@@ -1896,10 +1896,13 @@
             try {
                 const resp = await fetch('/api/update/check');
                 const data = await resp.json();
-                if (data.update_ready) {
-                    // Show update ready banner at top of header
-                    const banner = document.getElementById('updateBanner');
-                    banner.classList.remove('hidden');
+                // The banner offers "Restart Now", so only show it once the
+                // new version is actually downloaded. A packaged build fetches
+                // it in the background; a dev build never stages anything, so
+                // fall back to just announcing that one exists.
+                const readyToRestart = data.staged || (data.update_ready && data.frozen === false);
+                if (readyToRestart) {
+                    document.getElementById('updateBanner').classList.remove('hidden');
                 }
             } catch (err) {
                 console.warn('Background update query unreachable.');

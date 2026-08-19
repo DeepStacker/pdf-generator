@@ -818,3 +818,87 @@ class TestStateColumn:
 
         result = rv.validate_workbook(src)
         assert "state_unknown" not in result["summary"]
+
+
+class TestAutoUpdate:
+    """A found update is fetched in the background; the swap waits for a restart.
+
+    Replacing the binary under a running audit would lose work, so only the
+    download is automatic.
+    """
+
+    @pytest.fixture
+    def updater(self, monkeypatch):
+        import sys as _sys
+
+        from audit_engine.updater import client as c
+
+        monkeypatch.setattr(_sys, "frozen", True, raising=False)
+        st = c.update_state
+        st.update_ready = True
+        st.binary_url = "https://example.invalid/app.zip"
+        st.latest_version = "v9.9.9"
+        st.staged_version = ""
+        st._is_downloading = False
+        st._preflight_pass = True
+        from audit_engine.database import legacy
+        monkeypatch.setattr(legacy, "get_config", lambda k, d=None: "True")
+        return c
+
+    def test_downloads_when_an_update_is_available(self, updater):
+        assert updater._should_auto_download() is True
+
+    def test_never_downloads_in_dev_mode(self, updater, monkeypatch):
+        import sys as _sys
+        monkeypatch.delattr(_sys, "frozen", raising=False)
+        assert updater._should_auto_download() is False
+
+    def test_does_not_refetch_a_version_already_staged(self, updater):
+        updater.update_state.staged_version = "v9.9.9"
+        assert updater._should_auto_download() is False
+
+    def test_fetches_a_newer_version_after_one_was_staged(self, updater):
+        updater.update_state.staged_version = "v9.9.8"
+        assert updater._should_auto_download() is True
+
+    def test_skips_while_a_download_is_in_flight(self, updater):
+        updater.update_state._is_downloading = True
+        assert updater._should_auto_download() is False
+
+    def test_skips_when_preflight_fails(self, updater):
+        """No disk or no network right now — try again on the next check."""
+        updater.update_state._preflight_pass = False
+        assert updater._should_auto_download() is False
+
+    def test_skips_when_there_is_no_binary_for_this_os(self, updater):
+        updater.update_state.binary_url = ""
+        assert updater._should_auto_download() is False
+
+    @pytest.mark.parametrize("value", ["False", "false", "0", "no", "off"])
+    def test_config_can_turn_auto_download_off(self, updater, monkeypatch, value):
+        from audit_engine.database import legacy
+        monkeypatch.setattr(legacy, "get_config", lambda k, d=None: value)
+        assert updater._should_auto_download() is False
+
+    def test_defaults_to_on_when_config_is_unreadable(self, updater, monkeypatch):
+        from audit_engine.database import legacy
+
+        def boom(*_a, **_k):
+            raise RuntimeError("db unavailable")
+
+        monkeypatch.setattr(legacy, "get_config", boom)
+        assert updater._auto_download_enabled() is True
+
+    def test_check_reports_whether_the_update_is_on_disk(self, monkeypatch):
+        """The banner offers Restart Now, so it must know staged from merely-found."""
+        from audit_engine.updater import client as c
+        from audit_engine.web import handlers as h
+
+        monkeypatch.setattr(h, "check_latest_release", lambda force=False: {"update_ready": True})
+        c.update_state.latest_version = "v9.9.9"
+
+        c.update_state.staged_version = ""
+        assert h.handle_update_check()["staged"] is False
+
+        c.update_state.staged_version = "v9.9.9"
+        assert h.handle_update_check()["staged"] is True

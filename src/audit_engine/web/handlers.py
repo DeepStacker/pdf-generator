@@ -395,7 +395,16 @@ def handle_open(data: dict) -> dict:
 
 
 def handle_update_check(force: bool = False) -> dict:
-    return check_latest_release(force=force)
+    result = check_latest_release(force=force)
+    # Whether the new version is actually on disk. The banner offers "Restart
+    # Now", so it must not appear while the download is still in flight — a
+    # restart then would come back on the same version.
+    result["staged"] = bool(
+        update_state.latest_version
+        and update_state.staged_version == update_state.latest_version
+    )
+    result["downloading"] = update_state.is_downloading
+    return result
 
 
 def handle_update_install() -> dict:

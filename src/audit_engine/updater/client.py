@@ -32,6 +32,7 @@ class UpdateState:
         self.binary_url: str = ""
         self.dest_zip_path: str = ""
         self.staged_bat: str | None = None
+        self.staged_version: str = ""
         self._expected_sha256: str = ""
         self._progress_pct: float = 0.0
         self._is_downloading: bool = False
@@ -344,6 +345,34 @@ _CHECK_INTERVAL = 3600
 _BACKGROUND_DELAY = 15
 
 
+def _auto_download_enabled() -> bool:
+    """Whether a found update is fetched without waiting to be asked.
+
+    Defaults to on. Set the "auto_update" config key to a false-ish value to
+    have the app only notify and leave downloading to the Settings button.
+    """
+    try:
+        from audit_engine.database.legacy import get_config
+        value = get_config("auto_update", "True")
+    except Exception:  # noqa: BLE001 - never let config trouble stop the checker
+        return True
+    return str(value).strip().lower() not in ("false", "0", "no", "off")
+
+
+def _should_auto_download() -> bool:
+    if not getattr(sys, "frozen", False):
+        return False  # dev mode installs nothing
+    if not update_state.update_ready or not update_state.binary_url:
+        return False
+    if update_state.is_downloading:
+        return False
+    if update_state.staged_version == update_state.latest_version:
+        return False  # already fetched this release; it applies on restart
+    if not update_state.preflight_pass:
+        return False  # no disk/network for it right now — try again next hour
+    return _auto_download_enabled()
+
+
 def _background_check_worker() -> None:
     threading.Event().wait(_BACKGROUND_DELAY)
     while True:
@@ -353,6 +382,18 @@ def _background_check_worker() -> None:
             file_logger.info("Background update check complete (ready=%s, preflight=%s)",
                             result.get("update_ready"),
                             update_state.preflight_pass)
+            # Fetch it now so the new version is already on disk by the time
+            # anyone restarts. The swap itself still waits for a restart —
+            # replacing the binary under a running audit would lose work.
+            if _should_auto_download():
+                version = update_state.latest_version
+                file_logger.info("Auto-downloading update %s in the background", version)
+                download_update_worker(update_state.expected_sha256)
+                if update_state.success:
+                    update_state.staged_version = version
+                    file_logger.info("Update %s staged; it installs on the next restart", version)
+                else:
+                    file_logger.warning("Auto-download of %s failed: %s", version, update_state.error)
         except Exception as exc:
             file_logger.warning("Background update check failed: %s", exc)
         threading.Event().wait(_CHECK_INTERVAL)
