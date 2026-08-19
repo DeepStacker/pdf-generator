@@ -5,6 +5,19 @@ on:
     paths: ["src/audit_engine/_version.py"]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      windows:
+        description: "Build the Windows binary"
+        type: boolean
+        default: true
+      macos:
+        description: "Build the macOS binary"
+        type: boolean
+        default: false
+      linux:
+        description: "Build the Linux binary"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -16,7 +29,33 @@ jobs:
     outputs:
       version: ${{ steps.extract.outputs.version }}
       tag: ${{ steps.extract.outputs.tag }}
+      windows: ${{ steps.targets.outputs.windows }}
+      macos: ${{ steps.targets.outputs.macos }}
+      linux: ${{ steps.targets.outputs.linux }}
     steps:
+      - name: Decide which platforms to build
+        id: targets
+        env:
+          # Which platforms an automatic (version-bump) build publishes.
+          # Flip a value to "true" to start shipping that platform again; a
+          # manual run from the Actions tab can override any of them per-run
+          # without editing this file.
+          DEFAULT_WINDOWS: "true"
+          DEFAULT_MACOS: "false"
+          DEFAULT_LINUX: "false"
+        run: |
+          set -eu
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            WIN="${{ inputs.windows }}"; MAC="${{ inputs.macos }}"; LIN="${{ inputs.linux }}"
+          else
+            WIN="$DEFAULT_WINDOWS"; MAC="$DEFAULT_MACOS"; LIN="$DEFAULT_LINUX"
+          fi
+          {
+            echo "windows=$WIN"
+            echo "macos=$MAC"
+            echo "linux=$LIN"
+          } >> "$GITHUB_OUTPUT"
+          echo "building -> windows=$WIN macos=$MAC linux=$LIN"
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -38,42 +77,53 @@ jobs:
       - name: Create release if missing
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WANT_WINDOWS: ${{ steps.targets.outputs.windows }}
+          WANT_MACOS: ${{ steps.targets.outputs.macos }}
+          WANT_LINUX: ${{ steps.targets.outputs.linux }}
         run: |
-          # The macOS build is ad-hoc signed, not Developer-ID signed or
-          # notarised, so Gatekeeper blocks it after a browser download
-          # ("damaged and can't be opened"). Ship the unquarantine step in the
-          # notes until a paid Apple Developer ID is available.
-          cat > /tmp/notes.md <<'NOTES'
-          ## Install
+          set -eu
+          # Only document the platforms this run actually publishes, so the
+          # notes never point at a download that is not there.
+          NOTES=/tmp/notes.md
+          : > "$NOTES"
+          say() { printf '%s\n' "$1" >> "$NOTES"; }
 
-          ### Windows
-          Unzip and run `Audit_Engine_Elite.exe`. If SmartScreen appears, choose
-          **More info → Run anyway**.
+          say "## Install"
+          if [ "$WANT_WINDOWS" = "true" ]; then
+            say ""
+            say "### Windows"
+            say "Unzip and run \`Audit_Engine_Elite.exe\`. If SmartScreen appears,"
+            say "choose **More info -> Run anyway**."
+          fi
+          if [ "$WANT_MACOS" = "true" ]; then
+            say ""
+            say "### macOS (Apple Silicon)"
+            say "macOS blocks this app on first launch because it is not signed"
+            say "with a paid Apple Developer ID. Unzip it, then run this once in"
+            say "Terminal:"
+            say ""
+            say "    xattr -dr com.apple.quarantine /path/to/Audit_Engine_Elite.app"
+            say ""
+            say "Then open the app normally. (Double-clicking before this step"
+            say "shows \"damaged and can't be opened\" - the download is fine, it"
+            say "is Gatekeeper.)"
+          fi
+          if [ "$WANT_LINUX" = "true" ]; then
+            say ""
+            say "### Linux"
+            say "Extract the tarball and run the \`Audit_Engine_Elite\` binary"
+            say "(\`chmod +x\` it first if needed)."
+          fi
+          say ""
+          say "---"
+          say "Verify a download with the matching \`.sha256\` file."
 
-          ### macOS (Apple Silicon)
-          macOS blocks this app on first launch because it is not signed with a
-          paid Apple Developer ID. Unzip it, then run this once in Terminal:
-
-          ```
-          xattr -dr com.apple.quarantine /path/to/Audit_Engine_Elite.app
-          ```
-
-          Then open the app normally. (Double-clicking before this step shows
-          "damaged and can't be opened" — the download is fine, it is Gatekeeper.)
-
-          ### Linux
-          Extract the tarball and run the `Audit_Engine_Elite` binary
-          (`chmod +x` it first if needed).
-
-          ---
-          Verify a download with the matching `.sha256` file.
-          NOTES
-          sed -i 's/^          //' /tmp/notes.md
           gh release create "${{ steps.extract.outputs.tag }}" \
             --title "${{ steps.extract.outputs.tag }}" \
-            --notes-file /tmp/notes.md 2>/dev/null || true
+            --notes-file "$NOTES" 2>/dev/null || true
 
   windows:
+    if: needs.setup.outputs.windows == 'true'
     timeout-minutes: 45
     needs: setup
     runs-on: windows-latest
@@ -135,6 +185,7 @@ jobs:
           gh release upload $TAG $zip $sha --clobber
 
   macos:
+    if: needs.setup.outputs.macos == 'true'
     timeout-minutes: 45
     needs: setup
     runs-on: macos-latest
@@ -185,6 +236,7 @@ jobs:
           gh release upload "$TAG" "$ZIP" "$SHA" --clobber
 
   linux:
+    if: needs.setup.outputs.linux == 'true'
     timeout-minutes: 45
     needs: setup
     runs-on: ubuntu-24.04
@@ -306,12 +358,31 @@ jobs:
           "
       - name: Strip DT_RUNPATH from libraries (required for StaticX compatibility)
         run: |
-          echo "Stripping DT_RUNPATH from all bundled .so files..."
-          # Only strip libproxy and Python toolcache files (not numpy which needs OpenBLAS)
-          find /opt/hostedtoolcache/Python -path '*/python3.12/lib-dynload/*.so*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
-          patchelf --remove-rpath /opt/hostedtoolcache/Python/3.12.13/x64/lib/libpython3.12.so.1.0 2>&1 || true
-          sudo find /usr/lib -name 'libproxy*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
-          sudo find /usr/lib -name 'libpxbackend*' -type f -exec patchelf --remove-rpath {} \; 2>&1 || true
+          set -eu
+          # Only strip libproxy and Python toolcache files (not numpy, which
+          # needs its OpenBLAS RPATH).
+          find /opt/hostedtoolcache/Python -path '*/lib-dynload/*.so*' -type f \
+            -exec patchelf --remove-rpath {} + 2>/dev/null || true
+          sudo find /usr/lib -name 'libproxy*' -type f -exec patchelf --remove-rpath {} + 2>/dev/null || true
+          sudo find /usr/lib -name 'libpxbackend*' -type f -exec patchelf --remove-rpath {} + 2>/dev/null || true
+
+          # The Python patch version moves whenever setup-python updates, so
+          # find libpython instead of naming it. Hard-coding it meant the path
+          # silently stopped existing and `|| true` hid that, leaving
+          # DT_RUNPATH in place until StaticX rejected the build much later.
+          found=0
+          while IFS= read -r lib; do
+            found=1
+            patchelf --remove-rpath "$lib"
+            if patchelf --print-rpath "$lib" | grep -q .; then
+              echo "DT_RUNPATH still set on $lib" >&2
+              exit 1
+            fi
+          done < <(find /opt/hostedtoolcache/Python -name 'libpython3*.so*' -type f)
+          if [ "$found" -eq 0 ]; then
+            echo "no libpython found under the tool cache - StaticX would fail later" >&2
+            exit 1
+          fi
           echo "Done stripping RUNPATH"
       - name: Patch numpy to disable source-tree detection at build time
         run: |
