@@ -1070,3 +1070,141 @@ class TestTafRowsSkipTheDifferenceColumns:
         )
         assert ws.cell(row=5, column=KEY_TO_COL["actual_gross"]).value == 20.35
         assert "weight_aligned_to_gdr" not in result["summary"]
+
+
+# A realistic packet column: three series mixed together, roughly sequential
+# with gaps, exactly as a branch's sheet looks.
+REAL_PACKETS = (
+    [f"S824{n}" for n in range(5589, 5645)]
+    + [f"M12708{n:02d}" for n in range(21, 57)]
+    + [f"XS249{n}" for n in range(4311, 4335)]
+)
+
+
+class TestPacketFamilyLearning:
+    """The packet series are learned from the column, never hard-coded."""
+
+    def test_families_are_discovered_from_the_data(self):
+        families = rv.learn_packet_families(REAL_PACKETS)
+        assert ("S", 7) in families
+        assert ("M", 7) in families
+        assert ("XS", 7) in families
+        assert families[("S", 7)]["digit_prefix"].startswith("824")
+
+    def test_a_prefix_never_seen_before_is_learned_too(self):
+        """An 'L' series must work with no code change."""
+        families = rv.learn_packet_families(REAL_PACKETS + [f"L555{n}" for n in range(1000, 1010)])
+        assert ("L", 7) in families
+        assert families[("L", 7)]["count"] == 10
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("s8245589", "S8245589"),      # lowercase prefix
+            ("S 8245589", "S8245589"),     # space after the letter
+            (" S8245589 ", "S8245589"),    # padding
+            ("xs2494311", "XS2494311"),
+            ("S8245589", "S8245589"),      # already clean
+        ],
+    )
+    def test_tidying_is_safe_and_idempotent(self, raw, expected):
+        cleaned, _changed = rv.normalize_packet(raw)
+        assert cleaned == expected
+        assert rv.normalize_packet(cleaned)[0] == cleaned
+
+    def test_every_real_value_passes(self):
+        """No false alarms on a genuine column."""
+        families = rv.learn_packet_families(REAL_PACKETS)
+        for packet in REAL_PACKETS:
+            severity, why, _s = rv.check_packet(packet, families)
+            assert severity == "", f"{packet} wrongly flagged: {why}"
+
+    @pytest.mark.parametrize(
+        "bad,reason",
+        [
+            ("S8745615", "digit typo inside a correct-looking value"),
+            ("S82456211", "one digit too many"),
+            ("S824562", "one digit too few"),
+            ("S8245O29", "letter O typed for a zero"),
+            ("S9999999", "far outside the series' range"),
+        ],
+    )
+    def test_broken_values_are_errors(self, bad, reason):
+        families = rv.learn_packet_families(REAL_PACKETS)
+        severity, _why, _s = rv.check_packet(bad, families)
+        assert severity == "error", reason
+
+    def test_a_digit_typo_gets_a_suggestion(self):
+        families = rv.learn_packet_families(REAL_PACKETS)
+        severity, _why, suggestion = rv.check_packet("S8745615", families)
+        assert severity == "error"
+        assert suggestion == "S8245615"
+
+    def test_an_unfamiliar_prefix_is_review_not_error(self):
+        """It might be a real rare series, so a human decides."""
+        families = rv.learn_packet_families(REAL_PACKETS)
+        severity, _why, _s = rv.check_packet("ZZ1234567", families)
+        assert severity == "review"
+
+    def test_a_rare_series_stops_being_flagged_once_established(self):
+        families = rv.learn_packet_families(REAL_PACKETS + ["L5551000", "L5551001", "L5551002"])
+        severity, _why, _s = rv.check_packet("L5551001", families)
+        assert severity == ""
+
+
+class TestPacketChecksInAFullRun:
+    def _sheet_with(self, tmp_path, packets):
+        rows = []
+        for i, packet in enumerate(packets, 1):
+            row = good_row(f"X{i:03d}")
+            row["packet"] = packet
+            row["account"] = f"90020030{i:07d}"
+            rows.append(row)
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, rows)
+        result = rv.validate_workbook(src)
+        return result, openpyxl.load_workbook(result["output_path"])[SHEET]
+
+    def _packet_fill(self, ws, row):
+        return str(ws.cell(row=row, column=KEY_TO_COL["packet"]).fill.start_color.rgb)[-6:]
+
+    def test_a_clean_column_raises_nothing(self, tmp_path):
+        result, _ws = self._sheet_with(tmp_path, REAL_PACKETS)
+        assert "packet_pattern_break" not in result["summary"]
+        assert "packet_needs_review" not in result["summary"]
+        assert "packet_tidied" not in result["summary"]
+
+    def test_the_digit_typo_is_flagged_with_its_suggestion(self, tmp_path):
+        packets = list(REAL_PACKETS)
+        packets[20] = "S8745615"
+        result, ws = self._sheet_with(tmp_path, packets)
+
+        assert result["summary"]["packet_pattern_break"] == 1
+        note = result["summary_details"]["packet_pattern_break"][0]
+        assert "S8245615" in note, "the suggested correction should be offered"
+        assert self._packet_fill(ws, 5 + 20) == "FF8C00"
+        # the sheet value itself is never rewritten on a guess
+        assert ws.cell(row=5 + 20, column=KEY_TO_COL["packet"]).value == "S8745615"
+
+    def test_case_and_spaces_are_tidied_in_place(self, tmp_path):
+        packets = list(REAL_PACKETS)
+        packets[5] = packets[5].lower()
+        packets[6] = "S 824" + packets[6][4:]
+        result, ws = self._sheet_with(tmp_path, packets)
+
+        assert result["summary"]["packet_tidied"] == 2
+        assert ws.cell(row=10, column=KEY_TO_COL["packet"]).value == REAL_PACKETS[5]
+        assert self._packet_fill(ws, 10) == "C6EFCE"
+
+    def test_tidying_lets_the_duplicate_check_see_through_case(self, tmp_path):
+        """'s8245589' and 'S8245589' are the same packet, so that is a duplicate."""
+        packets = list(REAL_PACKETS)
+        packets[1] = packets[0].lower()
+        result, _ws = self._sheet_with(tmp_path, packets)
+        assert result["summary"].get("duplicate_packet", 0) >= 2
+
+    def test_short_columns_are_left_alone(self, tmp_path):
+        """Too few values to infer a series — say nothing rather than guess."""
+        result, _ws = self._sheet_with(tmp_path, ["A101", "B202", "C303"])
+        assert "packet_pattern_break" not in result["summary"]
+        assert "packet_needs_review" not in result["summary"]

@@ -2,7 +2,7 @@ import contextlib
 import logging
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from copy import copy
 from datetime import date, datetime
 from datetime import time as time_cls
@@ -154,6 +154,152 @@ def amend_discrepancy_remark(remark, fixed_gross, fixed_net):
     if still_net:
         return NET_DIFF_REMARK
     return NO_DISCREPANCY_REMARK
+
+
+# ─── Packet-number pattern learning ───────────────────────────────────
+# Packet numbers come in families ("S8245589", "XS2494311", "M1270821", and
+# whatever else a branch uses). Nothing about those families is hard-coded:
+# they are learned from the column being validated, so a new prefix needs no
+# code change. What the families give us is a way to spot the small typos —
+# a wrong digit, a dropped character, a stray space — that are invisible when
+# checking one row at a time.
+PACKET_SPLIT_RE = re.compile(r"^([A-Za-z]+)[\s\-]*(\d+)$")
+
+# A prefix seen fewer times than this is not treated as an established
+# family; it might be a real but rare one, so it is raised for review rather
+# than called an error.
+MIN_PACKET_FAMILY = 3
+# Fewer packet numbers than this in a column and there is no pattern worth
+# inferring, so the series check stays out of the way entirely.
+MIN_PACKETS_FOR_PATTERNS = 10
+# How much of a family must agree on a leading digit run for it to count as
+# that family's signature.
+PACKET_PREFIX_COVERAGE = 0.90
+
+
+def normalize_packet(raw):
+    """Tidy a packet number: drop stray whitespace, upper-case the letters.
+
+    Neither changes which packet it refers to, so both are safe to apply.
+    Returns (cleaned_text, changed).
+    """
+    original = safe_str(raw)
+    if not original:
+        return original, False
+    cleaned = re.sub(r"\s+", "", original)
+    match = PACKET_SPLIT_RE.match(cleaned)
+    if match:
+        cleaned = match.group(1).upper() + match.group(2)
+    return cleaned, cleaned != original
+
+
+def split_packet(value):
+    """('S', '8245589') for a well-formed packet number, else None."""
+    match = PACKET_SPLIT_RE.match(safe_str(value))
+    if not match:
+        return None
+    return match.group(1).upper(), match.group(2)
+
+
+def _stable_digit_prefix(digit_strings):
+    """The longest leading digit run shared by nearly every member."""
+    best = ""
+    width = min(len(d) for d in digit_strings)
+    for size in range(1, width + 1):
+        top, hits = Counter(d[:size] for d in digit_strings).most_common(1)[0]
+        if hits / len(digit_strings) < PACKET_PREFIX_COVERAGE:
+            break
+        best = top
+    return best
+
+
+def learn_packet_families(values):
+    """Group packet numbers into (prefix, digit count) families.
+
+    Each family records the leading digits its members agree on and the
+    numeric range they occupy — the two things a typo tends to break.
+    """
+    grouped = defaultdict(list)
+    for value in values:
+        parts = split_packet(value)
+        if parts:
+            grouped[(parts[0], len(parts[1]))].append(parts[1])
+
+    families = {}
+    for key, digit_strings in grouped.items():
+        numbers = sorted(int(d) for d in digit_strings)
+        families[key] = {
+            "count": len(digit_strings),
+            "digit_prefix": _stable_digit_prefix(digit_strings),
+            "low": numbers[0],
+            "high": numbers[-1],
+        }
+    return families
+
+
+def _established_digit_counts(families):
+    """Digit counts each prefix actually uses, ignoring one-off appearances."""
+    counts = defaultdict(set)
+    for (prefix, digit_count), info in families.items():
+        if info["count"] >= MIN_PACKET_FAMILY:
+            counts[prefix].add(digit_count)
+    return counts
+
+
+def check_packet(value, families, established=None):
+    """Judge one packet number against the families learned from its column.
+
+    Returns (severity, explanation, suggestion) where severity is "" for a
+    value that fits, "review" for one that might be a rare family or might be
+    a typo, and "error" for one that plainly breaks its own family's pattern.
+    """
+    text = safe_str(value)
+    if not text:
+        return "", "", ""
+    if established is None:
+        established = _established_digit_counts(families)
+
+    parts = split_packet(text)
+    if parts is None:
+        return "error", "not letters followed by digits", ""
+
+    prefix, digits = parts
+    known_counts = established.get(prefix)
+    if known_counts and len(digits) not in known_counts:
+        expected = "/".join(str(c) for c in sorted(known_counts))
+        return (
+            "error",
+            f"'{prefix}' uses {expected} digits in this file, this has {len(digits)}",
+            "",
+        )
+
+    info = families.get((prefix, len(digits)))
+    if not info or info["count"] < MIN_PACKET_FAMILY:
+        seen = info["count"] if info else 0
+        return (
+            "review",
+            f"'{prefix}' with {len(digits)} digits appears only {seen}x - a new series, or a typo?",
+            "",
+        )
+
+    family_prefix = info["digit_prefix"]
+    if family_prefix and not digits.startswith(family_prefix):
+        suggestion = f"{prefix}{family_prefix}{digits[len(family_prefix):]}"
+        return (
+            "error",
+            f"digits start '{digits[:len(family_prefix)]}', this series uses '{family_prefix}'",
+            suggestion if len(suggestion) == len(text) else "",
+        )
+
+    number = int(digits)
+    span = max(info["high"] - info["low"], 1)
+    if number < info["low"] - span or number > info["high"] + span:
+        return (
+            "error",
+            f"{number} sits far outside this series' {info['low']}..{info['high']}",
+            "",
+        )
+    return "", "", ""
 
 
 def is_topup_remark(remarks):
@@ -989,6 +1135,23 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
         return v
 
     # ══════════════════════════════════════════════════════════════════
+    # PASS 0: Tidy and pattern-check the packet numbers
+    # Runs first so everything downstream keys off the cleaned value — in
+    # particular "s8245589" and "S8245589" must be seen as the same packet by
+    # the duplicate check below.
+    # ══════════════════════════════════════════════════════════════════
+    col_packet_p0 = col_map.get("packet")
+    if col_packet_p0:
+        for r in all_rows:
+            cleaned, changed = normalize_packet(val(r, col_packet_p0))
+            if changed:
+                set_val(r, col_packet_p0, cleaned)
+                rows_data[r]["packet"] = cleaned
+                highlight(r, col_packet_p0, GREEN_FILL)
+                summary["packet_tidied"].append(f"Row {r}: packet tidied to '{cleaned}'")
+
+
+    # ══════════════════════════════════════════════════════════════════
     # PASS 1: Duplicate Packet Numbers
     # ══════════════════════════════════════════════════════════════════
     col_packet = col_map.get("packet")
@@ -1061,6 +1224,39 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
             else:
                 highlight(r, col_packet, ORANGE_FILL)
                 summary["topup_no_match"].append(f"Row {r}: {name} has no matching row with packet")
+
+    # ══════════════════════════════════════════════════════════════════
+    # PASS 2b: Packet numbers that break their own series
+    # The series in use are learned from this column, so any prefix a branch
+    # uses works without a code change. Runs after the duplicate and
+    # empty-packet passes so their colours win on a cell they already flagged.
+    # ══════════════════════════════════════════════════════════════════
+    col_packet_check = col_map.get("packet")
+    if col_packet_check:
+        present = [rows_data[r]["packet"] for r in all_rows if rows_data[r]["packet"]]
+        # Below a handful of values there is no pattern to infer, and guessing
+        # from two or three rows would only produce noise.
+        if len(present) >= MIN_PACKETS_FOR_PATTERNS:
+            packet_families = learn_packet_families(present)
+            established_counts = _established_digit_counts(packet_families)
+            for r in all_rows:
+                packet = rows_data[r]["packet"]
+                if not packet:
+                    continue
+                severity, explanation, suggestion = check_packet(
+                    packet, packet_families, established_counts
+                )
+                if not severity:
+                    continue
+                note = f"Row {r}: '{packet}' - {explanation}"
+                if suggestion:
+                    note += f" (did you mean '{suggestion}'?)"
+                if severity == "error":
+                    highlight(r, col_packet_check, ORANGE_FILL)
+                    summary["packet_pattern_break"].append(note)
+                else:
+                    highlight(r, col_packet_check, LIGHT_RED_FILL)
+                    summary["packet_needs_review"].append(note)
 
     # ══════════════════════════════════════════════════════════════════
     # PASS 3: Reset Closed/Top-Up rows to default values
