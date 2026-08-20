@@ -323,7 +323,8 @@ class TestClosedTopupClean:
         assert cell_of(ws, 5, "renewal_date").value == datetime.datetime(2026, 5, 1)
         assert cell_of(ws, 5, "renewal_date").number_format == rv.DATE_NUMBER_FORMAT
         assert cell_of(ws, 5, "gdr_gross").value == 0
-        assert cell_of(ws, 5, "magnet").value == "OK"
+        # A closed account was never opened for testing.
+        assert cell_of(ws, 5, "magnet").value == "TEST NOT DONE"
 
     def test_resolved_topup_row_also_cleaned(self, tmp_path):
         empty_pkt = good_row("P02", applicant="SHARED NAME", gdr_gross=12.5)

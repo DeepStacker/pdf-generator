@@ -2,7 +2,7 @@ import contextlib
 import logging
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from copy import copy
 from datetime import date, datetime
 from datetime import time as time_cls
@@ -172,9 +172,6 @@ MIN_PACKET_FAMILY = 3
 # Fewer packet numbers than this in a column and there is no pattern worth
 # inferring, so the series check stays out of the way entirely.
 MIN_PACKETS_FOR_PATTERNS = 10
-# How much of a family must agree on a leading digit run for it to count as
-# that family's signature.
-PACKET_PREFIX_COVERAGE = 0.90
 
 
 def normalize_packet(raw):
@@ -201,18 +198,6 @@ def split_packet(value):
     return match.group(1).upper(), match.group(2)
 
 
-def _stable_digit_prefix(digit_strings):
-    """The longest leading digit run shared by nearly every member."""
-    best = ""
-    width = min(len(d) for d in digit_strings)
-    for size in range(1, width + 1):
-        top, hits = Counter(d[:size] for d in digit_strings).most_common(1)[0]
-        if hits / len(digit_strings) < PACKET_PREFIX_COVERAGE:
-            break
-        best = top
-    return best
-
-
 def learn_packet_families(values):
     """Group packet numbers into (prefix, digit count) families.
 
@@ -230,7 +215,6 @@ def learn_packet_families(values):
         numbers = sorted(int(d) for d in digit_strings)
         families[key] = {
             "count": len(digit_strings),
-            "digit_prefix": _stable_digit_prefix(digit_strings),
             "low": numbers[0],
             "high": numbers[-1],
         }
@@ -247,21 +231,33 @@ def _established_digit_counts(families):
 
 
 def check_packet(value, families, established=None):
-    """Judge one packet number against the families learned from its column.
+    """Judge one packet number against the series learned from its column.
 
-    Returns (severity, explanation, suggestion) where severity is "" for a
-    value that fits, "review" for one that might be a rare family or might be
-    a typo, and "error" for one that plainly breaks its own family's pattern.
+    Deliberately narrow. Only two things are reported, both of which are
+    unambiguous typos rather than guesses:
+
+      * the value is not letters followed by digits at all;
+      * the prefix is one this file uses consistently, and this value has a
+        different number of digits (a dropped or doubled character).
+
+    Earlier versions also judged the leading digits and the numeric range.
+    Both flagged correct packets — a series that crosses a rounding boundary
+    (…8249999 to …8250000) changes its leading digits legitimately, and a
+    prefix with only a handful of packets has a range too narrow to infer
+    anything from. Rare prefixes are likewise left alone; a branch may
+    genuinely have one packet of a series.
+
+    Returns (severity, explanation) with severity "" when nothing is wrong.
     """
     text = safe_str(value)
     if not text:
-        return "", "", ""
+        return "", ""
     if established is None:
         established = _established_digit_counts(families)
 
     parts = split_packet(text)
     if parts is None:
-        return "error", "not letters followed by digits", ""
+        return "error", "not letters followed by digits"
 
     prefix, digits = parts
     known_counts = established.get(prefix)
@@ -269,37 +265,9 @@ def check_packet(value, families, established=None):
         expected = "/".join(str(c) for c in sorted(known_counts))
         return (
             "error",
-            f"'{prefix}' uses {expected} digits in this file, this has {len(digits)}",
-            "",
+            f"'{prefix}' uses {expected} digits everywhere else in this file, this has {len(digits)}",
         )
-
-    info = families.get((prefix, len(digits)))
-    if not info or info["count"] < MIN_PACKET_FAMILY:
-        seen = info["count"] if info else 0
-        return (
-            "review",
-            f"'{prefix}' with {len(digits)} digits appears only {seen}x - a new series, or a typo?",
-            "",
-        )
-
-    family_prefix = info["digit_prefix"]
-    if family_prefix and not digits.startswith(family_prefix):
-        suggestion = f"{prefix}{family_prefix}{digits[len(family_prefix):]}"
-        return (
-            "error",
-            f"digits start '{digits[:len(family_prefix)]}', this series uses '{family_prefix}'",
-            suggestion if len(suggestion) == len(text) else "",
-        )
-
-    number = int(digits)
-    span = max(info["high"] - info["low"], 1)
-    if number < info["low"] - span or number > info["high"] + span:
-        return (
-            "error",
-            f"{number} sits far outside this series' {info['low']}..{info['high']}",
-            "",
-        )
-    return "", "", ""
+    return "", ""
 
 
 def is_topup_remark(remarks):
@@ -601,6 +569,15 @@ def rearrange_rows_by_pdf(ws, col_map, all_rows, pdf_accounts):
         acct = normalize_account(ws.cell(row=r, column=col_acct).value)
         if acct:
             acct_to_rows[acct].append(r)
+
+    # A real report also prints reference numbers, totals and page furniture
+    # that can look exactly like an account. Those sit before the first real
+    # account or after the last, so anything unmatched outside that span is
+    # dropped — otherwise each one invents a blank "missing account" row.
+    known_accounts = set(acct_to_rows)
+    matched_at = [i for i, acct in enumerate(pdf_accounts) if acct in known_accounts]
+    if matched_at:
+        pdf_accounts = pdf_accounts[matched_at[0]:matched_at[-1] + 1]
 
     # One slot per PDF entry; None means "no such row in the workbook".
     slots = []
@@ -1243,20 +1220,13 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                 packet = rows_data[r]["packet"]
                 if not packet:
                     continue
-                severity, explanation, suggestion = check_packet(
+                severity, explanation = check_packet(
                     packet, packet_families, established_counts
                 )
                 if not severity:
                     continue
-                note = f"Row {r}: '{packet}' - {explanation}"
-                if suggestion:
-                    note += f" (did you mean '{suggestion}'?)"
-                if severity == "error":
-                    highlight(r, col_packet_check, ORANGE_FILL)
-                    summary["packet_pattern_break"].append(note)
-                else:
-                    highlight(r, col_packet_check, LIGHT_RED_FILL)
-                    summary["packet_needs_review"].append(note)
+                highlight(r, col_packet_check, ORANGE_FILL)
+                summary["packet_pattern_break"].append(f"Row {r}: '{packet}' - {explanation}")
 
     # ══════════════════════════════════════════════════════════════════
     # PASS 3: Reset Closed/Top-Up rows to default values
@@ -1288,14 +1258,14 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
     # These are not "not applicable" on a closed/top-up row — the expected
     # reading is simply the clean one, so they carry their default value
     # rather than being emptied.
-    default_text_cols = [
-        (col_map.get("magnet"), "Magnet Test", "OK"),
-        (col_map.get("tampered"), "Packet Tampered", "NO"),
-    ]
-    # A top-up has no GDR of its own, so this one genuinely blanks.
-    blank_cols = [
-        (col_map.get("gdr_no"), "GDR Number"),
-    ]
+    # A closed account was never opened for testing, so the magnet result
+    # records that rather than a pass; a top-up packet was checked and reads
+    # clean. Both keep a tampered reading of NO.
+    col_magnet_default = col_map.get("magnet")
+    col_tampered_default = col_map.get("tampered")
+    # A top-up has no GDR of its own, so that one blanks — but a closed
+    # account keeps the GDR number it was booked against.
+    col_gdr_no_default = col_map.get("gdr_no")
     for r in all_rows:
         is_closed = "CLOSED" in row_status_upper[r]
         is_topup = r in resolved_packet_rows or is_topup_remark(rows_data[r]["remarks"])
@@ -1314,18 +1284,22 @@ def run_validation(ws, ws_data, col_map, all_rows, rows_data, summary, _cell_cac
                 summary["closed_topup_defaulted"].append(f"Row {r}: {label} → 0")
         # The Renewal/Closed date is real loan data on both closed and top-up
         # rows, so it is preserved rather than blanked.
-        for tc, label, default in default_text_cols:
+        magnet_default = "TEST NOT DONE" if is_closed else "OK"
+        for tc, label, default in (
+            (col_magnet_default, "Magnet Test", magnet_default),
+            (col_tampered_default, "Packet Tampered", "NO"),
+        ):
             if tc and safe_str(val(r, tc)).upper() != default:
                 set_val(r, tc, default)
                 highlight(r, tc, GREEN_FILL, skip_excluded=False)
                 summary["closed_topup_defaulted"].append(f"Row {r}: {label} → {default}")
-        for bc, label in blank_cols:
-            if bc:
-                v = val(r, bc)
-                if v is not None and str(v).strip() != "":
-                    set_val(r, bc, None)
-                    highlight(r, bc, GREEN_FILL, skip_excluded=False)
-                    summary["closed_topup_cleared"].append(f"Row {r}: {label} cleared")
+        # Only a top-up clears the GDR number; a closed account keeps its own.
+        if col_gdr_no_default and not is_closed:
+            v = val(r, col_gdr_no_default)
+            if v is not None and str(v).strip() != "":
+                set_val(r, col_gdr_no_default, None)
+                highlight(r, col_gdr_no_default, GREEN_FILL, skip_excluded=False)
+                summary["closed_topup_cleared"].append(f"Row {r}: GDR Number cleared")
 
     # ══════════════════════════════════════════════════════════════════
     # PASS 3b: Normalize dates to dd/mm/yyyy
