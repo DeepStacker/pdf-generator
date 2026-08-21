@@ -1229,3 +1229,45 @@ class TestPacketChecksInAFullRun:
         make_workbook(src, self._rows(["S8245589", "S824559", "XS2494311"]))
         result = rv.validate_workbook(src)
         assert "packet_pattern_break" not in result["summary"]
+
+
+class TestDateSeparatorIsALiteralSlash:
+    """dd/mm/yyyy must survive a machine whose locale uses another separator.
+
+    An unescaped "/" in an Excel number format is the *locale* date separator,
+    not a slash — so on a machine set to use "-" the cell reads 05-05-2026.
+    """
+
+    def test_the_format_escapes_its_slashes(self):
+        assert rv.DATE_NUMBER_FORMAT == "DD\\/MM\\/YYYY"
+        assert "\\/" in rv.DATE_NUMBER_FORMAT, "an unescaped / follows the machine's locale"
+
+    def test_the_saved_file_carries_the_escaped_format(self, tmp_path):
+        import re as _re
+        import zipfile
+
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [good_row("P01", verification_date="05/05/2026")])
+        result = rv.validate_workbook(src)
+
+        with zipfile.ZipFile(result["output_path"]) as archive:
+            styles = archive.read("xl/styles.xml").decode()
+        codes = _re.findall(r'<numFmt numFmtId="\d+" formatCode="([^"]+)"', styles)
+        assert "DD\\/MM\\/YYYY" in codes
+
+    def test_normalized_date_cells_use_it(self, tmp_path):
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [good_row("P01", taf="TAF", verification_date="05/05/2026",
+                                     renewal_date="20-05-2026")])
+        result = rv.validate_workbook(src)
+        ws = openpyxl.load_workbook(result["output_path"])[SHEET]
+
+        for key in ("verification_date", "renewal_date"):
+            assert ws.cell(row=5, column=KEY_TO_COL[key]).number_format == rv.DATE_NUMBER_FORMAT
+
+    def test_the_filename_is_unchanged(self, tmp_path):
+        """The filename was never the problem - it must not drift."""
+        src = tmp_path / "B.xlsx"
+        make_workbook(src, [good_row("P01", verification_date="05/05/2026")])
+        result = rv.validate_workbook(src)
+        assert result["custom_filename"] == "TESTBR_Audit-MIS_05-MAY-2026.xlsx"

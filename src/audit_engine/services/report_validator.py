@@ -14,8 +14,11 @@ from openpyxl.utils import get_column_letter
 
 logger = logging.getLogger(__name__)
 
-# Every date in the report is displayed this way.
-DATE_NUMBER_FORMAT = "DD/MM/YYYY"
+# Every date in the report is displayed this way. The slashes are escaped:
+# an unescaped "/" in a number format is Excel's *locale* date separator, so
+# on a machine whose regional settings use "-" the cell would read 05-05-2026.
+# Escaping pins it to a literal slash everywhere.
+DATE_NUMBER_FORMAT = "DD\\/MM\\/YYYY"
 
 # Highlight fill (ARGB, as openpyxl stores it) → CSS color for the web grid.
 PREVIEW_FILL_MAP = {
