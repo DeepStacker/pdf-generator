@@ -148,7 +148,7 @@ jobs:
       # are already satisfied, so this does not upgrade them.
       - run: pip install -e .
       - name: Verify runtime deps are importable
-        run: python -c "import bottle, openpyxl, reportlab, pandas, PIL, certifi, pypdf; print('runtime deps OK')"
+        run: python -c "import bottle, openpyxl, reportlab, pandas, PIL, certifi, pypdf, pikepdf; print('runtime deps OK')"
       - name: Verify Tcl/Tk environment
         run: |
           python -c "import sys; print('Python:', sys.executable)"
@@ -207,7 +207,7 @@ jobs:
       - run: pip install pyinstaller pywebview reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk"
       - run: pip install -e .
       - name: Verify runtime deps are importable
-        run: python -c "import bottle, openpyxl, reportlab, pandas, PIL, certifi, pypdf; print('runtime deps OK')"
+        run: python -c "import bottle, openpyxl, reportlab, pandas, PIL, certifi, pypdf, pikepdf; print('runtime deps OK')"
       - run: pyinstaller --noconfirm pdf_generator.spec
       - name: Ad-hoc code sign
         run: |
@@ -278,7 +278,7 @@ jobs:
       - run: PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}" pip install pyinstaller pywebview pygobject reportlab openpyxl "numpy<2" "pandas<2.2" certifi "sv-ttk" staticx
       - run: pip install -e .
       - name: Verify runtime deps are importable
-        run: python -c "import bottle, openpyxl, reportlab, pandas, PIL, certifi, pypdf; print('runtime deps OK')"
+        run: python -c "import bottle, openpyxl, reportlab, pandas, PIL, certifi, pypdf, pikepdf; print('runtime deps OK')"
       - name: Query GI modules to seed PyInstaller cache
         run: |
           python3 -c "
