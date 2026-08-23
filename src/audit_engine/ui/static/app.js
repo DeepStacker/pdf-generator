@@ -131,7 +131,7 @@
         // INITIALIZATION
         function handleHashRouting() {
             let hash = window.location.hash.replace('#', '').toUpperCase();
-            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS', 'CONSOLIDATE', 'VALIDATOR'];
+            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS', 'CONSOLIDATE', 'VALIDATOR', 'FLATTEN'];
             if (!validTabs.includes(hash)) hash = 'PROCESS';
             
             if (state.activeTab !== hash) {
@@ -172,7 +172,7 @@
             if (bankName === 'CONSOLIDATION') {
                 // Show consolidation section, hide bank sections
                 document.getElementById('tab-CONSOLIDATE').classList.remove('hidden');
-                ['tab-PROCESS-IDFC','tab-PROCESS-EQUITAS','tab-PROCESS-ARVOG','tab-VALIDATOR'].forEach(id => {
+                ['tab-PROCESS-IDFC','tab-PROCESS-EQUITAS','tab-PROCESS-ARVOG','tab-VALIDATOR','tab-FLATTEN'].forEach(id => {
                     const s = document.getElementById(id);
                     if (s) s.classList.add('hidden');
                 });
@@ -333,6 +333,7 @@
             document.getElementById('tab-SETTINGS').classList.add('hidden');
             document.getElementById('tab-CONSOLIDATE').classList.add('hidden');
             document.getElementById('tab-VALIDATOR').classList.add('hidden');
+            document.getElementById('tab-FLATTEN').classList.add('hidden');
 
             // Show active section
             if (tabId === 'PROCESS') {
@@ -2717,4 +2718,177 @@
             document.getElementById('validatorProgressContainer').classList.add('hidden');
             document.getElementById('validatorConsole').innerHTML = '<div class="text-slate-500">[00:00:00] Ready. Select a report to validate.</div>';
             finishValidatorRun();
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════
+        // FLATTEN PDF
+        //
+        // Same zero-socket shape as the validator: a native dialog gives us a
+        // path, Python flattens it in place, and the result is revealed in the
+        // file manager. The PDF never leaves the machine.
+        // ═══════════════════════════════════════════════════════════════
+        let flattenPollInterval = null;
+        let flattenOutputPath = '';
+        let flattenLoggedCount = 0;
+
+        function flattenLog(level, message, timestamp) {
+            const box = document.getElementById('flattenConsole');
+            if (!box) return;
+            const time = timestamp || new Date().toTimeString().split(' ')[0];
+            let color = 'text-sky-400';
+            if (level === 'OK') color = 'text-emerald-400';
+            if (level === 'WARN') color = 'text-amber-500 font-semibold';
+            if (level === 'ERROR') color = 'text-rose-500 font-bold';
+            const row = `<div class="font-mono text-[11px]"><span class="text-slate-600">[${time}]</span> <span class="${color}">[${escapeHtml(level)}]</span> <span class="text-slate-200">${escapeHtml(message)}</span></div>`;
+            box.insertAdjacentHTML('beforeend', row);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function formatFileSize(bytes) {
+            if (!bytes && bytes !== 0) return '--';
+            if (bytes < 1024) return `${bytes} B`;
+            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+            return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+        }
+
+        async function browseFlattenFile() {
+            try {
+                const resp = await fetch('/api/flatten/browse');
+                const data = await resp.json();
+                if (data.path) {
+                    document.getElementById('flattenFilePath').value = data.path;
+                    flattenLog('INFO', `Selected ${data.path.split(/[\\/]/).pop()}`);
+                }
+            } catch (e) {
+                console.error('browseFlattenFile failed', e);
+                showToast('Could not open the file dialog', 'error');
+            }
+        }
+
+        async function runFlatten() {
+            const filepath = document.getElementById('flattenFilePath').value.trim();
+            if (!filepath) {
+                showToast('Select a PDF first', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('flattenBtnRun');
+            btn.disabled = true;
+            btn.textContent = 'Flattening...';
+            document.getElementById('flattenResults').classList.add('hidden');
+            document.getElementById('flattenProgressContainer').classList.remove('hidden');
+            document.getElementById('flattenProgressFile').textContent = filepath.split(/[\\/]/).pop();
+            document.getElementById('flattenConsole').innerHTML = '';
+            flattenOutputPath = '';
+            flattenLoggedCount = 0;
+
+            try {
+                const resp = await fetch('/api/flatten/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filepath: filepath })
+                });
+                const data = await resp.json();
+                if (!data.success) {
+                    flattenLog('ERROR', data.error || 'Could not start');
+                    showToast(data.error || 'Could not start', 'error');
+                    finishFlattenRun();
+                    return;
+                }
+                if (flattenPollInterval) clearInterval(flattenPollInterval);
+                flattenPollInterval = setInterval(pollFlattenProgress, 500);
+            } catch (e) {
+                console.error('runFlatten failed', e);
+                flattenLog('ERROR', String(e));
+                finishFlattenRun();
+            }
+        }
+
+        async function pollFlattenProgress() {
+            try {
+                const resp = await fetch('/api/flatten/progress');
+                const data = await resp.json();
+
+                const pct = data.pct || 0;
+                const circ = 125.6;
+                const ring = document.getElementById('flattenProgressRing');
+                if (ring) ring.style.strokeDashoffset = circ - (circ * pct / 100);
+                document.getElementById('flattenProgressPct').textContent = `${pct}%`;
+                document.getElementById('flattenProgressText').textContent = data.progress_text || 'Working...';
+
+                const logs = data.logs || [];
+                for (let i = flattenLoggedCount; i < logs.length; i++) {
+                    flattenLog(logs[i].level, logs[i].message, logs[i].timestamp);
+                }
+                flattenLoggedCount = logs.length;
+
+                if (!data.is_running) {
+                    clearInterval(flattenPollInterval);
+                    flattenPollInterval = null;
+                    if (data.error) {
+                        showToast(data.error, 'error');
+                    } else if (data.summary) {
+                        renderFlattenSummary(data.summary);
+                        showToast('PDF flattened', 'success');
+                    }
+                    finishFlattenRun();
+                }
+            } catch (e) {
+                console.error('pollFlattenProgress failed', e);
+                clearInterval(flattenPollInterval);
+                flattenPollInterval = null;
+                finishFlattenRun();
+            }
+        }
+
+        function finishFlattenRun() {
+            const btn = document.getElementById('flattenBtnRun');
+            btn.disabled = false;
+            btn.textContent = 'Flatten PDF';
+        }
+
+        function renderFlattenSummary(summary) {
+            flattenOutputPath = summary.output_path || '';
+            document.getElementById('flattenResultFile').textContent = summary.output_name || '--';
+            document.getElementById('flattenStat-pages').textContent = summary.pages || 0;
+            document.getElementById('flattenStat-fields').textContent = summary.fields_flattened || 0;
+            document.getElementById('flattenStat-links').textContent = summary.links_removed || 0;
+            document.getElementById('flattenStat-size').textContent =
+                `${formatFileSize(summary.source_bytes)} → ${formatFileSize(summary.output_bytes)}`;
+            document.getElementById('flattenResults').classList.remove('hidden');
+            updateThemeBranding();
+        }
+
+        async function openFlattenOutput() {
+            if (!flattenOutputPath) {
+                showToast('Nothing to open yet', 'error');
+                return;
+            }
+            try {
+                const resp = await fetch('/api/flatten/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: flattenOutputPath })
+                });
+                const data = await resp.json();
+                if (!data.success) showToast(data.error || 'Could not open the file', 'error');
+            } catch (e) {
+                console.error('openFlattenOutput failed', e);
+                showToast('Could not open the file', 'error');
+            }
+        }
+
+        function resetFlatten() {
+            if (flattenPollInterval) {
+                clearInterval(flattenPollInterval);
+                flattenPollInterval = null;
+            }
+            flattenOutputPath = '';
+            flattenLoggedCount = 0;
+            document.getElementById('flattenFilePath').value = '';
+            document.getElementById('flattenResults').classList.add('hidden');
+            document.getElementById('flattenProgressContainer').classList.add('hidden');
+            document.getElementById('flattenConsole').innerHTML = '<div class="text-slate-500">[00:00:00] Ready. Select a PDF to flatten.</div>';
+            finishFlattenRun();
         }

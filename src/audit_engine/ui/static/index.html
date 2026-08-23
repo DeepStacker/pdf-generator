@@ -548,6 +548,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
                     Validator
                 </button>
+                <button onclick="switchTab('FLATTEN')" id="tabBtn-FLATTEN" class="nav-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 15h6"/></svg>
+                    Flatten PDF
+                </button>
                 <button onclick="switchTab('STATS')" id="tabBtn-STATS" class="nav-btn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
                     Analytics
@@ -1455,6 +1459,100 @@
                                         </thead>
                                         <tbody id="validatorSummaryBody" class="divide-y divide-slate-800/60"></tbody>
                                     </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============ FLATTEN PDF ============ -->
+                <section id="tab-FLATTEN" class="space-y-6 hidden tab-content">
+                    <div class="border-b border-brand-borderLine pb-4 flex items-center justify-between">
+                        <div>
+                            <h2 class="text-3xl font-bold tracking-tight text-white font-sans">Flatten PDF</h2>
+                            <p class="text-xs text-slate-500 mt-1">Makes a PDF permanent: form fields, stamps and comments become part of the page and can no longer be edited.</p>
+                        </div>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">OFFLINE / NO UPLOAD</span>
+                    </div>
+
+                    <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Step 1: Select PDF</span>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">PDF File <span class="text-rose-400">*</span></label>
+                            <div class="flex gap-2">
+                                <input type="text" id="flattenFilePath" readonly placeholder="No file selected"
+                                       class="flex-1 bg-brand-termBg border border-brand-borderLine rounded-lg px-3 py-2 text-xs text-slate-200 font-mono truncate">
+                                <button onclick="browseFlattenFile()" id="flattenBtnBrowse"
+                                        class="bg-slate-800 text-slate-300 text-xs font-semibold px-4 py-2 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Browse</button>
+                            </div>
+                            <span class="text-2xs text-slate-500 mt-1 block">The original is never modified. The flattened copy is written beside it as &lt;name&gt;_flattened.pdf.</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Step 2: Flatten</span>
+                            <button onclick="resetFlatten()" class="text-2xs text-slate-500 hover:text-white transition">Reset</button>
+                        </div>
+                        <button onclick="runFlatten()" id="flattenBtnRun"
+                                class="w-full bg-blue-600 text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-blue-500 transition disabled:opacity-40 disabled:pointer-events-none dynamic-accent-bg dynamic-accent-hover-bg">
+                            Flatten PDF
+                        </button>
+
+                        <div id="flattenProgressContainer" class="hidden bg-slate-950/30 border border-brand-borderLine rounded-lg p-3">
+                            <div class="flex items-center gap-3">
+                                <div class="relative w-12 h-12 flex-shrink-0">
+                                    <svg class="w-full h-full -rotate-90">
+                                        <circle cx="24" cy="24" r="20" stroke-width="4" stroke="#1E293B" fill="transparent"/>
+                                        <circle id="flattenProgressRing" cx="24" cy="24" r="20" stroke-width="4" stroke="#2563EB" fill="transparent" stroke-dasharray="125.6" stroke-dashoffset="125.6" stroke-linecap="round" class="transition-all duration-300 dynamic-accent-stroke"/>
+                                    </svg>
+                                    <span id="flattenProgressPct" class="absolute inset-0 flex items-center justify-center text-2xs font-bold text-white">0%</span>
+                                </div>
+                                <div class="space-y-0.5">
+                                    <span id="flattenProgressText" class="block text-2xs font-bold text-slate-200">Working...</span>
+                                    <span id="flattenProgressFile" class="block text-2xs text-slate-500">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
+                            </div>
+                            <div id="flattenConsole" class="bg-brand-termBg border border-brand-borderLine rounded-lg h-20 font-mono text-2xs p-2 overflow-y-auto space-y-0.5">
+                                <div class="text-slate-500">[00:00:00] Ready. Select a PDF to flatten.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="flattenResults" class="hidden bg-brand-panelBg border border-brand-borderLine rounded-xl overflow-hidden shadow-md">
+                        <div class="p-6 space-y-4">
+                            <div class="flex items-center justify-between flex-wrap gap-3">
+                                <div>
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Flattened File</span>
+                                    <span id="flattenResultFile" class="text-sm font-bold text-white block mt-0.5 truncate max-w-[420px]">--</span>
+                                </div>
+                                <button onclick="openFlattenOutput()" id="flattenBtnOpen"
+                                        class="bg-blue-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-blue-500 transition dynamic-accent-bg dynamic-accent-hover-bg">Open Flattened PDF</button>
+                            </div>
+                            <div class="flex gap-2 flex-wrap">
+                                <div class="flex-1 min-w-[120px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Pages</span>
+                                    <span id="flattenStat-pages" class="text-sm font-bold mt-0.5 block text-slate-200">0</span>
+                                </div>
+                                <div class="flex-1 min-w-[120px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Fields Baked In</span>
+                                    <span id="flattenStat-fields" class="text-sm font-bold mt-0.5 block text-blue-500 dynamic-accent-fg">0</span>
+                                </div>
+                                <div class="flex-1 min-w-[120px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Links Removed</span>
+                                    <span id="flattenStat-links" class="text-sm font-bold mt-0.5 block text-slate-200">0</span>
+                                </div>
+                                <div class="flex-1 min-w-[120px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Size</span>
+                                    <span id="flattenStat-size" class="text-xs font-bold mt-0.5 block text-slate-400">--</span>
                                 </div>
                             </div>
                         </div>

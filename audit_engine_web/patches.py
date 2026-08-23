@@ -8,6 +8,7 @@ def apply_patches():
     import audit_engine.utils.dialogs as dialogs_mod
     import audit_engine.utils.platform as platform_mod
     import audit_engine.web.handlers as handlers_mod
+    import audit_engine.web.flatten_handlers as flatten_handlers_mod
     import audit_engine.web.report_handlers as report_handlers_mod
 
     dialogs_mod.ask_file_dialog = lambda: ""
@@ -42,3 +43,13 @@ def apply_patches():
     report_handlers_mod.handle_report_browse_pdf = lambda: {"success": True, "path": ""}
     report_handlers_mod.handle_report_run = lambda _data: dict(_desktop_only)
     report_handlers_mod.handle_report_open = lambda _data: dict(_desktop_only)
+
+    # The desktop flatten handlers drive a native dialog and read a path from
+    # the local disk. Served over HTTP that would mean a dialog on the server
+    # and arbitrary server-side file access, so they are disabled here — the
+    # browser uses the upload endpoint instead.
+    flatten_handlers_mod.ask_pdf_file_dialog = lambda: ""
+    flatten_handlers_mod.open_path = lambda _path: logger.info("open_path skipped (web mode): %s", _path)
+    flatten_handlers_mod.handle_flatten_browse = lambda: {"success": True, "path": ""}
+    flatten_handlers_mod.handle_flatten_run = lambda _data: dict(_desktop_only)
+    flatten_handlers_mod.handle_flatten_open = lambda _data: dict(_desktop_only)

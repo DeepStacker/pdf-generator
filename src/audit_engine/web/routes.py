@@ -10,6 +10,12 @@ import time
 import audit_engine.ui as ui_template
 from audit_engine._version import VERSION
 from audit_engine.lib.bottle import request, route
+from audit_engine.web.flatten_handlers import (
+    handle_flatten_browse,
+    handle_flatten_open,
+    handle_flatten_progress,
+    handle_flatten_run,
+)
 from audit_engine.web.handlers import (
     handle_browse_file,
     handle_browse_files,
@@ -197,3 +203,23 @@ def api_report_progress() -> dict:
 def api_report_open() -> dict:
     return handle_report_open(request.json)
 
+
+# ---- PDF Flatten (desktop, path-based / zero-socket) ----
+@route("/api/flatten/browse")
+def api_flatten_browse() -> dict:
+    return handle_flatten_browse()
+
+
+@route("/api/flatten/run", method="POST")
+def api_flatten_run() -> dict:
+    return handle_flatten_run(request.json)
+
+
+@route("/api/flatten/progress")
+def api_flatten_progress() -> dict:
+    return handle_flatten_progress()
+
+
+@route("/api/flatten/open", method="POST")
+def api_flatten_open() -> dict:
+    return handle_flatten_open(request.json)

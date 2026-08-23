@@ -96,12 +96,14 @@ a = Analysis(
         'audit_engine.web',
         'audit_engine.web.routes',
         'audit_engine.web.report_handlers',
+        'audit_engine.web.flatten_handlers',
         # --- Services ---
         'audit_engine.services',
         'audit_engine.services.idfc',
         'audit_engine.services.equitas',
         'audit_engine.services.arvog',
         'audit_engine.services.report_validator',
+        'audit_engine.services.pdf_flattener',
         # --- Consolidation ---
         'audit_engine.consolidator',
         'audit_engine.consolidator.config',
@@ -141,6 +143,8 @@ a = Analysis(
         'openpyxl',
         # Report Validator: optional PDF row-resequencing
         'pypdf',
+        # PDF flattening (bundles qpdf)
+        'pikepdf',
         'openpyxl.styles',
         'pandas',
         'numpy',

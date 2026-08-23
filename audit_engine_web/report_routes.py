@@ -21,6 +21,7 @@ import threading
 import uuid
 from copy import copy
 from pathlib import Path
+import tempfile
 from tempfile import NamedTemporaryFile
 
 import openpyxl
@@ -398,3 +399,58 @@ def report_download():
         download=download_name,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+# ── PDF Flatten ───────────────────────────────────────────────────────
+# One request does the whole job: the upload is flattened and the result is
+# streamed straight back, then both files are shredded. Nothing a user sends
+# is left on the server's disk after the response — there is no id to poll
+# and no stored copy to leak.
+
+@route("/api/flatten/upload", method=["OPTIONS", "POST"])
+def flatten_upload():
+    if request.method == "OPTIONS":
+        return {}
+
+    upload = request.files.get("file")
+    if not upload:
+        response.status = 400
+        return {"detail": "No file provided"}
+
+    original_name = upload.filename or "document.pdf"
+    if Path(original_name).suffix.lower() != ".pdf":
+        response.status = 400
+        return {"detail": "Only .pdf files can be flattened"}
+
+    from audit_engine.services.pdf_flattener import FlattenError, cleanup_dir
+    from audit_engine.services.pdf_flattener import flatten_pdf as _flatten
+    from audit_engine.services.pdf_flattener import secure_delete as _shred
+
+    work_dir = Path(tempfile.mkdtemp(prefix="flatten_", dir=str(REPORT_UPLOAD_DIR)))
+    source = work_dir / f"src_{uuid.uuid4().hex[:12]}.pdf"
+    try:
+        with open(source, "wb") as out:
+            shutil.copyfileobj(upload.file, out)
+
+        result = _flatten(source, output_path=work_dir / "flattened.pdf")
+
+        # Read the result into memory, then remove every trace from disk
+        # before the response goes out.
+        payload = Path(result["output_path"]).read_bytes()
+        download_name = f"{Path(original_name).stem}_flattened.pdf"
+
+        response.content_type = "application/pdf"
+        response.headers["Content-Disposition"] = f'attachment; filename="{download_name}"'
+        response.headers["X-Flatten-Pages"] = str(result["pages"])
+        response.headers["X-Flatten-Fields"] = str(result["fields_flattened"])
+        response.headers["X-Flatten-Links-Removed"] = str(result["links_removed"])
+        return payload
+    except FlattenError as e:
+        response.status = 400
+        return {"detail": str(e)}
+    except Exception as e:  # noqa: BLE001
+        response.status = 500
+        return {"detail": f"Could not flatten this PDF: {e}"}
+    finally:
+        # Shred the upload specifically; it is somebody's customer record.
+        _shred(source)
+        cleanup_dir(work_dir)
