@@ -1,0 +1,72 @@
+# Audit Engine web stack for the home server.
+#
+# Runs under rootless Podman alongside unrelated applications, so it follows
+# the same two rules the other stacks here do:
+#
+#  1. Nothing is published to the host. The Tailscale sidecar joins the tailnet
+#     itself and proxies inward, so the app is reachable at its own hostname
+#     without a single forwarded port.
+#  2. Its own project name and its own network. It cannot resolve or reach the
+#     other stacks' containers, and they cannot reach it.
+
+name: pdfgen
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      # Everything the app persists lives on the volume below. Left to itself
+      # it would write into the container's home directory, which a rebuild
+      # throws away.
+      REPORT_STORAGE_DIR: /data/reports
+      AUDIT_ENGINE_DB_PATH: /data/audit_engine.db
+      AUDIT_ENGINE_LOG_PATH: /data/audit_engine.log
+    volumes:
+      - pdfgen_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/', timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    networks: [pdfgen_net]
+
+  # The app's own device on the tailnet, answering at the root of its own
+  # hostname. Nothing is published to the host: this container joins the
+  # tailnet and proxies inward, which is why the stack needs no host port.
+  #
+  # Userspace networking (the image default) keeps it working under rootless
+  # podman with no TUN device and no added capabilities.
+  ts:
+    image: docker.io/tailscale/tailscale:stable
+    restart: unless-stopped
+    hostname: ${TS_HOSTNAME:-pdfgengss}
+    environment:
+      TS_HOSTNAME: ${TS_HOSTNAME:-pdfgengss}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      # The host resolves DNS; taking the tailnet's resolver here only adds a
+      # way for this container to lose sight of `app`.
+      TS_ACCEPT_DNS: "false"
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+    volumes:
+      # The node's identity. Without it every restart would join the tailnet as
+      # a brand new device and the hostname would gain a -1 suffix.
+      - pdfgen_ts_state:/var/lib/tailscale
+      - ./ts-serve.json:/config/serve.json:ro,z
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [pdfgen_net]
+
+volumes:
+  pdfgen_data:
+  pdfgen_ts_state:
+
+networks:
+  pdfgen_net:
+    driver: bridge

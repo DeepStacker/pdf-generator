@@ -33,6 +33,9 @@ generated_pdfs/
 .vscode/
 .idea/
 
+# Deployment secrets (Tailscale auth key). The example stays tracked.
+deploy/.env.production
+
 # Claude Code local tooling (dev-server launch config, etc.)
 .claude/
 

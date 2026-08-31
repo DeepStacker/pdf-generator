@@ -1,0 +1,29 @@
+# Brings the Audit Engine back after a reboot.
+#
+# Rootless podman does not restart containers on boot by itself, and the host's
+# global podman-restart.service is deliberately left disabled — enabling it
+# would change the restart behaviour of the unrelated stacks running under the
+# same user. This unit touches only this stack.
+#
+# Install (as the owning user, with lingering already enabled):
+#   mkdir -p ~/.config/systemd/user
+#   cp ~/apps/pdf-generator/deploy/pdfgen.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now pdfgen.service
+
+[Unit]
+Description=Audit Engine web (podman compose)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h/apps/pdf-generator/deploy
+ExecStart=/usr/bin/podman compose -f compose.prod.yml --env-file .env.production up -d
+ExecStop=/usr/bin/podman compose -f compose.prod.yml --env-file .env.production stop
+# The first start builds the image, which compiles nothing but pulls pandas.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=default.target
