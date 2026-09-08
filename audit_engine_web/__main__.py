@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import atexit
+import contextlib
 import json
 import logging
 import os
@@ -63,6 +64,108 @@ def _start_temp_garbage_collector():
     t.start()
 
 _start_temp_garbage_collector()
+
+
+# ---------------------------------------------------------------------------
+# Zero-trace file handling
+# ---------------------------------------------------------------------------
+# These workbooks carry customer names, loan numbers and gold weights. Nothing
+# is kept a moment longer than the request that needs it:
+#
+#   * every file the server touches lives under UPLOAD_DIR or OUTPUT_DIR, and
+#     nothing outside those two can be listed, previewed or downloaded;
+#   * starting a job wipes whatever the previous job left behind;
+#   * a file is deleted once it has been handed to the browser;
+#   * the sweeper above is the backstop for anything a crashed or abandoned
+#     job left behind.
+#
+# The desktop build deliberately does none of this: there the output folder is
+# one the user picked and the files are theirs to keep.
+
+# Seconds to wait before unlinking a file that has just been served. Removing
+# a file while it is still being sent is safe on POSIX — the open handle keeps
+# reading the data — so this only has to outlast the response starting.
+DOWNLOAD_DELETE_DELAY = 5.0
+
+
+def _workspace_roots() -> tuple[Path, ...]:
+    return (UPLOAD_DIR.resolve(), OUTPUT_DIR.resolve())
+
+
+def _within_workspace(path: Path) -> bool:
+    """True if path is inside a directory this server manages.
+
+    Without this, "path" on the download and preview routes is any absolute
+    path on the box — the history database and every other tenant's file
+    included.
+    """
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    return any(resolved == root or root in resolved.parents for root in _workspace_roots())
+
+
+def _reject_outside_workspace(path: Path) -> dict | None:
+    if _within_workspace(path):
+        return None
+    logger.warning("Refused access to %s: outside the managed directories", path)
+    response.status = 403
+    return {"error": "Access denied"}
+
+
+def _purge_workspace(keep_paths=()) -> int:
+    """Delete everything under the managed directories except keep_paths.
+
+    Used at the start of a job, so one customer's report is never sitting on
+    disk while the next customer's is being produced.
+    """
+    keep = set()
+    for raw in keep_paths:
+        if raw:
+            with contextlib.suppress(OSError):
+                keep.add(Path(raw).resolve())
+
+    removed = 0
+    for root in (UPLOAD_DIR, OUTPUT_DIR):
+        if not root.exists():
+            continue
+        for child in root.iterdir():
+            child_resolved = child.resolve()
+            # Keep the inputs for the job about to run, and the directory each
+            # one sits in.
+            if any(k == child_resolved or child_resolved in k.parents for k in keep):
+                continue
+            try:
+                if child.is_dir():
+                    shutil.rmtree(str(child), ignore_errors=True)
+                else:
+                    child.unlink()
+                removed += 1
+            except OSError as e:
+                logger.warning("Could not clear %s: %s", child, e)
+    return removed
+
+
+def _delete_after_download(*paths) -> None:
+    """Remove files once the browser has them."""
+    def _remove():
+        for raw in paths:
+            target = Path(raw)
+            try:
+                if target.is_dir():
+                    shutil.rmtree(str(target), ignore_errors=True)
+                elif target.exists():
+                    target.unlink()
+                else:
+                    continue
+                logger.info("Zero-trace: removed %s after download", target.name)
+            except OSError as e:
+                # Windows will not unlink a file that is still open. The purge
+                # at the start of the next job catches it.
+                logger.warning("Could not remove %s after download: %s", target, e)
+
+    threading.Timer(DOWNLOAD_DELETE_DELAY, _remove).start()
 
 app = create_app()
 
@@ -168,6 +271,9 @@ def handle_download():
         response.status = 400
         return {"error": "No path provided"}
     abs_path = Path(filepath)
+    denied = _reject_outside_workspace(abs_path)
+    if denied:
+        return denied
     if not abs_path.exists():
         response.status = 404
         return {"error": "File not found"}
@@ -177,7 +283,10 @@ def handle_download():
         with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
             for f in abs_path.rglob("*"):
                 zf.write(str(f), str(f.relative_to(abs_path)))
+        # The folder has been handed over; neither it nor the zip stays behind.
+        _delete_after_download(zip_path, abs_path)
         return static_file(zip_name, root=str(OUTPUT_DIR), download=zip_name)
+    _delete_after_download(abs_path)
     ext = abs_path.suffix.lower()
     mimetypes = {'.pdf': 'application/pdf', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xls': 'application/vnd.ms-excel', '.zip': 'application/zip', '.csv': 'text/csv', '.txt': 'text/plain'}
     response.content_type = mimetypes.get(ext, 'application/octet-stream')
@@ -190,6 +299,9 @@ def handle_preview():
         response.status = 400
         return {"error": "No path provided"}
     abs_path = Path(filepath)
+    denied = _reject_outside_workspace(abs_path)
+    if denied:
+        return denied
     if not abs_path.exists():
         response.status = 404
         return {"error": "File not found"}
@@ -270,7 +382,7 @@ def handle_download_zip():
     with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
         for item in paths_to_zip:
             p = Path(item)
-            if p.exists() and p.is_file():
+            if p.exists() and p.is_file() and _within_workspace(p):
                 zf.write(str(p), p.name)
 
     return {"success": True, "zip_path": str(zip_path)}
@@ -281,9 +393,9 @@ def handle_list_output():
     if not dirpath:
         return {"success": False, "files": []}
     p = Path(dirpath)
-    if not p.exists():
+    if not _within_workspace(p) or not p.exists():
         return {"success": False, "files": []}
-    
+
     files = []
     if p.is_file():
         files.append({"name": p.name, "path": str(p), "size": p.stat().st_size})
@@ -323,6 +435,28 @@ def handle_history_download(entry_id, filename):
                 zf.write(str(f), str(f.relative_to(file_path)))
         return static_file(zip_name, root=str(OUTPUT_DIR), download=zip_name)
     return static_file(file_path.name, root=str(file_path.parent), download=file_path.name)
+
+@route("/api/run", method="POST")
+def web_run():
+    """Start a job, after clearing out whatever the last one left behind."""
+    from audit_engine.web.handlers import handle_run
+
+    data = dict(request.json or {})
+
+    raw_input = data.get("filepath")
+    inputs = raw_input if isinstance(raw_input, list) else ([raw_input] if raw_input else [])
+
+    # Outputs are pinned inside the managed directory whatever the client asks
+    # for, so the purge above and the sweeper can always reach them — and so a
+    # crafted request cannot write a report into an arbitrary path.
+    data["out_path"] = str(OUTPUT_DIR)
+
+    cleared = _purge_workspace(keep_paths=inputs)
+    if cleared:
+        logger.info("Zero-trace: cleared %d item(s) left by the previous job", cleared)
+
+    return handle_run(data)
+
 
 @route("/api/update/check")
 def web_update_check():
