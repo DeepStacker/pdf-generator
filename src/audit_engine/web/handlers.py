@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from audit_engine.database.repos import config_repo, history_repo
-from audit_engine.domain.enums import AuditType, BankType, EquitasFormat, EquitasStage, OutputMode
+from audit_engine.domain.enums import ArvogFormat, AuditType, BankType, EquitasFormat, EquitasStage, OutputMode
 from audit_engine.tasks.workers import cancel_event, global_tracker, worker_arvog_thread, worker_equitas_thread, worker_idfc_thread
 from audit_engine.updater.client import check_latest_release, download_update_worker, update_state
 from audit_engine.utils.config import paths
@@ -140,6 +140,7 @@ _VALID_OUTPUT_MODES = {e.value for e in OutputMode}
 _VALID_AUDIT_TYPES = {e.value for e in AuditType}
 _VALID_EQUITAS_STAGES = {e.value for e in EquitasStage}
 _VALID_EQUITAS_FORMATS = {e.value for e in EquitasFormat}
+_VALID_ARVOG_FORMATS = {e.value for e in ArvogFormat}
 
 
 def _validate_enum(value: str, valid_set: set[str], name: str) -> str | None:
@@ -184,7 +185,7 @@ def handle_run(data: dict) -> dict:
         if err:
             return {"success": False, "error": err}
     elif bank == BankType.ARVOG.value:
-        err = _validate_enum(str(data.get("arvog_format", "BOTH")), _VALID_EQUITAS_FORMATS, "arvog_format")
+        err = _validate_enum(str(data.get("arvog_format", "BOTH")), _VALID_ARVOG_FORMATS, "arvog_format")
         if err:
             return {"success": False, "error": err}
         err = _validate_enum(str(data.get("arvog_mode", "BOTH")), _VALID_OUTPUT_MODES, "arvog_mode")

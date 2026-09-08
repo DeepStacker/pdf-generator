@@ -8,11 +8,17 @@ Path resolution order for database and log files:
 """
 
 import contextlib
+import json
+import logging
 import os
 import sys
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Final
+
+_logger = logging.getLogger(__name__)
 
 
 def _is_unsafe_vm_or_net_path(path: str) -> bool:
@@ -119,6 +125,47 @@ class BankFingerprints:
     arvog: frozenset[str] = frozenset({"jewellery1", "jewellery2", "jewellery no.", "packets number"})
 
 
+# Region -> cluster manager fallback for Arvog master sheets that leave the
+# "Cluster Manager" column blank. Kept here rather than in the service so a
+# staffing change is a config edit, not a code change: set
+# ARVOG_CLUSTER_MANAGERS='{"WARANGAL": "Some Name"}' to override, or to '{}'
+# to switch the fallback off entirely.
+_DEFAULT_REGION_CLUSTER_MANAGERS: Final[dict[str, str]] = {"WARANGAL": "D.Praveen Kumar"}
+
+
+def _load_region_cluster_managers() -> Mapping[str, str]:
+    raw = os.environ.get("ARVOG_CLUSTER_MANAGERS", "").strip()
+    if not raw:
+        return MappingProxyType(dict(_DEFAULT_REGION_CLUSTER_MANAGERS))
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        _logger.warning("ARVOG_CLUSTER_MANAGERS is not valid JSON; using built-in defaults")
+        return MappingProxyType(dict(_DEFAULT_REGION_CLUSTER_MANAGERS))
+    if not isinstance(parsed, dict):
+        _logger.warning("ARVOG_CLUSTER_MANAGERS must be a JSON object; using built-in defaults")
+        return MappingProxyType(dict(_DEFAULT_REGION_CLUSTER_MANAGERS))
+    # Regions are matched upper-cased and trimmed, the same way the sheet value is.
+    return MappingProxyType({
+        str(region).strip().upper(): str(name).strip()
+        for region, name in parsed.items()
+        if str(name).strip()
+    })
+
+
+@dataclass(frozen=True)
+class ArvogConfig:
+    """Arvog-specific defaults that are staffing data rather than logic."""
+
+    region_cluster_managers: Mapping[str, str] = field(default_factory=_load_region_cluster_managers)
+
+    def cluster_manager_for(self, region: str | None) -> str | None:
+        """Return the standing cluster manager for a region, or None."""
+        if not region:
+            return None
+        return self.region_cluster_managers.get(str(region).strip().upper())
+
+
 @dataclass(frozen=True)
 class UpdateConfig:
     repo: str = "DeepStacker/pdf-generator"
@@ -139,6 +186,7 @@ class HeartbeatConfig:
 # Global singleton instances
 paths: Final[Paths] = Paths()
 fingerprints: Final[BankFingerprints] = BankFingerprints()
+arvog: Final[ArvogConfig] = ArvogConfig()
 update: Final[UpdateConfig] = UpdateConfig()
 ui: Final[UIConfig] = UIConfig()
 heartbeat: Final[HeartbeatConfig] = HeartbeatConfig()

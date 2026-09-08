@@ -32,6 +32,20 @@ class EquitasFormat(Enum):
     BOTH = "BOTH"
 
 
+class ArvogFormat(Enum):
+    """Arvog output formats.
+
+    Deliberately its own enum rather than an alias of EquitasFormat: the two
+    banks happen to offer the same three choices today, and sharing one
+    constant would silently change Arvog validation the day Equitas gains a
+    fourth.
+    """
+
+    PDF_ONLY = "PDF ONLY"
+    EXCEL_ONLY = "EXCEL ONLY"
+    BOTH = "BOTH"
+
+
 class LogLevel(Enum):
     INFO = "INFO"
     WARN = "WARN"
