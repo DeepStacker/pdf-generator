@@ -89,6 +89,20 @@ def _sweep_expired_reports() -> int:
                 continue
     except OSError:
         return removed
+    # The rows carry the customer's own filename, and once the files they point
+    # at are gone the metadata is of no use to anyone.
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        deleted = conn.execute(
+            "DELETE FROM report_jobs WHERE created_at < ?", (cutoff,)
+        ).rowcount
+        conn.commit()
+        conn.close()
+        if deleted:
+            logger.info("Report retention: removed %d expired job record(s)", deleted)
+    except sqlite3.Error as e:
+        logger.warning("Could not prune expired job records: %s", e)
+
     if removed:
         logger.info("Report retention: removed %d expired file(s)", removed)
     return removed
