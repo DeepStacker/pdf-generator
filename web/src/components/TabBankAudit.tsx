@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Play, AlertCircle, CheckCircle2, Download, Terminal, FileSpreadsheet, FileText, Archive, Eye, Trash2, ShieldCheck, Sparkles, RotateCcw } from 'lucide-react';
 import { FilePreviewModal } from './FilePreviewModal';
 import { ArvogRebuildPanel } from './ArvogRebuildPanel';
@@ -9,6 +9,7 @@ export interface BankAuditOptions {
   output_mode?: string;
   equitas_stage?: string;
   equitas_format?: string;
+  equitas_pack?: string;
   arvog_format?: string;
   arvog_mode?: string;
 }
@@ -62,6 +63,17 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
 
   // Which leg of the Arvog round trip: out to the branch, or back from it.
   // Mirrors the desktop's sub-tab inside the Arvog panel.
+  // Equitas packaging is matched by substring in the service, not by an enum,
+  // so these are the seven the desktop offers. The browser never sent this
+  // field at all, leaving every web Equitas run on the FOLDER default.
+  const EQUITAS_PACKS = [
+    'FOLDER', 'ZIP OF PDF', 'ZIP OF EXCEL', 'ZIP OF BOTH',
+    'BOTH (FOLDER + ZIP OF PDF)', 'BOTH (FOLDER + ZIP OF EXCEL)',
+    'BOTH (FOLDER + ZIP OF BOTH)',
+  ];
+  const [equitasPack, setEquitasPack] = useState<string>(() =>
+    readOption('bank_audit_equitasPack', EQUITAS_PACKS, 'FOLDER'));
+
   const [arvogPanel, setArvogPanel] = useState<'GENERATE' | 'REBUILD'>(() =>
     localStorage.getItem('bank_audit_arvogPanel') === 'REBUILD' ? 'REBUILD' : 'GENERATE');
 
@@ -115,6 +127,10 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
   useEffect(() => {
     localStorage.setItem('bank_audit_equitasFormat', equitasFormat);
   }, [equitasFormat]);
+
+  useEffect(() => {
+    localStorage.setItem('bank_audit_equitasPack', equitasPack);
+  }, [equitasPack]);
 
   useEffect(() => {
     localStorage.setItem('bank_audit_arvogFormat', arvogFormat);
@@ -231,8 +247,32 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
     }
   };
 
+  // Held in a ref so Cancel can stop it and so an unmount clears it. It used
+  // to be a local that handleExecute dropped on the floor, which left the
+  // 400 ms poll running for the life of the page on every error path.
+  const pollRef = useRef<number | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  useEffect(() => stopPolling, []);
+
+  const handleCancel = async () => {
+    setLogs((prev) => [...prev, '[WARN] Cancelling…']);
+    try {
+      await fetch('/api/cancel');
+    } catch {
+      /* the run may already have finished; the poll below settles it */
+    }
+  };
+
   const pollProgress = () => {
-    const interval = setInterval(async () => {
+    stopPolling();
+    const interval = window.setInterval(async () => {
       try {
         const res = await fetch('/api/progress');
         const data = await res.json();
@@ -246,7 +286,7 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
           }
 
           if (data.is_running === false) {
-            clearInterval(interval);
+            stopPolling();
             setIsProcessing(false);
 
             let foundDir: string | null = null;
@@ -272,8 +312,7 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
         console.error('Error polling progress:', err);
       }
     }, 400);
-
-    return () => clearInterval(interval);
+    pollRef.current = interval;
   };
 
   const handleExecute = async () => {
@@ -304,6 +343,7 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
         output_mode: idfcOutputMode,
         equitas_stage: equitasStage,
         equitas_format: equitasFormat,
+        equitas_pack: equitasPack,
         arvog_format: arvogFormat,
         arvog_mode: arvogMode,
       };
@@ -514,6 +554,21 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
                 <option value="EXCEL ONLY">Excel Only</option>
               </select>
             </div>
+
+            <div>
+              <label htmlFor="equitasPack" className="block text-xs font-semibold text-slate-300 mb-1.5">Packaging Mode</label>
+              <select
+                id="equitasPack"
+                name="equitasPack"
+                value={equitasPack}
+                onChange={(e) => setEquitasPack(e.target.value)}
+                className="app-input font-medium"
+              >
+                {EQUITAS_PACKS.map((mode) => (
+                  <option key={mode} value={mode}>{mode}</option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
 
@@ -696,6 +751,15 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
                 </div>
               )}
             </button>
+
+            {isProcessing && (
+              <button
+                onClick={handleCancel}
+                className="w-full py-2 rounded-lg text-xs font-bold bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 transition-colors"
+              >
+                Stop Generation
+              </button>
+            )}
 
             {isProcessing && (
               <div className="space-y-2 pt-1">

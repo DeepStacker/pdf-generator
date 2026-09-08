@@ -45,10 +45,10 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ file, onClos
             </div>
 
             <div className="p-3.5 rounded-xl bg-[#090d16] border border-slate-800 text-center space-y-1">
-              <span className="text-[10px] uppercase font-semibold text-slate-400 block">Schema Check</span>
+              <span className="text-[10px] uppercase font-semibold text-slate-400 block">File Name</span>
               <span className="text-xs font-mono font-bold text-emerald-400 flex items-center justify-center space-x-1">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Valid Headers</span>
+                <span>As uploaded</span>
               </span>
             </div>
 

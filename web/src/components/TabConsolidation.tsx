@@ -405,7 +405,7 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
 
               {outputPath && (
                 <button
-                  onClick={() => setPreviewModal({ path: outputPath, name: "Mar'26 consolidated.xlsx" })}
+                  onClick={() => setPreviewModal({ path: outputPath, name: outputPath ? outputPath.split(/[\\/]/).pop()! : 'consolidated.xlsx' })}
                   className="px-4 py-2.5 rounded-xl border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-bold flex items-center space-x-1.5 cursor-pointer transition"
                 >
                   <Eye className="w-4 h-4" />
@@ -416,7 +416,7 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
               {outputPath && (
                 <a
                   href={`/api/download?path=${encodeURIComponent(outputPath)}`}
-                  download="Mar'26 consolidated.xlsx"
+                  download={outputPath ? outputPath.split(/[\\/]/).pop()! : 'consolidated.xlsx'}
                   className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/20 flex items-center space-x-2 transition"
                 >
                   <Download className="w-4 h-4" />
