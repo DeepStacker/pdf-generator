@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UploadCloud, FileSpreadsheet, Trash2, Play, CheckCircle2, AlertTriangle, RefreshCw, Download, Layers, TrendingUp, Users, Search, Eye, Check, Loader2 } from 'lucide-react';
 import { DocumentViewerModal } from './DocumentViewerModal';
 
@@ -127,8 +127,22 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
     setError(null);
   };
 
+  // Held so it can be stopped. It used to be a local nothing kept, so the
+  // 250 ms poll outlived every failed run.
+  const pollRef = useRef<number | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  useEffect(() => stopPolling, []);
+
   const pollConsolidationProgress = () => {
-    const interval = setInterval(async () => {
+    stopPolling();
+    const interval = window.setInterval(async () => {
       try {
         const res = await fetch('/api/consolidate/progress');
         const data = await res.json();
@@ -140,7 +154,7 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
             setProgressText(data.progress_text);
           }
           if (data.is_running === false) {
-            clearInterval(interval);
+            stopPolling();
             setIsProcessing(false);
             setConsolidationPct(100);
             if (data.summary) {
@@ -155,6 +169,7 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
         console.error('Error polling consolidation progress:', err);
       }
     }, 250);
+    pollRef.current = interval;
   };
 
   const handleConsolidate = async () => {

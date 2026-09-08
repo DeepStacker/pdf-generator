@@ -35,8 +35,15 @@ def _format_size(total_size: int) -> str:
     return f"{total_size / 1024:.1f} KB" if total_size < 1024 * 1024 else f"{total_size / 1024 / 1024:.1f} MB"
 
 
-def _make_summary(title: str, items: list[dict]) -> dict:
-    return {"title": title, "items": items}
+def _make_summary(title: str, items: list[dict], output_dir: str | None = None) -> dict:
+    """Summary payload for the UI.
+
+    `output_dir` is stated rather than left to be recognised. The browser used
+    to find it by matching one of four label strings, or by sniffing any value
+    containing "/var/" or "/tmp/" — which meant renaming a label, or running on
+    Windows, silently left the outputs panel empty.
+    """
+    return {"title": title, "items": items, "output_dir": output_dir}
 
 
 def worker_idfc_thread(inp: str | list[str], out_base: str, typ: str, output_mode: str, auto_open: bool, naming_pattern: str) -> None:
@@ -141,7 +148,7 @@ def worker_idfc_thread(inp: str | list[str], out_base: str, typ: str, output_mod
             {"label": "Total Time Taken", "value": f"{_elapsed:.1f}s"},
             {"label": "Total Output Size", "value": _format_size(total_size) if total_size > 0 else "0 KB"},
             {"label": "Staging Directory", "value": out_base}
-        ])
+        ], output_dir=out_base)
         trigger_notification("Audit Engine Elite", f"✓ IDFC Bulk generation complete! Created {pdf_count} branch reports.")
 
     except Exception as e:
@@ -228,7 +235,7 @@ def worker_equitas_thread(inp: str | list[str], out_base: str, stage: str, equit
             {"label": "Total Time Taken", "value": f"{_elapsed:.1f}s"},
             {"label": "Total File Size", "value": _format_size(total_size) if total_size > 0 else "0 KB"},
             {"label": "Output Directory", "value": out_base}
-        ])
+        ], output_dir=out_base)
         trigger_notification("Audit Engine Elite", f"✓ Equitas Bulk {stage} complete! Generated {item_count} items.")
 
     except Exception as e:
@@ -327,7 +334,7 @@ def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool, ou
             {"label": "Total Time", "value": f"{_elapsed:.1f}s"},
             {"label": "Total Output Size", "value": _format_size(total_size) if total_size > 0 else "0 KB"},
             {"label": "Output Directory", "value": out_base}
-        ])
+        ], output_dir=out_base)
         trigger_notification("Audit Engine Elite", f"✓ Bulk generation complete! Created {pdf_count} branch reports.")
 
     except Exception as e:

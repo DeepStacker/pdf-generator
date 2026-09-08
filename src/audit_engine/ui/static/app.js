@@ -344,6 +344,13 @@
                     document.getElementById('tab-PROCESS-IDFC').classList.remove('hidden');
                 } else if (isArvog) {
                     document.getElementById('tab-PROCESS-ARVOG').classList.remove('hidden');
+                } else if (state.activeBank === 'CONSOLIDATION') {
+                    // Consolidation is selected through the same pill row but is
+                    // not a bank. Without this it fell through to the else below
+                    // and showed Equitas while state.activeBank stayed
+                    // 'CONSOLIDATION', after which the file list and the active
+                    // prefix disagreed about which screen you were on.
+                    document.getElementById('tab-CONSOLIDATE').classList.remove('hidden');
                 } else {
                     document.getElementById('tab-PROCESS-EQUITAS').classList.remove('hidden');
                 }

@@ -40,6 +40,20 @@ def test_script_is_inlined_and_executable(html):
     assert "async function runArvogRebuild(" in html
 
 
+def test_no_element_id_is_declared_twice(html):
+    """getElementById returns the first match, so a repeat is unreachable.
+
+    arvogAutoOpen and eqAutoOpen were each declared twice: the listener bound
+    to one copy and the run read the other, which never saw the update.
+    """
+    import re
+    from collections import Counter
+
+    counts = Counter(re.findall(r'\bid="([^"]+)"', html))
+    repeated = sorted(i for i, n in counts.items() if n > 1)
+    assert not repeated, f"ids declared more than once: {repeated}"
+
+
 def test_every_inline_handler_has_a_function(html):
     """An onclick naming a function that was never written throws on click.
 

@@ -745,7 +745,11 @@
                             </div>
                         </div>
 
-                        <!-- Hidden desktop elements to prevent JS crashes -->
+                        <!-- The only declaration of these ids. They carry the
+                             output path and auto-open preference, which the run
+                             reads and /api/dashboard fills in, but which the
+                             desktop has no visible control for. Duplicating any
+                             of them elsewhere silently shadows this copy. -->
                         <div style="display:none">
                             <input type="checkbox" id="idfcAutoOpen">
                             <input type="checkbox" id="eqAutoOpen">
@@ -904,11 +908,6 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- Hidden desktop checkboxes to prevent JS crashes -->
-                        <div style="display:none">
-                            <input type="checkbox" id="arvogAutoOpen">
                         </div>
 
                         <!-- FULL WIDTH: Console Logs -->
@@ -1154,11 +1153,6 @@
                                     <span id="eqStatusBadge-zip" class="flex items-center gap-1"><svg class="icon w-3 h-3 text-slate-600" id="eqStatusIcon-zip" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg> ZIP</span>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- Hidden auto-open checkbox to prevent JS crashes -->
-                        <div style="display:none">
-                            <input type="checkbox" id="eqAutoOpen">
                         </div>
 
                         <!-- FULL WIDTH: Console Logs -->

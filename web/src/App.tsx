@@ -76,20 +76,30 @@ export default function App() {
   }, [theme]);
 
   const handleUploadFiles = async (files: File[]): Promise<string[]> => {
-    const uploadedPaths: string[] = [];
-    for (const f of files) {
-      const formData = new FormData();
-      formData.append('file', f);
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.success && data.path) {
-        uploadedPaths.push(data.path);
-      }
+    // Uploads run together rather than one after another, and a file that
+    // fails is named. Previously any file whose response lacked a path was
+    // dropped in silence, so a batch could come back short with no clue why.
+    const results = await Promise.all(
+      files.map(async (f) => {
+        const formData = new FormData();
+        formData.append('file', f);
+        try {
+          const res = await fetch('/api/upload', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (data.success && data.path) return { name: f.name, path: data.path as string };
+          return { name: f.name, error: data.error || `HTTP ${res.status}` };
+        } catch {
+          return { name: f.name, error: 'could not reach the server' };
+        }
+      })
+    );
+
+    const failed = results.filter((r) => !('path' in r));
+    if (failed.length) {
+      const detail = failed.map((r: any) => `${r.name} (${r.error})`).join(', ');
+      throw new Error(`${failed.length} file(s) could not be uploaded: ${detail}`);
     }
-    return uploadedPaths;
+    return results.map((r: any) => r.path);
   };
 
   const handleRunReport = async (bankName: string, filePaths: string[], options: any) => {

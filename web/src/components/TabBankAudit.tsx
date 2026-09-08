@@ -289,15 +289,18 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
             stopPolling();
             setIsProcessing(false);
 
-            let foundDir: string | null = null;
-            if (data.summary && Array.isArray(data.summary.items)) {
+            // The backend states this now. The label matching below is kept
+            // only so an older server still works; on its own it missed the
+            // directory whenever a label was reworded, and its "/var/" and
+            // "/tmp/" sniffing never matched a Windows path at all.
+            let foundDir: string | null = data.summary?.output_dir ?? null;
+            if (!foundDir && data.summary && Array.isArray(data.summary.items)) {
               const dirItem = data.summary.items.find(
                 (item: any) =>
                   item.label === 'Staging Directory' ||
                   item.label === 'Output Directory' ||
                   item.label === 'Output Folder' ||
-                  item.label === 'Output Path' ||
-                  (typeof item.value === 'string' && (item.value.includes('/var/') || item.value.includes('/tmp/')))
+                  item.label === 'Output Path'
               );
               if (dirItem) foundDir = dirItem.value;
             }
