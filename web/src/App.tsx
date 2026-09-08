@@ -4,18 +4,25 @@ import { TabBankAudit } from './components/TabBankAudit';
 import { TabConsolidation } from './components/TabConsolidation';
 import { TabStats } from './components/TabStats';
 import { TabReportAutomation } from './components/TabReportAutomation';
+import { TabFlatten } from './components/TabFlatten';
+import { TabHistory } from './components/TabHistory';
+import { TabSettings } from './components/TabSettings';
 
 export default function App() {
+  // Every valid tab, in one place. TabHistory and TabSettings were written but
+  // never reachable because this list and the nav were maintained separately.
+  const TABS: ActiveTab[] = [
+    'audit', 'consolidation', 'report', 'flatten', 'stats', 'history', 'settings',
+  ];
+  const isTab = (value: string | null): value is ActiveTab =>
+    !!value && (TABS as string[]).includes(value);
+
   // Read initial tab from URL hash or localStorage, default to 'audit'
   const getInitialTab = (): ActiveTab => {
     const hash = window.location.hash.replace('#', '');
-    if (hash === 'audit' || hash === 'consolidation' || hash === 'stats' || hash === 'report') {
-      return hash as ActiveTab;
-    }
+    if (isTab(hash)) return hash;
     const saved = localStorage.getItem('audit_engine_active_tab');
-    if (saved === 'audit' || saved === 'consolidation' || saved === 'stats' || saved === 'report') {
-      return saved as ActiveTab;
-    }
+    if (isTab(saved)) return saved;
     return 'audit';
   };
 
@@ -54,8 +61,8 @@ export default function App() {
 
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash === 'audit' || hash === 'consolidation' || hash === 'stats' || hash === 'report') {
-        setActiveTabState(hash as ActiveTab);
+      if (isTab(hash)) {
+        setActiveTabState(hash);
         localStorage.setItem('audit_engine_active_tab', hash);
       }
     };
@@ -127,6 +134,15 @@ export default function App() {
         </div>
         <div className={activeTab === 'report' ? 'block' : 'hidden'}>
           <TabReportAutomation />
+        </div>
+        <div className={activeTab === 'flatten' ? 'block' : 'hidden'}>
+          <TabFlatten />
+        </div>
+        <div className={activeTab === 'history' ? 'block' : 'hidden'}>
+          <TabHistory />
+        </div>
+        <div className={activeTab === 'settings' ? 'block' : 'hidden'}>
+          <TabSettings />
         </div>
       </main>
 

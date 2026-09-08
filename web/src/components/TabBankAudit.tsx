@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, Play, AlertCircle, CheckCircle2, Download, Terminal, FileSpreadsheet, FileText, Archive, Eye, Trash2, ShieldCheck, Sparkles, RotateCcw } from 'lucide-react';
 import { FilePreviewModal } from './FilePreviewModal';
+import { ArvogRebuildPanel } from './ArvogRebuildPanel';
 import { DocumentViewerModal } from './DocumentViewerModal';
 
 export interface BankAuditOptions {
@@ -28,25 +29,41 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
     return localStorage.getItem('bank_audit_selectedBank') || 'IDFC First Bank';
   });
   
-  // Bank options with localStorage persistence
-  const [idfcAuditType, setIdfcAuditType] = useState<string>(() => {
-    return localStorage.getItem('bank_audit_idfcAuditType') || 'POA';
-  });
-  const [idfcOutputMode, setIdfcOutputMode] = useState<string>(() => {
-    return localStorage.getItem('bank_audit_idfcOutputMode') || 'BOTH';
-  });
-  const [equitasStage, setEquitasStage] = useState<string>(() => {
-    return localStorage.getItem('bank_audit_equitasStage') || 'STAGE 1';
-  });
-  const [equitasFormat, setEquitasFormat] = useState<string>(() => {
-    return localStorage.getItem('bank_audit_equitasFormat') || 'BOTH';
-  });
-  const [arvogFormat, setArvogFormat] = useState<string>(() => {
-    return localStorage.getItem('bank_audit_arvogFormat') || 'BOTH';
-  });
-  const [arvogMode, setArvogMode] = useState<string>(() => {
-    return localStorage.getItem('bank_audit_arvogMode') || 'BOTH';
-  });
+  // Bank options with localStorage persistence.
+  //
+  // These values go straight to the API, which validates them against its own
+  // enums and rejects anything it does not recognise. The options here once
+  // sent 'PDF', 'EXCEL', 'ZIP', 'BRANCH', 'SINGLE' and 'Touch and Feel', none
+  // of which the backend accepts, so every choice except the default failed.
+  // A saved value from that era is still in people's browsers, so anything
+  // unrecognised falls back to the default rather than being sent on.
+  const AUDIT_TYPES = ['POA', 'TAF'];
+  const PACKAGING_MODES = ['FOLDER', 'ZIP ONLY', 'BOTH'];
+  const OUTPUT_FORMATS = ['PDF ONLY', 'EXCEL ONLY', 'BOTH'];
+  const EQUITAS_STAGES = ['STAGE 1', 'STAGE 2'];
+
+  const readOption = (key: string, allowed: string[], fallback: string): string => {
+    const saved = localStorage.getItem(key);
+    return saved && allowed.includes(saved) ? saved : fallback;
+  };
+
+  const [idfcAuditType, setIdfcAuditType] = useState<string>(() =>
+    readOption('bank_audit_idfcAuditType', AUDIT_TYPES, 'POA'));
+  const [idfcOutputMode, setIdfcOutputMode] = useState<string>(() =>
+    readOption('bank_audit_idfcOutputMode', PACKAGING_MODES, 'BOTH'));
+  const [equitasStage, setEquitasStage] = useState<string>(() =>
+    readOption('bank_audit_equitasStage', EQUITAS_STAGES, 'STAGE 1'));
+  const [equitasFormat, setEquitasFormat] = useState<string>(() =>
+    readOption('bank_audit_equitasFormat', OUTPUT_FORMATS, 'BOTH'));
+  const [arvogFormat, setArvogFormat] = useState<string>(() =>
+    readOption('bank_audit_arvogFormat', OUTPUT_FORMATS, 'BOTH'));
+  const [arvogMode, setArvogMode] = useState<string>(() =>
+    readOption('bank_audit_arvogMode', PACKAGING_MODES, 'BOTH'));
+
+  // Which leg of the Arvog round trip: out to the branch, or back from it.
+  // Mirrors the desktop's sub-tab inside the Arvog panel.
+  const [arvogPanel, setArvogPanel] = useState<'GENERATE' | 'REBUILD'>(() =>
+    localStorage.getItem('bank_audit_arvogPanel') === 'REBUILD' ? 'REBUILD' : 'GENERATE');
 
   // Execution states with localStorage persistence
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
@@ -411,6 +428,29 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
           <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">In-Memory Engine</span>
         </div>
 
+        {selectedBank.includes('Arvog') && (
+          <div className="flex bg-[#0b0f19] border border-slate-800 rounded-lg p-0.5 w-max">
+            {(['GENERATE', 'REBUILD'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => {
+                  setArvogPanel(mode);
+                  localStorage.setItem('bank_audit_arvogPanel', mode);
+                }}
+                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                  arvogPanel === mode
+                    ? 'bg-emerald-500 text-white font-bold'
+                    : 'text-slate-400 hover:text-white font-semibold'
+                }`}
+              >
+                {mode === 'GENERATE' ? 'Generate PDF / Excel' : 'Rebuild Master Sheet'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {selectedBank.includes('Arvog') && arvogPanel === 'REBUILD' && <ArvogRebuildPanel />}
+
         {selectedBank === 'IDFC First Bank' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -423,12 +463,12 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
                 className="app-input font-medium"
               >
                 <option value="POA">POA (Physical Verification)</option>
-                <option value="Touch and Feel">Touch and Feel</option>
+                <option value="TAF">TAF (Touch and Feel)</option>
               </select>
             </div>
 
             <div>
-              <label htmlFor="idfcOutputMode" className="block text-xs font-semibold text-slate-300 mb-1.5">Output Package Format</label>
+              <label htmlFor="idfcOutputMode" className="block text-xs font-semibold text-slate-300 mb-1.5">Packaging Mode</label>
               <select
                 id="idfcOutputMode"
                 name="idfcOutputMode"
@@ -436,9 +476,9 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
                 onChange={(e) => setIdfcOutputMode(e.target.value)}
                 className="app-input font-medium"
               >
-                <option value="BOTH">PDF & ZIP Archive (Recommended)</option>
-                <option value="PDF">PDF Only</option>
-                <option value="ZIP">ZIP Archive Only</option>
+                <option value="BOTH">Folder & ZIP Archive (Recommended)</option>
+                <option value="FOLDER">Folder Only</option>
+                <option value="ZIP ONLY">ZIP Archive Only</option>
               </select>
             </div>
           </div>
@@ -470,17 +510,17 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
                 className="app-input font-medium"
               >
                 <option value="BOTH">PDF & Excel Spreadsheet</option>
-                <option value="PDF">PDF Only</option>
-                <option value="EXCEL">Excel Only</option>
+                <option value="PDF ONLY">PDF Only</option>
+                <option value="EXCEL ONLY">Excel Only</option>
               </select>
             </div>
           </div>
         )}
 
-        {selectedBank.includes('Arvog') && (
+        {selectedBank.includes('Arvog') && arvogPanel === 'GENERATE' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="arvogMode" className="block text-xs font-semibold text-slate-300 mb-1.5">Grouping Mode</label>
+              <label htmlFor="arvogMode" className="block text-xs font-semibold text-slate-300 mb-1.5">Packaging Mode</label>
               <select
                 id="arvogMode"
                 name="arvogMode"
@@ -488,9 +528,9 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
                 onChange={(e) => setArvogMode(e.target.value)}
                 className="app-input font-medium"
               >
-                <option value="BOTH">Branch & Single PDF</option>
-                <option value="BRANCH">Grouped by Branch</option>
-                <option value="SINGLE">Single Combined PDF</option>
+                <option value="BOTH">Folder & ZIP Archive</option>
+                <option value="FOLDER">Folder Only</option>
+                <option value="ZIP ONLY">ZIP Archive Only</option>
               </select>
             </div>
 
@@ -504,8 +544,8 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
                 className="app-input font-medium"
               >
                 <option value="BOTH">PDF & Excel Spreadsheet</option>
-                <option value="PDF">PDF Only</option>
-                <option value="EXCEL">Excel Only</option>
+                <option value="PDF ONLY">PDF Only</option>
+                <option value="EXCEL ONLY">Excel Only</option>
               </select>
             </div>
           </div>
@@ -520,7 +560,11 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
       )}
 
       {/* Step 1 & Step 2 Workflows */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Staging and execution belong to the generate leg. The rebuild carries
+          its own upload, and showing both would offer two conflicting ways in. */}
+      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 ${
+        selectedBank.includes('Arvog') && arvogPanel === 'REBUILD' ? 'hidden' : ''
+      }`}>
         {/* File Dropzone & Queue Manager */}
         <div className="glass-panel p-6 space-y-4 flex flex-col justify-between">
           <div className="space-y-4">

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Building2, Layers, BarChart3, History, Settings, FileText, Sun, Moon, ShieldCheck } from 'lucide-react';
+import { Layers, BarChart3, History, Settings, FileText, Sun, Moon, ShieldCheck, FileStack } from 'lucide-react';
 
-export type ActiveTab = 'audit' | 'consolidation' | 'stats' | 'report';
+export type ActiveTab = 'audit' | 'consolidation' | 'flatten' | 'stats' | 'report' | 'history' | 'settings';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -14,8 +14,11 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, theme, 
   const tabs: { id: ActiveTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'audit', label: 'Bank Audit', icon: FileText },
     { id: 'consolidation', label: 'Consolidation', icon: Layers },
-    { id: 'stats', label: 'Analytics', icon: BarChart3 },
     { id: 'report', label: 'Report Validator', icon: ShieldCheck },
+    { id: 'flatten', label: 'Flatten PDF', icon: FileStack },
+    { id: 'stats', label: 'Analytics', icon: BarChart3 },
+    { id: 'history', label: 'History', icon: History },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   const toggleTheme = () => {

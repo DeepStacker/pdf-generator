@@ -176,7 +176,10 @@
                     const s = document.getElementById(id);
                     if (s) s.classList.add('hidden');
                 });
-                loadConsolidationBanks();
+                // loadConsolidationBanks() used to be called here and has never
+                // existed, so selecting Consolidation threw a ReferenceError -
+                // which also stopped the progress poll on the next line from
+                // ever running.
                 pollConsolidationProgress();
                 return;
             }
@@ -1751,6 +1754,13 @@
 
         // HISTORY LOGS SECTION
         let searchTimeout = null;
+        function clearSearch() {
+            const box = document.getElementById('historySearch');
+            if (!box) return;
+            box.value = '';
+            refreshHistory();
+        }
+
         function debouncedSearch() {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(refreshHistory, 300);

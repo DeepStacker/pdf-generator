@@ -447,8 +447,14 @@ def web_run():
     inputs = raw_input if isinstance(raw_input, list) else ([raw_input] if raw_input else [])
 
     # Outputs are pinned inside the managed directory whatever the client asks
-    # for, so the purge above and the sweeper can always reach them — and so a
+    # for, so the purge below and the sweeper can always reach them — and so a
     # crafted request cannot write a report into an arbitrary path.
+    #
+    # Recreated first: the idle sweeper deletes this directory once a couple of
+    # minutes pass with nothing written to it, and handle_run rejects an
+    # out_path that does not exist. Without this, the first job after a quiet
+    # spell failed with "Output directory invalid."
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     data["out_path"] = str(OUTPUT_DIR)
 
     cleared = _purge_workspace(keep_paths=inputs)

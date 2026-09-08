@@ -40,6 +40,32 @@ def test_script_is_inlined_and_executable(html):
     assert "async function runArvogRebuild(" in html
 
 
+def test_every_inline_handler_has_a_function(html):
+    """An onclick naming a function that was never written throws on click.
+
+    Two shipped that way: the History search's clear button called
+    clearSearch(), and selecting Consolidation called loadConsolidationBanks().
+    """
+    import re
+
+    called = set()
+    for attr in re.findall(r'on(?:click|input|change)="([^"]+)"', html):
+        # Bare calls only — `document.getElementById(...)` is a method on an
+        # object, not a name this document has to define.
+        for name in re.findall(r"(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(", attr):
+            called.add(name)
+
+    defined = set(re.findall(r"function\s+([A-Za-z_$][\w$]*)\s*\(", html))
+    defined |= set(re.findall(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(", html))
+
+    builtins = {
+        "alert", "confirm", "event", "parseInt", "parseFloat", "String", "Number",
+        "encodeURIComponent", "decodeURIComponent", "setTimeout", "JSON",
+    }
+    missing = sorted(called - defined - builtins)
+    assert not missing, f"inline handlers call undefined functions: {missing}"
+
+
 def test_inlined_script_does_not_break_out_of_its_tag(html):
     """A literal </script> inside the JS would terminate the tag early."""
     body = html[html.index("function switchTab("):]
