@@ -28,6 +28,14 @@ from audit_engine.services.arvog_columns import (
     kind_for,
     normalize_dataframe,
 )
+from audit_engine.services.arvog_layout import (
+    DATA_ATTR_ORDER,
+    HEADER_SCAN_ROWS,
+    find_header_row,
+    map_ornaments,
+    read_header_row,
+    read_rows,
+)
 from audit_engine.utils.config import arvog as arvog_config
 
 _MAX_JEWELLERY_COLUMNS = 20
@@ -239,18 +247,28 @@ class ArvogService:
             pass
         return None, None
 
-    def detect_valid_sheet(self, excel_path: str) -> str:
-        xls = pd.ExcelFile(excel_path)
-        required_normalized = [c.lower() for c in self.REQUIRED_COLUMNS]
+    def detect_tall_sheet(self, excel_path: str) -> tuple[str | None, int | None]:
+        """Find the already-converted sheet, and which row its headings are on.
 
+        The row is not always the first. A sheet we produce now carries the
+        "Sumeru" banner above its headings; one produced before that banner
+        existed does not, and both are in circulation with auditors.
+        """
+        xls = pd.ExcelFile(excel_path)
         for sheet_name in xls.sheet_names:
             try:
-                df = pd.read_excel(excel_path, sheet_name=sheet_name)
-                cols = self.normalize_columns(df.columns)
-                if all(col in cols for col in required_normalized):
-                    return str(sheet_name)
+                rows = read_rows(excel_path, str(sheet_name), HEADER_SCAN_ROWS)
             except Exception:
                 continue
+            header_row = find_header_row(rows, self.REQUIRED_COLUMNS)
+            if header_row is not None:
+                return str(sheet_name), header_row
+        return None, None
+
+    def detect_valid_sheet(self, excel_path: str) -> str:
+        sheet_name, _header_row = self.detect_tall_sheet(excel_path)
+        if sheet_name is not None:
+            return sheet_name
 
         raise Exception("No valid sheet found.")
 
@@ -307,6 +325,15 @@ class ArvogService:
             ]
             tall_cols = beg_present + jewellery_cols + end_present
 
+        # Ornament columns are located by position, anchored on each
+        # Jewellery{i} heading in the file's own header row. Going through
+        # pandas' de-duplicated names instead would assume every ornament
+        # occupies seven columns — true of the original master, false of one
+        # rebuilt from a filled audit sheet, where the auditor's block travels
+        # with each ornament and repeats "Gross Wt." and "Karat".
+        raw_headers = read_header_row(excel_path, sheet_name, header_row)
+        ornament_blocks = [b for b in map_ornaments(raw_headers) if b.name < len(df_raw.columns)]
+
         converted_rows = []
 
         for idx, row in df_raw.iterrows():
@@ -315,39 +342,25 @@ class ArvogService:
 
             first_ornament_for_loan = True
 
-            for i in range(1, 21):
-                j_col = f"Jewellery{i}"
-                if j_col not in df_raw.columns:
-                    continue
+            for block in ornament_blocks:
+                i = block.number
 
-                ornament_name = row[j_col]
+                ornament_name = row.iloc[block.name]
                 if pd.isna(ornament_name):
                     continue
                 ornament_name_str = str(ornament_name).strip()
                 if ornament_name_str in ("-", ""):
                     continue
 
-                if i == 1:
-                    gw_col = "Gross Wt."
-                    sw_col = "Stone Wt."
-                    nw_col = "Net Wt."
-                    k_col = "Karat"
-                    pur_col = "Purity % %"
-                    nwp_col = "Net weight after Purity %"
-                else:
-                    gw_col = f"Gross Wt..{i-1}"
-                    sw_col = f"Stone Wt..{i-1}"
-                    nw_col = f"Net Wt..{i-1}"
-                    k_col = f"Karat.{i-1}"
-                    pur_col = f"Purity % %.{i-1}"
-                    nwp_col = "Final net weight after purity %" if i == _MAX_JEWELLERY_COLUMNS else f"Net weight after Purity %.{i - 1}"
+                def _cell(attribute, _row=row, _block=block):
+                    column = _block.data.get(attribute)
+                    if column is None or column >= len(_row):
+                        return None
+                    return _row.iloc[column]
 
-                gross_wt = row.get(gw_col) if gw_col in df_raw.columns else None
-                stone_wt = row.get(sw_col) if sw_col in df_raw.columns else None
-                net_wt = row.get(nw_col) if nw_col in df_raw.columns else None
-                karat = row.get(k_col) if k_col in df_raw.columns else None
-                purity = row.get(pur_col) if pur_col in df_raw.columns else None
-                net_wt_purity = row.get(nwp_col) if nwp_col in df_raw.columns else None
+                gross_wt, stone_wt, net_wt, karat, purity, net_wt_purity = (
+                    _cell(attribute) for attribute in DATA_ATTR_ORDER
+                )
 
                 if isinstance(karat, str):
                     karat = karat.strip()
@@ -627,9 +640,13 @@ class ArvogService:
                 # the PDF, so the frame the PDF renders keeps single columns.
                 self.write_converted_excel(df, converted_excel_path)
         else:
-            sheet_name = self.detect_valid_sheet(input_excel)
+            sheet_name, tall_header_row = self.detect_tall_sheet(input_excel)
+            if sheet_name is None:
+                raise Exception("No valid sheet found.")
             log_func(f"Detected Converted Tall-Format Excel Sheet: {sheet_name}")
-            df = normalize_dataframe(pd.read_excel(input_excel, sheet_name=sheet_name))
+            df = normalize_dataframe(
+                pd.read_excel(input_excel, sheet_name=sheet_name, header=tall_header_row or 0)
+            )
 
         if output_format in ("PDF ONLY", "BOTH"):
             df = self.clean_dataframe(df)
@@ -675,6 +692,10 @@ def detect_raw_excel(excel_path):
 
 def detect_valid_sheet(excel_path):
     return _default_service.detect_valid_sheet(excel_path)
+
+
+def detect_tall_sheet(excel_path):
+    return _default_service.detect_tall_sheet(excel_path)
 
 
 def convert_raw_to_tall(excel_path, sheet_name, header_row, cluster_manager=None, log_func=print, schema_reference=None):
