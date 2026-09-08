@@ -567,6 +567,7 @@
                 // Arvog Preferences
                 if (data.arvog_format) setArvogFormat(data.arvog_format);
                 if (data.arvog_mode) setArvogMode(data.arvog_mode);
+                if (data.arvog_panel) switchArvogPanel(data.arvog_panel);
                 
                 // Set output path across all tabs
                 if (data.out_path) {
@@ -2891,4 +2892,148 @@
             document.getElementById('flattenProgressContainer').classList.add('hidden');
             document.getElementById('flattenConsole').innerHTML = '<div class="text-slate-500">[00:00:00] Ready. Select a PDF to flatten.</div>';
             finishFlattenRun();
+        }
+
+        // =====================================================
+        // ARVOG: REBUILD MASTER SHEET
+        // =====================================================
+        // The return leg of the Arvog round trip. Lives as a sub-tab inside the
+        // Arvog panel rather than a tab of its own, so switchTab and switchBank
+        // are untouched — only these two panels swap.
+        let arvogRebuildPollInterval = null;
+        let arvogRebuildOutputPath = null;
+        let arvogRebuildLoggedCount = 0;
+
+        function switchArvogPanel(mode) {
+            const isRebuild = (mode === 'REBUILD');
+            document.getElementById('arvogPanel-GENERATE').classList.toggle('hidden', isRebuild);
+            document.getElementById('arvogPanel-REBUILD').classList.toggle('hidden', !isRebuild);
+
+            const active = 'px-3 py-1 text-xs font-bold rounded-md bg-emerald-500 text-white';
+            const idle = 'px-3 py-1 text-xs font-semibold text-slate-400 hover:text-white';
+            document.getElementById('arvogPanelBtn-GENERATE').className = isRebuild ? idle : active;
+            document.getElementById('arvogPanelBtn-REBUILD').className = isRebuild ? active : idle;
+
+            const heading = document.getElementById('arvogHeading');
+            if (heading) heading.textContent = isRebuild ? 'Rebuild Master Sheet' : 'Generate Reports';
+
+            saveConfig('arvog_panel', mode);
+        }
+
+        function arvogRebuildLog(level, message) {
+            const el = document.getElementById('arvogRebuildConsole');
+            if (!el) return;
+            const colours = { INFO: 'text-slate-400', OK: 'text-emerald-400', WARN: 'text-amber-400', ERROR: 'text-red-400' };
+            const stamp = new Date().toLocaleTimeString('en-GB', { hour12: false });
+            const line = document.createElement('div');
+            line.className = colours[level] || 'text-slate-400';
+            line.textContent = `[${stamp}] ${message}`;
+            el.appendChild(line);
+            el.scrollTop = el.scrollHeight;
+        }
+
+        async function browseArvogRebuildFile() {
+            try {
+                const resp = await fetch('/api/arvog/rebuild/browse');
+                const data = await resp.json();
+                if (data.path) {
+                    document.getElementById('arvogRebuildPath').value = data.path;
+                    arvogRebuildLog('INFO', `Selected ${data.path.split(/[\\/]/).pop()}`);
+                }
+            } catch (e) {
+                console.error('browseArvogRebuildFile failed', e);
+                showToast('Could not open the file dialog', 'error');
+            }
+        }
+
+        async function runArvogRebuild() {
+            const filepath = document.getElementById('arvogRebuildPath').value.trim();
+            if (!filepath) {
+                showToast('Select a filled audit sheet first', 'error');
+                return;
+            }
+
+            document.getElementById('arvogRebuildConsole').innerHTML = '';
+            document.getElementById('arvogRebuildResults').classList.add('hidden');
+            document.getElementById('arvogRebuildProgressContainer').classList.remove('hidden');
+            document.getElementById('arvogRebuildBtnRun').disabled = true;
+            arvogRebuildLoggedCount = 0;
+
+            try {
+                const resp = await fetch('/api/arvog/rebuild/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filepath })
+                });
+                const data = await resp.json();
+                if (!data.success) {
+                    arvogRebuildLog('ERROR', data.error || 'Could not start the rebuild');
+                    showToast(data.error || 'Could not start the rebuild', 'error');
+                    finishArvogRebuild();
+                    return;
+                }
+                arvogRebuildPollInterval = setInterval(pollArvogRebuildProgress, 500);
+            } catch (e) {
+                console.error('runArvogRebuild failed', e);
+                arvogRebuildLog('ERROR', 'Could not start the rebuild');
+                finishArvogRebuild();
+            }
+        }
+
+        async function pollArvogRebuildProgress() {
+            try {
+                const resp = await fetch('/api/arvog/rebuild/progress');
+                const data = await resp.json();
+
+                (data.logs || []).slice(arvogRebuildLoggedCount).forEach(entry => {
+                    arvogRebuildLog(entry.level, entry.message);
+                });
+                arvogRebuildLoggedCount = (data.logs || []).length;
+
+                document.getElementById('arvogRebuildProgressPct').textContent = `${data.pct || 0}%`;
+                document.getElementById('arvogRebuildProgressBar').style.width = `${data.pct || 0}%`;
+                document.getElementById('arvogRebuildProgressText').textContent = data.progress_text || '';
+
+                if (!data.is_running) {
+                    finishArvogRebuild();
+                    if (data.error) {
+                        showToast(data.error, 'error');
+                    } else if (data.summary) {
+                        renderArvogRebuildSummary(data.summary);
+                    }
+                }
+            } catch (e) {
+                console.error('pollArvogRebuildProgress failed', e);
+                finishArvogRebuild();
+            }
+        }
+
+        function finishArvogRebuild() {
+            if (arvogRebuildPollInterval) {
+                clearInterval(arvogRebuildPollInterval);
+                arvogRebuildPollInterval = null;
+            }
+            document.getElementById('arvogRebuildBtnRun').disabled = false;
+        }
+
+        function renderArvogRebuildSummary(summary) {
+            arvogRebuildOutputPath = summary.output_path;
+            document.getElementById('arvogRebuildStat-loans').textContent = summary.loans;
+            document.getElementById('arvogRebuildStat-ornaments').textContent = summary.ornaments;
+            document.getElementById('arvogRebuildStat-columns').textContent = summary.columns;
+            document.getElementById('arvogRebuildResults').classList.remove('hidden');
+            showToast(`Rebuilt ${summary.loans} loan(s) into ${summary.columns} columns`, 'success');
+        }
+
+        async function openArvogRebuildOutput() {
+            if (!arvogRebuildOutputPath) return;
+            try {
+                await fetch('/api/arvog/rebuild/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: arvogRebuildOutputPath })
+                });
+            } catch (e) {
+                console.error('openArvogRebuildOutput failed', e);
+            }
         }

@@ -36,6 +36,8 @@ def test_script_is_inlined_and_executable(html):
     # a function defined in app.js must now live in the document itself
     assert "function switchTab(" in html
     assert "function runValidator(" in html
+    assert "function switchArvogPanel(" in html
+    assert "async function runArvogRebuild(" in html
 
 
 def test_inlined_script_does_not_break_out_of_its_tag(html):

@@ -38,8 +38,13 @@ class TestAppFactory:
         assert isinstance(app, Bottle)
 
     def test_create_app_no_routes(self):
+        # create_app hands back Bottle's global default_app, so this cannot
+        # assert the app is empty — any earlier test that registered routes
+        # would have done so on this same object. What it can assert is that
+        # this call adds none of its own.
+        before = len(create_app(register_routes=False).routes)
         app = create_app(register_routes=False)
-        assert len(app.routes) == 0
+        assert len(app.routes) == before
 
     def test_create_app_with_routes(self):
         app = create_app(register_routes=True)

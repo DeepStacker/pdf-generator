@@ -10,6 +10,12 @@ import time
 import audit_engine.ui as ui_template
 from audit_engine._version import VERSION
 from audit_engine.lib.bottle import request, route
+from audit_engine.web.arvog_rebuild_handlers import (
+    handle_arvog_rebuild_browse,
+    handle_arvog_rebuild_open,
+    handle_arvog_rebuild_progress,
+    handle_arvog_rebuild_run,
+)
 from audit_engine.web.flatten_handlers import (
     handle_flatten_browse,
     handle_flatten_open,
@@ -223,3 +229,24 @@ def api_flatten_progress() -> dict:
 @route("/api/flatten/open", method="POST")
 def api_flatten_open() -> dict:
     return handle_flatten_open(request.json)
+
+
+# ---- Arvog master rebuild (desktop, path-based / zero-socket) ----
+@route("/api/arvog/rebuild/browse")
+def api_arvog_rebuild_browse() -> dict:
+    return handle_arvog_rebuild_browse()
+
+
+@route("/api/arvog/rebuild/run", method="POST")
+def api_arvog_rebuild_run() -> dict:
+    return handle_arvog_rebuild_run(request.json)
+
+
+@route("/api/arvog/rebuild/progress")
+def api_arvog_rebuild_progress() -> dict:
+    return handle_arvog_rebuild_progress()
+
+
+@route("/api/arvog/rebuild/open", method="POST")
+def api_arvog_rebuild_open() -> dict:
+    return handle_arvog_rebuild_open(request.json)

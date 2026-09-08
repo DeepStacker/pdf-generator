@@ -307,3 +307,127 @@ class TestGuards:
         seen = []
         rebuild_wide_workbook(tall, str(tmp_path / "o.xlsx"), on_progress=lambda p, m: seen.append(p))
         assert seen and seen[-1] == 100.0
+
+
+# ---------------------------------------------------------------------------
+# Desktop handlers
+# ---------------------------------------------------------------------------
+
+import json  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import audit_engine.web.arvog_rebuild_handlers as rh  # noqa: E402
+
+
+def _wait_for_idle(timeout: float = 20.0) -> dict:
+    deadline = time.time() + timeout
+    payload = rh.handle_arvog_rebuild_progress()
+    while payload["is_running"] and time.time() < deadline:
+        time.sleep(0.05)
+        payload = rh.handle_arvog_rebuild_progress()
+    return payload
+
+
+class TestDesktopHandlers:
+    @pytest.fixture(autouse=True)
+    def _fresh_tracker(self):
+        rh.rebuild_tracker.__init__()
+        yield
+        rh.rebuild_tracker.__init__()
+
+    def test_no_file_selected(self):
+        assert rh.handle_arvog_rebuild_run({})["success"] is False
+
+    def test_missing_file(self, tmp_path):
+        result = rh.handle_arvog_rebuild_run({"filepath": str(tmp_path / "nope.xlsx")})
+        assert result["success"] is False
+        assert "not found" in result["error"].lower()
+
+    def test_a_non_excel_file_is_refused(self, tmp_path):
+        pdf = tmp_path / "notes.pdf"
+        pdf.write_bytes(b"%PDF-1.4")
+        result = rh.handle_arvog_rebuild_run({"filepath": str(pdf)})
+        assert result["success"] is False
+        assert "Excel" in result["error"]
+
+    def test_full_cycle(self, tmp_path):
+        tall = _fill_audit_block(_tall_sheet(tmp_path, [2, 3]))
+        assert rh.handle_arvog_rebuild_run({"filepath": tall})["success"] is True
+
+        payload = _wait_for_idle()
+        assert payload["error"] is None
+        assert payload["pct"] == 100
+        summary = payload["summary"]
+        assert summary["loans"] == 2
+        assert Path(summary["output_path"]).is_file()
+
+    def test_a_broken_input_fails_without_leaving_the_job_running(self, tmp_path):
+        junk = tmp_path / "junk.xlsx"
+        junk.write_bytes(b"not a workbook")
+        assert rh.handle_arvog_rebuild_run({"filepath": str(junk)})["success"] is True
+
+        payload = _wait_for_idle()
+        assert payload["is_running"] is False
+        assert payload["error"]
+
+    def test_only_one_rebuild_at_a_time(self, tmp_path):
+        tall = _fill_audit_block(_tall_sheet(tmp_path, [2]))
+        assert rh.handle_arvog_rebuild_run({"filepath": tall})["success"] is True
+        second = rh.handle_arvog_rebuild_run({"filepath": tall})
+        assert second["success"] is False
+        assert "already running" in second["error"]
+        _wait_for_idle()
+
+    def test_open_guards_a_missing_path(self):
+        assert rh.handle_arvog_rebuild_open({})["success"] is False
+        assert rh.handle_arvog_rebuild_open({"path": "/nope/x.xlsx"})["success"] is False
+
+    def test_a_sheet_predating_the_audit_block_is_reported(self, tmp_path):
+        """Sheets produced before the audit block existed still rebuild, but
+        the auditor is told the block came out empty rather than left to
+        wonder."""
+        tall = _tall_sheet(tmp_path, [2])
+        wb = openpyxl.load_workbook(tall)
+        ws = wb.active
+        headers = [c.value for c in ws[HEADER_ROW]]
+        ws.delete_cols(len(headers) - len(AUDIT_BLOCK_COLUMNS) + 1, len(AUDIT_BLOCK_COLUMNS))
+        wb.save(tall)
+
+        assert rh.handle_arvog_rebuild_run({"filepath": tall})["success"] is True
+        payload = _wait_for_idle()
+        assert payload["error"] is None
+        assert payload["summary"]["audit_columns_found"] == 0
+        assert any("No audit block" in log["message"] for log in payload["logs"])
+
+
+class TestZeroSocketBridge:
+    """The desktop talks to Python through an in-process bridge that carries
+    JSON strings only. This is the one test that exercises that path."""
+
+    def test_end_to_end_over_the_bridge(self, tmp_path):
+        from audit_engine.app import create_app
+        from audit_engine.web.bridge import WebViewBridge
+
+        create_app()
+        bridge = WebViewBridge()
+        rh.rebuild_tracker.__init__()
+
+        tall = _fill_audit_block(_tall_sheet(tmp_path, [2, 4]))
+        started = json.loads(bridge.fetch_proxy(
+            "POST", "/api/arvog/rebuild/run", json.dumps({"filepath": tall})
+        ))
+        assert started["success"] is True
+
+        deadline = time.time() + 20
+        payload = None
+        while time.time() < deadline:
+            payload = json.loads(bridge.fetch_proxy("GET", "/api/arvog/rebuild/progress", ""))
+            if not payload["is_running"]:
+                break
+            time.sleep(0.05)
+
+        assert payload and payload["error"] is None
+        assert payload["summary"]["loans"] == 2
+        assert payload["summary"]["widest_loan"] == 4
+        assert Path(payload["summary"]["output_path"]).is_file()

@@ -454,3 +454,59 @@ def flatten_upload():
         # Shred the upload specifically; it is somebody's customer record.
         _shred(source)
         cleanup_dir(work_dir)
+
+
+# The Arvog return leg, on the same terms: one request, nothing kept. The
+# filled audit sheet carries customer names, loan numbers and gold weights, so
+# it is shredded with the rebuilt master the moment the response is built.
+
+@route("/api/arvog/rebuild/upload", method=["OPTIONS", "POST"])
+def arvog_rebuild_upload():
+    if request.method == "OPTIONS":
+        return {}
+
+    upload = request.files.get("file")
+    if not upload:
+        response.status = 400
+        return {"detail": "No file provided"}
+
+    original_name = upload.filename or "audit.xlsx"
+    suffix = Path(original_name).suffix.lower()
+    if suffix not in (".xlsx", ".xlsm", ".xls"):
+        response.status = 400
+        return {"detail": "Only Excel workbooks can be rebuilt"}
+
+    from audit_engine.services.arvog_rebuild import RebuildError, rebuild_wide_workbook
+    from audit_engine.services.pdf_flattener import cleanup_dir
+    from audit_engine.services.pdf_flattener import secure_delete as _shred
+
+    work_dir = Path(tempfile.mkdtemp(prefix="arvog_rebuild_", dir=str(REPORT_UPLOAD_DIR)))
+    source = work_dir / f"src_{uuid.uuid4().hex[:12]}{suffix}"
+    output = work_dir / "master.xlsx"
+    try:
+        with open(source, "wb") as out:
+            shutil.copyfileobj(upload.file, out)
+
+        result = rebuild_wide_workbook(str(source), str(output))
+
+        payload = Path(result["output_path"]).read_bytes()
+        download_name = f"{Path(original_name).stem}_master.xlsx"
+
+        response.content_type = (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response.headers["Content-Disposition"] = f'attachment; filename="{download_name}"'
+        response.headers["X-Rebuild-Loans"] = str(result["loans"])
+        response.headers["X-Rebuild-Ornaments"] = str(result["ornaments"])
+        response.headers["X-Rebuild-Columns"] = str(result["columns"])
+        response.headers["X-Rebuild-Audit-Columns"] = str(result["audit_columns_found"])
+        return payload
+    except RebuildError as e:
+        response.status = 400
+        return {"detail": str(e)}
+    except Exception as e:  # noqa: BLE001
+        response.status = 500
+        return {"detail": f"Could not rebuild this workbook: {e}"}
+    finally:
+        _shred(source)
+        cleanup_dir(work_dir)

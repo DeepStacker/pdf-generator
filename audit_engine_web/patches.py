@@ -8,6 +8,7 @@ def apply_patches():
     import audit_engine.utils.dialogs as dialogs_mod
     import audit_engine.utils.platform as platform_mod
     import audit_engine.web.handlers as handlers_mod
+    import audit_engine.web.arvog_rebuild_handlers as arvog_rebuild_mod
     import audit_engine.web.flatten_handlers as flatten_handlers_mod
     import audit_engine.web.report_handlers as report_handlers_mod
 
@@ -53,3 +54,12 @@ def apply_patches():
     flatten_handlers_mod.handle_flatten_browse = lambda: {"success": True, "path": ""}
     flatten_handlers_mod.handle_flatten_run = lambda _data: dict(_desktop_only)
     flatten_handlers_mod.handle_flatten_open = lambda _data: dict(_desktop_only)
+
+    # Likewise the Arvog rebuild: a native dialog and a path on the local disk.
+    # Over HTTP that would be a dialog on the server and server-side file
+    # access, so the browser uses the upload endpoint instead.
+    arvog_rebuild_mod.ask_file_dialog = lambda: ""
+    arvog_rebuild_mod.open_path = lambda _path: logger.info("open_path skipped (web mode): %s", _path)
+    arvog_rebuild_mod.handle_arvog_rebuild_browse = lambda: {"success": True, "path": ""}
+    arvog_rebuild_mod.handle_arvog_rebuild_run = lambda _data: dict(_desktop_only)
+    arvog_rebuild_mod.handle_arvog_rebuild_open = lambda _data: dict(_desktop_only)

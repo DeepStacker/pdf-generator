@@ -32,6 +32,7 @@ def handle_dashboard() -> dict:
         "equitas_pack": config_repo.get("equitas_pack", "FOLDER"),
         "arvog_format": config_repo.get("arvog_format", "BOTH"),
         "arvog_mode": config_repo.get("arvog_mode", "BOTH"),
+        "arvog_panel": config_repo.get("arvog_panel", "GENERATE"),
         "auto_open": config_repo.get_bool("auto_open", True),
         "eq_auto_open": config_repo.get_bool("auto_open", True),
         "db_path": paths.db,
@@ -314,7 +315,7 @@ _ALLOWED_CONFIG_KEYS = frozenset({
     "bank", "last_file", "out_path", "audit_type", "pkg_mode", "output_mode",
     "equitas_format", "equitas_pack", "auto_open", "naming_pattern",
     "selected_files_IDFC First Bank", "selected_files_Equitas Small Finance Bank",
-    "selected_files_Arvog Bank", "arvog_format", "arvog_mode",
+    "selected_files_Arvog Bank", "arvog_format", "arvog_mode", "arvog_panel",
 })
 
 
