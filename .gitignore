@@ -55,10 +55,17 @@ requirements.txt
 # Coverage
 .coverage
 
-# Pyodide web app (on web-app-pyodide branch only)
-# Anchored to the repo root: a bare "web/" also matched src/audit_engine/web/,
-# so new files there were silently skipped by `git add`.
-/web/
+# The web SPA's source. This used to be ignored wholesale, for a Pyodide app on
+# a branch that no longer exists — which meant the React source of a deployed
+# application lived outside version control. Nothing built it in CI or Docker
+# either, so the committed bundle was whatever someone last built by hand, and
+# the two front ends drifted apart: Flatten PDF shipped a working endpoint that
+# no UI ever called.
+#
+# Only the things a build regenerates are ignored now.
+/web/node_modules
+/web/dist/
+/web/*.tsbuildinfo
 
 # Track build scripts and spec file
 !pdf_generator.spec
