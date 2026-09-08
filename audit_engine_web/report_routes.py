@@ -18,11 +18,14 @@ import re
 import shutil
 import sqlite3
 import threading
+import time
 import uuid
 from copy import copy
 from pathlib import Path
 import tempfile
 from tempfile import NamedTemporaryFile
+
+import logging
 
 import openpyxl
 from openpyxl.styles import PatternFill, Font
@@ -33,6 +36,8 @@ from audit_engine.lib.bottle import route, request, response, static_file, HTTPE
 from audit_engine.services import report_validator as rv
 
 # ── Storage ───────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
+
 # REPORT_STORAGE_DIR is meant to live on a persistent disk in production so
 # output files survive redeploys. Falls back to a project-local dir.
 _STORAGE_ENV = os.environ.get("REPORT_STORAGE_DIR")
@@ -49,6 +54,68 @@ DB_PATH = REPORT_UPLOAD_DIR / "report_jobs.db"
 # In-memory job status map: file_id -> {status, pct, error, result, ...}
 JOBS = {}
 JOBS_LOCK = threading.Lock()
+
+# How long a validator job's files may stay on disk.
+#
+# Unlike flatten and rebuild, this flow cannot shred on the way out: the upload
+# is exchanged for an id, the browser polls, and the download comes later - and
+# may come more than once, because editing a cell re-downloads. So the files
+# have to outlive the request that made them.
+#
+# They were outliving everything. Uploaded workbooks and their outputs sat here
+# indefinitely; production was found holding customer sheets more than a week
+# old. They are now swept once the window has passed, which is the longest a
+# session plausibly stays open.
+REPORT_RETENTION_MINUTES = int(os.environ.get("REPORT_RETENTION_MINUTES", "60"))
+_SWEEP_INTERVAL_SECONDS = 300
+# Deleting a file the moment it is sent would break the edit-and-download-again
+# path, so served copies get a short grace period instead.
+_SERVED_FILE_GRACE_SECONDS = 30
+
+
+def _sweep_expired_reports() -> int:
+    """Remove job files past the retention window. Returns how many went."""
+    cutoff = time.time() - REPORT_RETENTION_MINUTES * 60
+    removed = 0
+    try:
+        for entry in REPORT_UPLOAD_DIR.iterdir():
+            if not entry.is_file() or entry.name == DB_PATH.name:
+                continue
+            try:
+                if entry.stat().st_mtime < cutoff:
+                    secure_delete(str(entry))
+                    removed += 1
+            except OSError:
+                continue
+    except OSError:
+        return removed
+    if removed:
+        logger.info("Report retention: removed %d expired file(s)", removed)
+    return removed
+
+
+def _start_retention_sweeper() -> None:
+    def loop():
+        while True:
+            time.sleep(_SWEEP_INTERVAL_SECONDS)
+            try:
+                _sweep_expired_reports()
+            except Exception as e:  # noqa: BLE001 - the sweeper must never die
+                logger.warning("Report retention sweep failed: %s", e)
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
+def _delete_soon(path, delay: float = _SERVED_FILE_GRACE_SECONDS) -> None:
+    """Remove a served file once the response has had time to go out."""
+    def remove():
+        try:
+            if os.path.exists(path):
+                secure_delete(str(path))
+        except OSError as e:
+            logger.warning("Could not remove %s: %s", path, e)
+
+    threading.Timer(delay, remove).start()
 
 FILL_HEX = {
     "DARK_RED": "8B0000",
@@ -393,6 +460,9 @@ def report_download():
     wb.save(str(response_path))
     wb.close()
 
+    # A per-download copy; it has no reason to outlive the response.
+    _delete_soon(response_path)
+
     return static_file(
         response_path.name,
         root=str(REPORT_UPLOAD_DIR),
@@ -510,3 +580,9 @@ def arvog_rebuild_upload():
     finally:
         _shred(source)
         cleanup_dir(work_dir)
+
+
+# Anything left from a previous run is already past its window by the time the
+# process comes back, so sweep once at startup and then on the interval.
+_sweep_expired_reports()
+_start_retention_sweeper()

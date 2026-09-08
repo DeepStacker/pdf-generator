@@ -56,7 +56,7 @@ jobs:
             echo "linux=$LIN"
           } >> "$GITHUB_OUTPUT"
           echo "building -> windows=$WIN macos=$MAC linux=$LIN"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Extract version
@@ -128,16 +128,16 @@ jobs:
     needs: setup
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~\AppData\Local\pip\Cache
           key: pip-win-${{ hashFiles('pyproject.toml') }}
           restore-keys: pip-win-
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~\AppData\Local\pyinstaller
           key: pyi-win-${{ hashFiles('pdf_generator.spec') }}
@@ -190,16 +190,16 @@ jobs:
     needs: setup
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/Library/Caches/pip
           key: pip-macos-${{ hashFiles('pyproject.toml') }}
           restore-keys: pip-macos-
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/Library/Caches/pyinstaller
           key: pyi-macos-${{ hashFiles('pdf_generator.spec') }}
@@ -241,16 +241,16 @@ jobs:
     needs: setup
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-linux-${{ hashFiles('pyproject.toml') }}
           restore-keys: pip-linux-
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.cache/pyinstaller
           key: pyi-linux-${{ hashFiles('pdf_generator.spec') }}
