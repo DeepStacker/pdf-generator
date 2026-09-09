@@ -111,6 +111,57 @@ def test_assets_actually_ship_in_the_package():
         assert os.path.isfile(os.path.join(ui._ASSETS_DIR, name)), f"{name} missing from ui/static"
 
 
+def _relative_luminance(hex_color: str) -> float:
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+    def lin(c: float) -> float:
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = lin(r), lin(g), lin(b)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast_ratio(hex_a: str, hex_b: str) -> float:
+    la, lb = _relative_luminance(hex_a), _relative_luminance(hex_b)
+    la, lb = max(la, lb), min(la, lb)
+    return (la + 0.05) / (lb + 0.05)
+
+
+def test_solid_button_fills_pass_wcag_aa_with_white_text():
+    """A button whose fill and text read as the same weight is unusable.
+
+    Every one of these hexes is a *solid, full-opacity* background this app
+    draws white bold text over -- Generate Reports, a segmented control's
+    selected state, Stop, the update banner. Text this size (well under the
+    18pt/14pt-bold WCAG "large text" threshold) needs 4.5:1 against its
+    background; #34C98C, the accent-emerald shade these were themed from
+    before this test existed, measured 2.1:1 here — a button whose label was,
+    for practical purposes, invisible.
+    """
+    fills = {
+        "btn-primary / IDFC fill":      "506CDB",
+        "btn-success / Arvog fill":     "18855B",
+        "Equitas fill":                 "9F6A19",
+        "bg-blue-600":                  "4768F0",
+        "bg-emerald-600":               "18855B",
+        "bg-rose-600 (Stop/danger)":    "D43D47",
+    }
+    failing = {
+        name: round(_contrast_ratio("FFFFFF", hex_val), 2)
+        for name, hex_val in fills.items()
+        if _contrast_ratio("FFFFFF", hex_val) < 4.5
+    }
+    assert not failing, f"white text fails AA against these fills: {failing}"
+
+
+def test_dim_text_tier_is_readable_on_the_canvas():
+    """--text-dim / .text-slate-600 are used for real captions and labels,
+    not just decoration, so they need the same 4.5:1 floor as body text."""
+    ratio = _contrast_ratio("717B89", "0A0D12")
+    assert ratio >= 4.5, f"text-dim only reaches {ratio:.2f}:1 against the canvas"
+
+
 def test_every_static_ref_in_index_html_resolves():
     """Guards against a future tag pointing at an asset that isn't shipped."""
     import os

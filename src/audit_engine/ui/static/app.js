@@ -274,13 +274,22 @@
             }
 
             // 2. Inject CSS dynamically for classes marked as "dynamic-accent-*"
-            let primaryColor = '#D97706';
-            if (isIDFC) primaryColor = '#2563EB';
-            else if (isArvog) primaryColor = '#10B981';
+            //
+            // Two shades per bank, not one. dynamic-accent-fg/-border sit on a
+            // dark page background (logo text, links, ring strokes) and need
+            // to stay light to read there. dynamic-accent-bg is the opposite:
+            // it's a SOLID fill with white button text drawn over it, and the
+            // same light shade measured well under the 4.5:1 AA floor there
+            // -- --accent-emerald was 2.1:1 with white text. Same hue, two
+            // lightnesses, one per job.
+            let primaryColor = '#C7841F';
+            let primaryColorFill = '#9F6A19';
+            if (isIDFC) { primaryColor = '#4c6fff'; primaryColorFill = '#4768F0'; }
+            else if (isArvog) { primaryColor = '#34c98c'; primaryColorFill = '#18855B'; }
 
             // Apply style dynamically
             document.querySelectorAll('.dynamic-accent-bg').forEach(el => {
-                el.style.backgroundColor = primaryColor;
+                el.style.backgroundColor = primaryColorFill;
             });
             document.querySelectorAll('.dynamic-accent-fg').forEach(el => {
                 el.style.color = primaryColor;
@@ -1617,13 +1626,15 @@
             if (!svg || !list || !centerPct) return;
             
             if (!dataDict || Object.keys(dataDict).length === 0) {
-                svg.innerHTML = `<circle cx="50" cy="50" r="30" fill="none" stroke="#1E293B" stroke-width="12" />`;
+                svg.innerHTML = `<circle cx="50" cy="50" r="30" fill="none" stroke="#232a36" stroke-width="12" />`;
                 list.innerHTML = `<div class="text-xs text-slate-500 italic">No runs recorded yet.</div>`;
                 centerPct.textContent = '0%';
                 return;
             }
             
-            const colors = ['#3B82F6', '#F59E0B', '#10B981', '#6366F1', '#EC4899', '#8B5CF6'];
+            // One qualitative palette, each color already in use elsewhere in
+            // the app so a chart never introduces a hue nothing else uses.
+            const colors = ['#5C7CFA', '#C7841F', '#34C98C', '#8B7FE8', '#4C9AFF', '#F2555A'];
             const total = Object.values(dataDict).reduce((a, b) => a + b, 0);
             
             let htmlSvg = '';
@@ -1669,8 +1680,8 @@
             
             if (!trendData || trendData.length === 0) {
                 svg.innerHTML = `
-                    <line x1="30" y1="100" x2="270" y2="100" stroke="#1E293B" stroke-width="1" />
-                    <text x="150" y="60" fill="#64748B" font-size="10" text-anchor="middle" font-family="sans-serif">No activity recorded</text>`;
+                    <line x1="30" y1="100" x2="270" y2="100" stroke="#232a36" stroke-width="1" />
+                    <text x="150" y="60" fill="#7c8695" font-size="10" text-anchor="middle" font-family="sans-serif">No activity recorded</text>`;
                 labelRow.innerHTML = '<div class="col-span-7 italic text-slate-500 text-center py-4">No recent history</div>';
                 return;
             }
@@ -1696,9 +1707,9 @@
             });
             
             let htmlGrid = `
-                <line x1="${paddingX}" y1="${paddingY}" x2="${width - paddingX}" y2="${paddingY}" stroke="#1E293B" stroke-width="0.5" stroke-dasharray="2,2" />
-                <line x1="${paddingX}" y1="${paddingY + chartHeight/2}" x2="${width - paddingX}" y2="${paddingY + chartHeight/2}" stroke="#1E293B" stroke-width="0.5" stroke-dasharray="2,2" />
-                <line x1="${paddingX}" y1="${paddingY + chartHeight}" x2="${width - paddingX}" y2="${paddingY + chartHeight}" stroke="#1E293B" stroke-dasharray="2,2" />
+                <line x1="${paddingX}" y1="${paddingY}" x2="${width - paddingX}" y2="${paddingY}" stroke="#232a36" stroke-width="0.5" stroke-dasharray="2,2" />
+                <line x1="${paddingX}" y1="${paddingY + chartHeight/2}" x2="${width - paddingX}" y2="${paddingY + chartHeight/2}" stroke="#232a36" stroke-width="0.5" stroke-dasharray="2,2" />
+                <line x1="${paddingX}" y1="${paddingY + chartHeight}" x2="${width - paddingX}" y2="${paddingY + chartHeight}" stroke="#232a36" stroke-dasharray="2,2" />
             `;
             
             let pathD = '';
@@ -1712,16 +1723,16 @@
             
             let htmlChart = htmlGrid;
             if (points.length > 1) {
-                htmlChart += `<path d="${pathD}" fill="none" stroke="#3B82F6" stroke-width="4" opacity="0.15" stroke-linecap="round" stroke-linejoin="round" />`;
-                htmlChart += `<path d="${pathD}" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="dynamic-accent-stroke" />`;
+                htmlChart += `<path d="${pathD}" fill="none" stroke="#5c7cfa" stroke-width="4" opacity="0.15" stroke-linecap="round" stroke-linejoin="round" />`;
+                htmlChart += `<path d="${pathD}" fill="none" stroke="#5c7cfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="dynamic-accent-stroke" />`;
             }
             
             points.forEach(pt => {
                 htmlChart += `
                     <g>
-                        <circle cx="${pt.x}" cy="${pt.y}" r="6" fill="#3B82F6" opacity="0.1" />
-                        <circle cx="${pt.x}" cy="${pt.y}" r="3" fill="#ffffff" stroke="#3B82F6" stroke-width="1.5" class="dynamic-accent-stroke" />
-                        <text x="${pt.x}" y="${pt.y - 8}" fill="#3B82F6" font-size="8" font-weight="extrabold" text-anchor="middle" font-family="sans-serif" class="dynamic-accent-fg">${pt.val}</text>
+                        <circle cx="${pt.x}" cy="${pt.y}" r="6" fill="#5c7cfa" opacity="0.1" />
+                        <circle cx="${pt.x}" cy="${pt.y}" r="3" fill="#ffffff" stroke="#5c7cfa" stroke-width="1.5" class="dynamic-accent-stroke" />
+                        <text x="${pt.x}" y="${pt.y - 8}" fill="#5c7cfa" font-size="8" font-weight="extrabold" text-anchor="middle" font-family="sans-serif" class="dynamic-accent-fg">${pt.val}</text>
                     </g>`;
             });
             

@@ -4,32 +4,52 @@
 
 /* --- CSS Custom Properties --- */
 :root {
-  --bg-deep: #050a14;
-  --bg-surface: #0c1222;
-  --bg-card: rgba(15, 23, 42, 0.65);
-  --bg-card-hover: rgba(20, 30, 52, 0.8);
-  --bg-elevated: rgba(30, 41, 59, 0.5);
-  --bg-input: rgba(7, 12, 24, 0.8);
-  --border-subtle: rgba(56, 75, 112, 0.25);
-  --border-active: rgba(99, 125, 175, 0.4);
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --text-dim: #475569;
-  --accent-blue: #3b82f6;
-  --accent-amber: #f59e0b;
-  --accent-emerald: #10b981;
-  --accent-violet: #8b5cf6;
-  --accent-rose: #f43f5e;
-  --accent-sky: #38bdf8;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --shadow-card: 0 4px 24px rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2);
-  --shadow-glow-blue: 0 0 20px rgba(59,130,246,0.15);
-  --shadow-glow-amber: 0 0 20px rgba(245,158,11,0.15);
-  --shadow-glow-emerald: 0 0 20px rgba(16,185,129,0.15);
+  --bg-deep: #0a0d12;
+  --bg-surface: #10141b;
+  --bg-card: rgba(20, 25, 34, 0.65);
+  --bg-card-hover: rgba(27, 33, 44, 0.8);
+  --bg-elevated: rgba(35, 42, 54, 0.5);
+  --bg-input: rgba(10, 12, 16, 0.8);
+  --border-subtle: rgba(58, 68, 82, 0.25);
+  --border-active: rgba(92, 124, 250, 0.4);
+  --text-primary: #e9ecf1;
+  --text-secondary: #a6afbd;
+  --text-muted: #7c8695;
+  /* Lightened from #5b6472 -- that measured 3.25:1 against the canvas, under
+     the 4.5:1 AA floor for the small caption/label text this token is
+     actually used for (stat labels, table headers, sub-captions). */
+  --text-dim: #717b89;
+  --accent-blue: #5c7cfa;
+  --accent-amber: #c7841f;
+  --accent-emerald: #34c98c;
+  --accent-violet: #8b7fe8;
+  --accent-rose: #f2555a;
+  --accent-sky: #4c9aff;
+  /* --accent-blue/emerald/amber above are tuned to read well as TEXT and
+     badge fills on a dark background -- which is the opposite of what a
+     SOLID button needs. White text at 0.8rem bold on the un-darkened
+     --accent-emerald measured 2.1:1, nowhere near the 4.5:1 AA floor. These
+     three are the same hues, darkened only as far as needed for white text
+     on top of them to pass, and are used solely for that: .btn-primary,
+     .btn-success, .chip-btn.selected and their equivalents in app.js/HTML. */
+  --accent-blue-fill: #506cdb;
+  --accent-emerald-fill: #18855b;
+  --accent-amber-fill: #9f6a19;
+  /* A hair tighter than the previous 8/12/16/20 scale — enough to read as
+     considered rather than soft/bubbly, without breaking anyone's sense of
+     where a corner is. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  /* A standard two-layer elevation shadow, not a colored glow — the card
+     lifts off the page because of light and shadow, not because it's
+     radiating its own accent color. */
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.24), 0 8px 20px -6px rgba(0,0,0,0.32);
+  /* Visible, brand-neutral focus ring for keyboard navigation. Used by
+     :focus-visible rules below rather than the browser default outline,
+     which this system's dark backgrounds render nearly invisible. */
+  --focus-ring: 0 0 0 2px var(--bg-deep), 0 0 0 4px rgba(92, 124, 250, 0.6);
   --transition-fast: 150ms ease;
   --transition-smooth: 250ms cubic-bezier(0.4, 0, 0.2, 1);
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -64,11 +84,12 @@ body {
 
 /* --- Top Navbar --- */
 .top-navbar {
-  background: rgba(8, 14, 28, 0.95);
+  background: rgba(16, 20, 27, 0.95);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
-  box-shadow: 0 1px 20px rgba(99, 102, 241, 0.06);
+  /* A plain neutral hairline, not an accent-tinted one — the chrome frames
+     the work, it doesn't compete with it. */
+  border-bottom: 1px solid var(--border-subtle);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -98,13 +119,12 @@ body {
   width: 100%;
   height: 100%;
   display: block;
-  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.3));
 }
 .navbar-logo-text {
   font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%);
+  background: linear-gradient(135deg, #dde2e8 0%, #a6afbd 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -115,7 +135,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.6);
+  color: rgba(166, 175, 189, 0.6);
   line-height: 1.2;
 }
 .navbar-nav {
@@ -133,7 +153,7 @@ body {
   border-radius: 8px;
   font-size: 0.78rem;
   font-weight: 500;
-  color: rgba(148, 163, 184, 0.7);
+  color: rgba(166, 175, 189, 0.7);
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
@@ -142,16 +162,20 @@ body {
   position: relative;
 }
 .nav-btn:hover {
-  color: #e2e8f0;
-  background: rgba(99, 102, 241, 0.08);
-  border-color: rgba(99, 102, 241, 0.15);
+  color: #dde2e8;
+  background: rgba(92, 124, 250, 0.08);
+  border-color: rgba(92, 124, 250, 0.15);
 }
 .nav-btn.active {
-  color: #e2e8f0;
-  background: rgba(99, 102, 241, 0.12);
-  border-color: rgba(99, 102, 241, 0.25);
+  color: #dde2e8;
+  background: rgba(92, 124, 250, 0.12);
+  border-color: rgba(92, 124, 250, 0.25);
   font-weight: 600;
-  box-shadow: 0 0 12px rgba(99, 102, 241, 0.08);
+}
+.nav-btn:focus-visible,
+.bank-pill:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 .nav-btn svg { width: 15px; height: 15px; opacity: 0.8; }
 .nav-btn.active svg { opacity: 1; }
@@ -160,10 +184,10 @@ body {
   align-items: center;
   gap: 0.3rem;
   flex-shrink: 0;
-  background: rgba(30, 41, 59, 0.4);
+  background: rgba(35, 42, 54, 0.4);
   padding: 0.25rem;
   border-radius: 8px;
-  border: 1px solid rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(92, 124, 250, 0.08);
 }
 
 /* Bank Pills */
@@ -309,7 +333,7 @@ main.flex-1 { min-height: 0; }
   outline: none;
   transition: border-color var(--transition-fast);
 }
-.input-field:focus { border-color: var(--accent-blue); }
+.input-field:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(92, 124, 250, 0.15); }
 .input-field::placeholder { color: var(--text-dim); }
 
 /* --- Buttons --- */
@@ -328,21 +352,33 @@ main.flex-1 { min-height: 0; }
   white-space: nowrap;
 }
 .btn-primary {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: linear-gradient(135deg, var(--accent-blue-fill), #3f5bc9);
   color: #fff;
-  box-shadow: 0 2px 12px rgba(59,130,246,0.3);
+  box-shadow: 0 2px 12px rgba(80, 108, 219, 0.35);
 }
-.btn-primary:hover { background: linear-gradient(135deg, #60a5fa, #3b82f6); transform: translateY(-1px); }
+/* Hover stays within the same AA-safe pair -- swapping to the brighter,
+   pre-darkening shade here would look like feedback but would just as
+   quietly fail contrast again on hover. The lift (translateY) plus the
+   deepened shadow below is the hover cue instead. */
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent-blue-fill), #3f5bc9);
+  box-shadow: 0 4px 16px rgba(80, 108, 219, 0.45);
+  transform: translateY(-1px);
+}
 .btn-success {
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: linear-gradient(135deg, var(--accent-emerald-fill), #146e4c);
   color: #fff;
-  box-shadow: 0 2px 12px rgba(16,185,129,0.3);
+  box-shadow: 0 2px 12px rgba(24, 133, 91, 0.35);
 }
-.btn-success:hover { background: linear-gradient(135deg, #34d399, #10b981); transform: translateY(-1px); }
+.btn-success:hover {
+  background: linear-gradient(135deg, var(--accent-emerald-fill), #146e4c);
+  box-shadow: 0 4px 16px rgba(24, 133, 91, 0.45);
+  transform: translateY(-1px);
+}
 .btn-danger {
-  background: rgba(244,63,94,0.15);
+  background: rgba(242, 85, 90,0.15);
   color: var(--accent-rose);
-  border: 1px solid rgba(244,63,94,0.25);
+  border: 1px solid rgba(242, 85, 90,0.25);
 }
 .btn-danger:hover { background: var(--accent-rose); color: #fff; }
 .btn-ghost {
@@ -352,6 +388,10 @@ main.flex-1 { min-height: 0; }
 }
 .btn-ghost:hover { background: var(--bg-card-hover); color: var(--text-primary); }
 .btn:disabled { opacity: 0.4; pointer-events: none; }
+.btn:focus-visible, .chip-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
 .btn-sm { padding: 0.4rem 0.85rem; font-size: 0.72rem; }
 .btn-lg { padding: 0.75rem 1.75rem; font-size: 0.9rem; }
 
@@ -367,16 +407,19 @@ main.flex-1 { min-height: 0; }
   text-align: center;
   cursor: pointer;
   transition: all var(--transition-smooth);
-  background: rgba(7, 12, 24, 0.4);
+  background: rgba(10, 12, 16, 0.4);
 }
 .drop-zone:hover {
   border-color: var(--accent-blue);
-  background: rgba(59, 130, 246, 0.04);
+  background: rgba(92, 124, 250, 0.04);
 }
 .drop-zone.dragover {
   border-color: var(--accent-emerald);
-  background: rgba(16, 185, 129, 0.06);
-  box-shadow: 0 0 30px rgba(16, 185, 129, 0.1);
+  background: rgba(52, 201, 140, 0.06);
+}
+.drop-zone:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 .drop-zone-icon { color: var(--text-dim); margin-bottom: 0.75rem; }
 .drop-zone-title { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
@@ -384,7 +427,7 @@ main.flex-1 { min-height: 0; }
 
 /* --- Console Terminal --- */
 .console-terminal {
-  background: rgba(2, 6, 15, 0.85);
+  background: rgba(10, 13, 18, 0.85);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   font-family: var(--font-mono);
@@ -398,7 +441,7 @@ main.flex-1 { min-height: 0; }
 
 /* --- Progress Ring --- */
 .progress-container {
-  background: rgba(2, 6, 15, 0.5);
+  background: rgba(10, 13, 18, 0.5);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 1.25rem;
@@ -446,7 +489,7 @@ main.flex-1 { min-height: 0; }
   font-size: 0.65rem;
 }
 .preview-table thead tr {
-  background: rgba(15,23,42,0.8);
+  background: rgba(20, 25, 34,0.8);
   border-bottom: 1px solid var(--border-subtle);
 }
 .preview-table th {
@@ -476,7 +519,7 @@ main.flex-1 { min-height: 0; }
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: rgba(15,23,42,0.6);
+  background: rgba(20, 25, 34,0.6);
   border-bottom: 1px solid var(--border-subtle);
 }
 .history-table td {
@@ -520,7 +563,7 @@ main.flex-1 { min-height: 0; }
 .modal-body { padding: 1.5rem; }
 .modal-footer {
   padding: 1rem 1.5rem;
-  background: rgba(15,23,42,0.5);
+  background: rgba(20, 25, 34,0.5);
   border-top: 1px solid var(--border-subtle);
   display: flex;
   justify-content: flex-end;
@@ -529,7 +572,7 @@ main.flex-1 { min-height: 0; }
 
 /* --- Footer --- */
 .app-footer {
-  background: rgba(12, 18, 34, 0.85);
+  background: rgba(13, 16, 22, 0.85);
   border-top: 1px solid var(--border-subtle);
   padding: 0.5rem 2.5rem;
   display: flex;
@@ -562,21 +605,21 @@ main.flex-1 { min-height: 0; }
 /* --- Utility Classes (required by app.js) --- */
 .hidden { display: none !important; }
 .text-white { color: #fff; }
-.text-emerald-400 { color: #34d399; }
-.text-rose-400 { color: #fb7185; }
-.text-rose-500 { color: #f43f5e; }
-.text-sky-400 { color: #38bdf8; }
-.text-blue-400 { color: #60a5fa; }
-.text-blue-500 { color: #3b82f6; }
-.text-amber-400 { color: #fbbf24; }
-.text-amber-500 { color: #f59e0b; }
-.text-slate-300 { color: #cbd5e1; }
-.text-slate-400 { color: #94a3b8; }
-.text-slate-500 { color: #64748b; }
-.text-slate-600 { color: #475569; }
-.text-indigo-400 { color: #818cf8; }
-.text-emerald-500 { color: #10b981; }
-.text-violet-400 { color: #a78bfa; }
+.text-emerald-400 { color: #4fdb9e; }
+.text-rose-400 { color: #f5828a; }
+.text-rose-500 { color: #f2555a; }
+.text-sky-400 { color: #4c9aff; }
+.text-blue-400 { color: #8ca6ff; }
+.text-blue-500 { color: #5c7cfa; }
+.text-amber-400 { color: #f0ba5c; }
+.text-amber-500 { color: #c7841f; }
+.text-slate-300 { color: #c7cdd6; }
+.text-slate-400 { color: #a6afbd; }
+.text-slate-500 { color: #7c8695; }
+.text-slate-600 { color: #717b89; }
+.text-indigo-400 { color: #a79cf0; }
+.text-emerald-500 { color: #34c98c; }
+.text-violet-400 { color: #afa3ee; }
 .font-mono { font-family: var(--font-mono); }
 .font-bold { font-weight: 700; }
 .font-semibold { font-weight: 600; }
@@ -649,10 +692,10 @@ svg.icon {
   font-size: 0.68rem;
   font-weight: 700;
 }
-.badge-blue { background: rgba(59,130,246,0.1); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.2); }
-.badge-amber { background: rgba(245,158,11,0.1); color: var(--accent-amber); border: 1px solid rgba(245,158,11,0.2); }
-.badge-emerald { background: rgba(16,185,129,0.1); color: var(--accent-emerald); border: 1px solid rgba(16,185,129,0.2); }
-.badge-violet { background: rgba(139,92,246,0.1); color: var(--accent-violet); border: 1px solid rgba(139,92,246,0.2); }
+.badge-blue { background: rgba(92, 124, 250,0.1); color: var(--accent-blue); border: 1px solid rgba(92, 124, 250,0.2); }
+.badge-amber { background: rgba(199, 132, 31,0.1); color: var(--accent-amber); border: 1px solid rgba(199, 132, 31,0.2); }
+.badge-emerald { background: rgba(52, 201, 140,0.1); color: var(--accent-emerald); border: 1px solid rgba(52, 201, 140,0.2); }
+.badge-violet { background: rgba(139, 127, 232,0.1); color: var(--accent-violet); border: 1px solid rgba(139, 127, 232,0.2); }
 
 /* Label */
 .field-label {
@@ -680,9 +723,9 @@ svg.icon {
 }
 .chip-btn:hover { color: var(--text-secondary); border-color: var(--border-active); }
 .chip-btn.selected {
-  background: var(--accent-blue);
+  background: var(--accent-blue-fill);
   color: #fff;
-  border-color: var(--accent-blue);
+  border-color: var(--accent-blue-fill);
 }
 
 /* Recent Files */
@@ -756,7 +799,7 @@ svg.icon {
 
 /* Update Banner */
 .update-banner {
-  background: linear-gradient(135deg, #059669, #10b981);
+  background: linear-gradient(135deg, #1fa873, #34c98c);
   padding: 0.65rem 2.5rem;
   display: flex;
   align-items: center;
