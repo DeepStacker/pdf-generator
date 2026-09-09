@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Generator</title>
+    <title>GSS-MIS</title>
     <link rel="stylesheet" href="/static/web.css?v=5.2.265">
     <style>
         /* ===== RESET & BASE ===== */
@@ -80,8 +80,10 @@
         .h-3 { height: 0.75rem; }
         .h-4 { height: 1rem; }
         .h-5 { height: 1.25rem; }
+        .h-6 { height: 1.5rem; }
         .h-8 { height: 2rem; }
         .h-10 { height: 2.5rem; }
+        .h-12 { height: 3rem; }
         .h-20 { height: 5rem; }
         .h-44 { height: 11rem; }
         .h-52 { height: 13rem; }
@@ -89,7 +91,9 @@
         .w-3 { width: 0.75rem; }
         .w-4 { width: 1rem; }
         .w-5 { width: 1.25rem; }
+        .w-6 { width: 1.5rem; }
         .w-8 { width: 2rem; }
+        .w-12 { width: 3rem; }
         .w-20 { width: 5rem; }
         .w-44 { width: 11rem; }
         .w-64 { width: 16rem; }
@@ -403,38 +407,12 @@
             .hidden-mobile { display: none !important; }
         }
 
-        /* ===== BANK PROFILE PILLS ===== */
-        .bank-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 14px;
-            border-radius: 9999px;
-            font-size: 12px;
-            font-weight: 600;
-            border: 1px solid #232a36;
-            background: transparent;
-            color: #7c8695;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            white-space: nowrap;
-        }
-        .bank-pill:hover {
-            border-color: #5b6472;
-            color: #dde2e8;
-            background: rgba(35, 42, 54, 0.4);
-        }
-        .bank-pill.active {
-            background: rgba(35, 42, 54, 0.6);
-            color: #ffffff;
-        }
-        .bank-dot {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
+        /* Sidebar row styling (.sidebar-item, .bank-pill.active, .bank-dot) now
+           lives entirely in web.css. This used to be redefined again here,
+           with its own slightly different padding and gap -- and since this
+           inline block loads after web.css, it always won the cascade, so
+           web.css's copy was dead weight the whole time it existed. One
+           definition now. */
 
         /* ===== KEYBOARD NAVIGATION FOR DROP ZONES ===== */
         .arvog-drag-zone:focus-visible {
@@ -550,74 +528,91 @@
     </style>
 
 </head>
-<body class="h-full flex flex-col overflow-hidden">
-    <!-- Top Navigation Bar -->
-    <header class="top-navbar">
-        <div class="top-navbar-inner">
-            <div class="navbar-logo">
-                <div class="logo-mark">
-                    <svg viewBox="0 0 32 32" fill="none">
-                        <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#logo-grad)"/>
-                        <text x="16" y="21" text-anchor="middle" fill="#fff" font-size="13" font-weight="800" font-family="system-ui">PG</text>
-                        <defs>
-                            <linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32">
-                                <stop offset="0%" stop-color="#4c6fff"/>
-                                <stop offset="100%" stop-color="#5c7cfa"/>
-                            </linearGradient>
-                        </defs>
-                    </svg>
-                </div>
-                <div class="flex flex-col leading-tight">
-                    <span class="navbar-logo-text">PDF Generator</span>
-                    <span class="navbar-logo-sub">v{{VERSION}}</span>
-                </div>
+<body class="h-full app-shell">
+    <!-- Sidebar: every screen is one flat list, one place to look. Previously
+         a top nav bar and a separate bank-pill row each controlled half the
+         app, and neither made it obvious the other existed. -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="logo-mark">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#logo-grad)"/>
+                    <text x="16" y="21" text-anchor="middle" fill="#fff" font-size="12" font-weight="800" font-family="system-ui">GM</text>
+                    <defs>
+                        <linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32">
+                            <stop offset="0%" stop-color="#4c6fff"/>
+                            <stop offset="100%" stop-color="#5c7cfa"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
             </div>
-            <nav class="navbar-nav">
-                <button onclick="switchTab('PROCESS')" id="tabBtn-PROCESS" class="nav-btn active">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    Process
-                </button>
-                <button onclick="switchTab('VALIDATOR')" id="tabBtn-VALIDATOR" class="nav-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                    Validator
-                </button>
-                <button onclick="switchTab('FLATTEN')" id="tabBtn-FLATTEN" class="nav-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 15h6"/></svg>
-                    Flatten PDF
-                </button>
-                <button onclick="switchTab('STATS')" id="tabBtn-STATS" class="nav-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
-                    Analytics
-                </button>
-                <button onclick="switchTab('HISTORY')" id="tabBtn-HISTORY" class="nav-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
-                    History
-                </button>
-                <button onclick="switchTab('SETTINGS')" id="tabBtn-SETTINGS" class="nav-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/></svg>
-                    Settings
-                </button>
-            </nav>
-            <div id="bankSelector" class="navbar-bank-switcher">
-                <button onclick="switchBank('IDFC First Bank')" class="bank-pill active" data-bank="IDFC First Bank" id="bankPill-IDFC">
-                    <span class="bank-dot" style="background:#4c6fff"></span> IDFC
-                </button>
-                <button onclick="switchBank('Equitas Small Finance Bank')" class="bank-pill" data-bank="Equitas Small Finance Bank" id="bankPill-EQUITAS">
-                    <span class="bank-dot" style="background:#c7841f"></span> Equitas
-                </button>
-                <button onclick="switchBank('Arvog Bank')" class="bank-pill" data-bank="Arvog Bank" id="bankPill-ARVOG">
-                    <span class="bank-dot" style="background:#34c98c"></span> Arvog
-                </button>
-                <button onclick="switchBank('CONSOLIDATION')" class="bank-pill" data-bank="CONSOLIDATION" id="bankPill-CONSOLIDATION">
-                    <span class="bank-dot" style="background:#8b7fe8"></span> Consolidation
-                </button>
+            <div class="flex flex-col leading-tight">
+                <span class="navbar-logo-text">GSS-MIS</span>
+                <span class="navbar-logo-sub">v{{VERSION}}</span>
             </div>
         </div>
-    </header>
+
+        <nav class="sidebar-nav">
+            <div class="sidebar-group">
+                <span class="sidebar-group-label">Reports</span>
+                <button onclick="selectScreen('IDFC')" class="sidebar-item bank-pill active" data-bank="IDFC First Bank" id="bankPill-IDFC">
+                    <span class="bank-dot" style="background:#4c6fff"></span>
+                    <span class="sidebar-item-label">IDFC First Bank</span>
+                </button>
+                <button onclick="selectScreen('EQUITAS')" class="sidebar-item bank-pill" data-bank="Equitas Small Finance Bank" id="bankPill-EQUITAS">
+                    <span class="bank-dot" style="background:#c7841f"></span>
+                    <span class="sidebar-item-label">Equitas Small Finance</span>
+                </button>
+                <button onclick="selectScreen('ARVOG')" class="sidebar-item bank-pill" data-bank="Arvog Bank" id="bankPill-ARVOG">
+                    <span class="bank-dot" style="background:#34c98c"></span>
+                    <span class="sidebar-item-label">Arvog Bank</span>
+                </button>
+                <button onclick="selectScreen('CONSOLIDATION')" class="sidebar-item bank-pill" data-bank="CONSOLIDATION" id="bankPill-CONSOLIDATION">
+                    <span class="bank-dot" style="background:#8b7fe8"></span>
+                    <span class="sidebar-item-label">Consolidation</span>
+                </button>
+            </div>
+
+            <div class="sidebar-group">
+                <span class="sidebar-group-label">Tools</span>
+                <button onclick="selectScreen('VALIDATOR')" id="tabBtn-VALIDATOR" class="sidebar-item nav-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    <span class="sidebar-item-label">Report Validator</span>
+                </button>
+                <button onclick="selectScreen('FLATTEN')" id="tabBtn-FLATTEN" class="sidebar-item nav-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 15h6"/></svg>
+                    <span class="sidebar-item-label">Flatten PDF</span>
+                </button>
+            </div>
+
+            <div class="sidebar-group">
+                <span class="sidebar-group-label">Insights</span>
+                <button onclick="selectScreen('STATS')" id="tabBtn-STATS" class="sidebar-item nav-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+                    <span class="sidebar-item-label">Analytics</span>
+                </button>
+                <button onclick="selectScreen('HISTORY')" id="tabBtn-HISTORY" class="sidebar-item nav-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+                    <span class="sidebar-item-label">History</span>
+                </button>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button onclick="selectScreen('SETTINGS')" id="tabBtn-SETTINGS" class="sidebar-item nav-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/></svg>
+                <span class="sidebar-item-label">Settings</span>
+            </button>
+            <div class="sidebar-status">
+                <span id="footerStatusText" class="sidebar-status-text"><span class="status-dot"></span>Idle. Ready.</span>
+            </div>
+        </div>
+    </aside>
 
     <!-- Toast container for inline notifications -->
     <div id="toastContainer" class="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
 
+    <div class="app-main">
     <!-- Main Content -->
     <main class="flex-1 bg-slate-950 flex flex-col overflow-hidden">
         <!-- Header bar / Info Banner -->
@@ -637,157 +632,147 @@
                 
                 <!-- SECTION: PROCESS (IDFC WORKFLOW) -->
                 <section id="tab-PROCESS-IDFC" class="tab-content process-layout">
-                    <!-- Title Header -->
-                    <div class="flex justify-between items-center">
-                        <h2 class="text-xl font-bold tracking-tight text-white">Generate Reports</h2>
-                        <span class="px-2 py-1 text-2xs font-bold rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">IDFC FIRST Bank</span>
+                    <!-- Page header -->
+                    <div class="section-header">
+                        <div>
+                            <h2 class="section-title">Generate Reports</h2>
+                            <p class="text-sm text-slate-400 mt-1">Physical verification and Touch &amp; Feel branch reports, straight from the master audit sheet.</p>
+                        </div>
+                        <span class="section-badge badge-blue">IDFC FIRST Bank</span>
                     </div>
 
-                    <!-- Statistics + Controls in 2-column grid -->
                     <div class="process-grid">
-                        <!-- LEFT COLUMN: Stats + File Upload -->
-                        <div class="space-y-3">
-                            <!-- Statistics inline -->
-                            <div class="flex gap-2">
-                                <div class="flex-1 bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Sessions</span>
-                                    <span id="idfcStat-sessions" class="text-sm font-bold mt-0.5 block text-sky-400">0</span>
+                        <!-- LEFT COLUMN: source file + preview -->
+                        <div class="space-y-4">
+                            <div class="stats-row">
+                                <div class="stat-card">
+                                    <span class="stat-label">Sessions</span>
+                                    <span id="idfcStat-sessions" class="stat-value text-sky-400">0</span>
                                 </div>
-                                <div class="flex-1 bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Last Run</span>
-                                    <span id="idfcStat-lastRun" class="text-xs font-bold mt-0.5 block text-emerald-400 truncate">No activity yet</span>
+                                <div class="stat-card">
+                                    <span class="stat-label">Last Run</span>
+                                    <span id="idfcStat-lastRun" class="stat-value text-sm text-emerald-400 truncate">No activity yet</span>
                                 </div>
-                                <div class="flex-1 bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">PDFs</span>
-                                    <span id="idfcStat-pdfs" class="text-sm font-bold mt-0.5 block text-blue-500 dynamic-accent-fg">0</span>
+                                <div class="stat-card">
+                                    <span class="stat-label">PDFs</span>
+                                    <span id="idfcStat-pdfs" class="stat-value text-blue-500 dynamic-accent-fg">0</span>
                                 </div>
                             </div>
 
-                            <!-- Source File / Drag Zone -->
                             <div>
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Source Master Excel</label>
+                                <label class="field-label">Source Master Excel</label>
                                 <input type="file" id="idfcFileInputHidden" multiple accept=".xlsx,.xls,.xlsm" class="hidden" onchange="handleNativeFileSelect(event)">
-                                <div id="idfcDropZone" class="arvog-drag-zone rounded-lg p-4 flex flex-col items-center justify-center text-center cursor-pointer border border-dashed border-brand-borderLine hover:border-blue-500/50"
+                                <div id="idfcDropZone" class="drop-zone drag-zone-compact"
                                      onclick="browseMultipleFiles()"
                                      ondragover="handleDragOver(event)"
                                      ondragleave="handleDragLeave(event)"
-                                     ondrop="handleDrop(event)">
-                                    <div class="flex flex-col items-center space-y-1 pointer-events-none">
-                                        <svg class="icon w-6 h-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                            <polyline points="17 8 12 3 7 8"/>
-                                            <line x1="12" y1="3" x2="12" y2="15"/>
-                                        </svg>
-                                        <span class="text-xs text-slate-200">Drag & drop or <span style="color: #4c6fff; font-weight: 600;">browse</span></span>
-                                        <span class="text-2xs text-slate-500">.xlsx, .xls, .xlsm</span>
-                                    </div>
+                                     ondrop="handleDrop(event)"
+                                     tabindex="0" role="button" aria-label="Browse or drop master Excel files">
+                                    <svg class="icon drop-zone-icon w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                    <span class="drop-zone-title">Drag &amp; drop or <span class="text-blue-500 dynamic-accent-fg">browse</span></span>
+                                    <span class="drop-zone-sub">.xlsx, .xls, .xlsm</span>
                                 </div>
                                 <input type="text" id="idfcInputFile" class="hidden">
                             </div>
 
                             <!-- Selected Files List -->
-                            <div id="idfcSelectedFilesContainer" class="hidden">
-                                <div class="flex justify-between items-center text-2xs font-bold text-slate-400">
-                                    <span>FILES (<span id="idfcSelectedCount">0</span>)</span>
-                                    <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 text-2xs">Clear</button>
+                            <div id="idfcSelectedFilesContainer" class="hidden space-y-1.5">
+                                <div class="flex justify-between items-center text-2xs font-bold text-slate-400 uppercase tracking-wider">
+                                    <span>Files (<span id="idfcSelectedCount">0</span>)</span>
+                                    <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 text-2xs font-bold">Clear</button>
                                 </div>
-                                <div id="idfcSelectedFilesList" class="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                <div id="idfcSelectedFilesList" class="file-list-container space-y-1 p-1.5">
                                 </div>
                             </div>
 
-                            <div id="idfcValidationBox" class="hidden text-xs rounded-lg px-3 py-2"></div>
+                            <div id="idfcValidationBox" class="hidden validation-box"></div>
                             <div id="idfcPreviewBox" class="hidden"><span id="idfcPreviewText"></span></div>
 
                             <!-- Excel Preview Grid -->
                             <div id="idfcGridContainer" class="hidden space-y-1">
-                                <button onclick="togglePreviewGrid('idfc')" class="flex items-center space-x-1 text-2xs text-slate-400 hover:text-white">
+                                <button onclick="togglePreviewGrid('idfc')" class="flex items-center space-x-1 text-2xs font-semibold text-slate-400 hover:text-white">
                                     <svg id="idfcGridIcon" class="icon w-3 h-3 transition-transform duration-200" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
                                     <span>Preview (5 rows)</span>
                                 </button>
-                                <div id="idfcGridWrapper" class="hidden overflow-x-auto rounded-lg border border-brand-borderLine bg-slate-950/40">
-                                    <table class="w-full text-left border-collapse text-2xs font-mono whitespace-nowrap">
-                                        <thead><tr id="idfcGridHeader" class="bg-slate-900 border-b border-brand-borderLine text-slate-500 uppercase tracking-wider font-sans font-bold"></tr></thead>
-                                        <tbody id="idfcGridBody" class="divide-y divide-brand-borderLine text-slate-300"></tbody>
+                                <div id="idfcGridWrapper" class="hidden overflow-x-auto rounded-lg border border-brand-borderLine">
+                                    <table class="preview-table">
+                                        <thead><tr id="idfcGridHeader"></tr></thead>
+                                        <tbody id="idfcGridBody"></tbody>
                                     </table>
                                 </div>
                             </div>
 
                             <!-- Column Mapper -->
-                            <div id="idfcMapperContainer" class="hidden p-2 bg-slate-900/30 border border-brand-borderLine rounded-lg">
-                                <span class="block text-2xs font-bold text-slate-400 uppercase tracking-wider">Column Mapping</span>
-                                <div class="grid grid-cols-2 gap-1 mt-1">
-                                    <div><label style="font-size:9px" class="font-semibold text-slate-400">Prospect</label><select id="idfcMap-prospect" class="w-full bg-slate-950 border border-brand-borderLine rounded px-1 py-1 text-2xs text-slate-200"></select></div>
-                                    <div><label style="font-size:9px" class="font-semibold text-slate-400">CUID</label><select id="idfcMap-cuid" class="w-full bg-slate-950 border border-brand-borderLine rounded px-1 py-1 text-2xs text-slate-200"></select></div>
-                                    <div><label style="font-size:9px" class="font-semibold text-slate-400">Tare Wt</label><select id="idfcMap-tare" class="w-full bg-slate-950 border border-brand-borderLine rounded px-1 py-1 text-2xs text-slate-200"></select></div>
-                                    <div><label style="font-size:9px" class="font-semibold text-slate-400">Branch</label><select id="idfcMap-branch" class="w-full bg-slate-950 border border-brand-borderLine rounded px-1 py-1 text-2xs text-slate-200"></select></div>
+                            <div id="idfcMapperContainer" class="hidden card-compact card">
+                                <span class="field-label mb-2">Column Mapping</span>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div><label class="text-2xs font-semibold text-slate-400">Prospect</label><select id="idfcMap-prospect" class="input-field text-2xs py-1"></select></div>
+                                    <div><label class="text-2xs font-semibold text-slate-400">CUID</label><select id="idfcMap-cuid" class="input-field text-2xs py-1"></select></div>
+                                    <div><label class="text-2xs font-semibold text-slate-400">Tare Wt</label><select id="idfcMap-tare" class="input-field text-2xs py-1"></select></div>
+                                    <div><label class="text-2xs font-semibold text-slate-400">Branch</label><select id="idfcMap-branch" class="input-field text-2xs py-1"></select></div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- RIGHT COLUMN: Controls -->
-                        <div class="space-y-3">
-                            <!-- Audit Type -->
+                        <!-- RIGHT COLUMN: run parameters -->
+                        <div class="card space-y-4">
                             <div>
-                                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Audit Type</label>
-                                <div class="bg-slate-900 p-0.5 rounded-lg border border-brand-borderLine flex">
-                                    <button onclick="setIdfcAuditType('POA')" id="idfcOpt-POA" class="flex-1 py-1 text-xs font-bold rounded-md bg-blue-500 text-white dynamic-accent-bg">POA</button>
-                                    <button onclick="setIdfcAuditType('TAF')" id="idfcOpt-TAF" class="flex-1 py-1 text-xs font-semibold text-slate-400 hover:text-white">TAF</button>
+                                <label class="field-label">Audit Type</label>
+                                <div class="chip-group" id="idfcAuditTypeGroup">
+                                    <button onclick="setIdfcAuditType('POA')" id="idfcOpt-POA" class="chip-btn selected dynamic-accent-bg">POA</button>
+                                    <button onclick="setIdfcAuditType('TAF')" id="idfcOpt-TAF" class="chip-btn">TAF</button>
                                 </div>
                             </div>
 
-                            <!-- Output Mode -->
                             <div>
-                                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Output Mode</label>
-                                <div class="bg-slate-900 p-0.5 rounded-lg border border-brand-borderLine flex">
-                                    <button onclick="setIdfcOutputMode('FOLDER')" id="idfcMode-FOLDER" class="flex-1 py-1 text-xs font-semibold text-slate-400 hover:text-white">FOLDER</button>
-                                    <button onclick="setIdfcOutputMode('ZIP ONLY')" id="idfcMode-ZIPONLY" class="flex-1 py-1 text-xs font-semibold text-slate-400 hover:text-white">ZIP ONLY</button>
-                                    <button onclick="setIdfcOutputMode('BOTH')" id="idfcMode-BOTH" class="flex-1 py-1 text-xs font-bold rounded-md bg-blue-500 text-white dynamic-accent-bg">BOTH</button>
+                                <label class="field-label">Output Mode</label>
+                                <div class="chip-group" id="idfcOutputModeGroup">
+                                    <button onclick="setIdfcOutputMode('FOLDER')" id="idfcMode-FOLDER" class="chip-btn">Folder</button>
+                                    <button onclick="setIdfcOutputMode('ZIP ONLY')" id="idfcMode-ZIPONLY" class="chip-btn">Zip Only</button>
+                                    <button onclick="setIdfcOutputMode('BOTH')" id="idfcMode-BOTH" class="chip-btn selected dynamic-accent-bg">Both</button>
                                 </div>
                             </div>
 
-                            <!-- Download info -->
-                            <div class="text-2xs text-slate-500 italic">
-                                Files available for download after generation.
-                            </div>
+                            <p class="text-2xs text-slate-500 italic">Files are available for download once generation finishes.</p>
 
-                            <!-- Divider -->
                             <div class="border-t border-brand-borderLine"></div>
 
-                            <!-- Action Buttons -->
                             <div class="flex gap-2">
-                                <button id="idfcBtnRun" onclick="startGeneration()" class="flex-1 bg-blue-600 text-white text-xs font-bold py-2 px-4 rounded-lg hover:bg-blue-500 dynamic-accent-bg">Generate Reports</button>
-                                <button id="idfcBtnCancel" onclick="cancelGeneration()" disabled class="bg-rose-600 text-white text-xs font-bold py-2 px-4 rounded-lg hover:bg-rose-500 disabled:opacity-40 disabled:pointer-events-none">Stop</button>
+                                <button id="idfcBtnRun" onclick="startGeneration()" class="btn btn-primary flex-1 dynamic-accent-bg">Generate Reports</button>
+                                <button id="idfcBtnCancel" onclick="cancelGeneration()" disabled class="btn btn-danger">Stop</button>
                             </div>
 
                             <!-- Progress -->
-                            <div id="idfcProgressContainer" class="hidden bg-slate-950/30 border border-brand-borderLine rounded-lg p-3">
-                                <div class="flex items-center gap-3">
-                                    <div class="relative w-12 h-12 flex-shrink-0">
-                                        <svg class="w-full h-full -rotate-90">
-                                            <circle cx="24" cy="24" r="20" stroke-width="4" stroke="#232a36" fill="transparent"/>
-                                            <circle id="idfcProgressRing" cx="24" cy="24" r="20" stroke-width="4" stroke="#4c6fff" fill="transparent" stroke-dasharray="125.6" stroke-dashoffset="125.6" stroke-linecap="round" class="transition-all duration-300 dynamic-accent-stroke"/>
-                                        </svg>
-                                        <span id="idfcProgressPct" class="absolute inset-0 flex items-center justify-center text-2xs font-bold text-white">0%</span>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span id="idfcProgressBranch" class="block text-2xs font-bold text-slate-200">Initializing...</span>
-                                        <span id="idfcProgressSpeed" class="block text-2xs text-slate-500">Speed: --</span>
-                                        <span id="idfcProgressEta" class="block text-2xs text-emerald-400">ETA: --</span>
-                                    </div>
+                            <div id="idfcProgressContainer" class="hidden progress-container">
+                                <div class="progress-ring-wrap">
+                                    <svg class="w-full h-full" viewBox="0 0 48 48">
+                                        <circle cx="24" cy="24" r="20" stroke-width="4" stroke="#232a36" fill="transparent"/>
+                                        <circle id="idfcProgressRing" cx="24" cy="24" r="20" stroke-width="4" stroke="#4c6fff" fill="transparent" stroke-dasharray="125.6" stroke-dashoffset="125.6" stroke-linecap="round" class="transition-all duration-300 dynamic-accent-stroke"/>
+                                    </svg>
+                                    <span id="idfcProgressPct" class="progress-pct">0%</span>
+                                </div>
+                                <div class="space-y-1 min-w-0">
+                                    <span id="idfcProgressBranch" class="block text-xs font-bold text-slate-200 truncate">Initializing...</span>
+                                    <span id="idfcProgressSpeed" class="block text-2xs text-slate-500">Speed: --</span>
+                                    <span id="idfcProgressEta" class="block text-2xs text-emerald-400">ETA: --</span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- The only declaration of these ids. They carry the
-                             output path and auto-open preference, which the run
-                             reads and /api/dashboard fills in, but which the
-                             desktop has no visible control for. Duplicating any
-                             of them elsewhere silently shadows this copy. -->
+                        <!-- The only declaration of these ids: three per-bank
+                             mirrors of the one real output path/auto-open
+                             control, which now lives on the Settings screen
+                             (#settingsOutputDir, #prefAutoOpen). Duplicating
+                             any of these ids elsewhere silently shadows this
+                             copy. -->
                         <div style="display:none">
                             <input type="checkbox" id="idfcAutoOpen">
                             <input type="checkbox" id="eqAutoOpen">
                             <input type="checkbox" id="arvogAutoOpen">
-                            <input type="checkbox" id="prefAutoOpen">
                             <input type="text" id="idfcOutputDir">
                             <input type="text" id="eqOutputDir">
                             <input type="text" id="arvogOutputDir">
@@ -795,11 +780,9 @@
                         </div>
 
                         <!-- FULL WIDTH: Console Logs -->
-                        <div class="process-grid-full mt-1">
-                            <div class="flex items-center gap-2">
-                                <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
-                            </div>
-                            <div id="idfcConsole" class="bg-brand-termBg border border-brand-borderLine rounded-lg h-20 font-mono text-2xs p-2 overflow-y-auto space-y-0.5">
+                        <div class="process-grid-full space-y-2">
+                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
+                            <div id="idfcConsole" class="console-terminal" style="height:6rem">
                                 <div class="text-slate-500">[00:00:00] Terminal logger online. Ready.</div>
                             </div>
                         </div>
@@ -808,147 +791,133 @@
 
                 <!-- SECTION: PROCESS (ARVOG WORKFLOW) -->
                 <section id="tab-PROCESS-ARVOG" class="tab-content process-layout hidden">
-                    <!-- Title Header -->
-                    <div class="flex justify-between items-center">
-                        <h2 id="arvogHeading" class="text-xl font-bold tracking-tight text-white">Generate Reports</h2>
-                        <span class="px-2 py-1 text-2xs font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Arvog Bank</span>
+                    <div class="section-header">
+                        <div>
+                            <h2 id="arvogHeading" class="section-title">Generate Reports</h2>
+                            <p class="text-sm text-slate-400 mt-1">Branch and packet-wise PDF groupings, straight from the master audit sheet.</p>
+                        </div>
+                        <span class="section-badge badge-emerald">Arvog Bank</span>
                     </div>
 
                     <!-- Which leg of the round trip: out to the branch, or back -->
-                    <div class="flex bg-brand-panelBg border border-brand-borderLine rounded-lg p-0.5 w-max">
-                        <button onclick="switchArvogPanel('GENERATE')" id="arvogPanelBtn-GENERATE"
-                                class="px-3 py-1 text-xs font-bold rounded-md bg-emerald-500 text-white">Generate PDF / Excel</button>
-                        <button onclick="switchArvogPanel('REBUILD')" id="arvogPanelBtn-REBUILD"
-                                class="px-3 py-1 text-xs font-semibold text-slate-400 hover:text-white">Rebuild Master Sheet</button>
+                    <div class="chip-group w-max">
+                        <button onclick="switchArvogPanel('GENERATE')" id="arvogPanelBtn-GENERATE" class="chip-btn selected dynamic-accent-bg" style="padding:0.5rem 0.9rem">Generate PDF / Excel</button>
+                        <button onclick="switchArvogPanel('REBUILD')" id="arvogPanelBtn-REBUILD" class="chip-btn" style="padding:0.5rem 0.9rem">Rebuild Master Sheet</button>
                     </div>
 
                     <div id="arvogPanel-GENERATE">
-                    <!-- Statistics + Controls in 2-column grid -->
                     <div class="process-grid">
-                        <!-- LEFT COLUMN: Stats + File Upload -->
-                        <div class="space-y-3">
-                            <!-- Statistics inline -->
-                            <div class="flex gap-2">
-                                <div class="flex-1 bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Sessions</span>
-                                    <span id="arvogStat-sessions" class="text-sm font-bold mt-0.5 block text-sky-400">0</span>
+                        <!-- LEFT COLUMN: source file + preview -->
+                        <div class="space-y-4">
+                            <div class="stats-row">
+                                <div class="stat-card">
+                                    <span class="stat-label">Sessions</span>
+                                    <span id="arvogStat-sessions" class="stat-value text-sky-400">0</span>
                                 </div>
-                                <div class="flex-1 bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Last Run</span>
-                                    <span id="arvogStat-lastRun" class="text-xs font-bold mt-0.5 block text-emerald-400 truncate">No activity yet</span>
+                                <div class="stat-card">
+                                    <span class="stat-label">Last Run</span>
+                                    <span id="arvogStat-lastRun" class="stat-value text-sm text-emerald-400 truncate">No activity yet</span>
                                 </div>
-                                <div class="flex-1 bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">PDFs</span>
-                                    <span id="arvogStat-pdfs" class="text-sm font-bold mt-0.5 block text-emerald-500">0</span>
+                                <div class="stat-card">
+                                    <span class="stat-label">PDFs</span>
+                                    <span id="arvogStat-pdfs" class="stat-value text-emerald-500">0</span>
                                 </div>
                             </div>
 
-                            <!-- Source File / Drag Zone -->
                             <div>
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Source Master Excel</label>
+                                <label class="field-label">Source Master Excel</label>
                                 <input type="file" id="arvogFileInputHidden" multiple accept=".xlsx,.xls,.xlsm" class="hidden" onchange="handleNativeFileSelect(event)">
-                                <div id="arvogDropZone" class="arvog-drag-zone rounded-lg p-4 flex flex-col items-center justify-center text-center cursor-pointer border border-dashed border-brand-borderLine hover:border-emerald-500/50"
+                                <div id="arvogDropZone" class="drop-zone drag-zone-compact"
                                      onclick="browseMultipleFiles()"
                                      ondragover="handleDragOver(event)"
                                      ondragleave="handleDragLeave(event)"
-                                     ondrop="handleDrop(event)">
-                                    <div class="flex flex-col items-center space-y-1 pointer-events-none">
-                                        <svg class="icon w-6 h-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                            <polyline points="17 8 12 3 7 8"/>
-                                            <line x1="12" y1="3" x2="12" y2="15"/>
-                                        </svg>
-                                        <span class="text-xs text-slate-200">Drag & drop or <span style="color: #34c98c; font-weight: 600;">browse</span></span>
-                                        <span class="text-2xs text-slate-500">.xlsx, .xls, .xlsm</span>
-                                    </div>
+                                     ondrop="handleDrop(event)"
+                                     tabindex="0" role="button" aria-label="Browse or drop master Excel files">
+                                    <svg class="icon drop-zone-icon w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                    <span class="drop-zone-title">Drag &amp; drop or <span style="color: #34c98c; font-weight: 600;">browse</span></span>
+                                    <span class="drop-zone-sub">.xlsx, .xls, .xlsm</span>
                                 </div>
                                 <input type="text" id="arvogInputFile" class="hidden">
                             </div>
 
                             <!-- Selected Files List -->
-                            <div id="arvogSelectedFilesContainer" class="hidden">
-                                <div class="flex justify-between items-center text-2xs font-bold text-slate-400">
-                                    <span>FILES (<span id="arvogSelectedCount">0</span>)</span>
-                                    <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 text-2xs">Clear</button>
+                            <div id="arvogSelectedFilesContainer" class="hidden space-y-1.5">
+                                <div class="flex justify-between items-center text-2xs font-bold text-slate-400 uppercase tracking-wider">
+                                    <span>Files (<span id="arvogSelectedCount">0</span>)</span>
+                                    <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 text-2xs font-bold">Clear</button>
                                 </div>
-                                <div id="arvogSelectedFilesList" class="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                <div id="arvogSelectedFilesList" class="file-list-container space-y-1 p-1.5">
                                 </div>
                             </div>
 
-                            <div id="arvogValidationBox" class="hidden text-xs rounded-lg px-3 py-2"></div>
+                            <div id="arvogValidationBox" class="hidden validation-box"></div>
                             <div id="arvogPreviewBox" class="hidden"><span id="arvogPreviewText"></span></div>
 
                             <!-- Excel Preview Grid -->
                             <div id="arvogGridContainer" class="hidden space-y-1">
-                                <button onclick="togglePreviewGrid('arvog')" class="flex items-center space-x-1 text-2xs text-slate-400 hover:text-white">
+                                <button onclick="togglePreviewGrid('arvog')" class="flex items-center space-x-1 text-2xs font-semibold text-slate-400 hover:text-white">
                                     <svg id="arvogGridIcon" class="icon w-3 h-3 transition-transform duration-200" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
                                     <span>Preview (5 rows)</span>
                                 </button>
-                                <div id="arvogGridWrapper" class="hidden overflow-x-auto rounded-lg border border-brand-borderLine bg-slate-950/40">
-                                    <table class="w-full text-left border-collapse text-2xs font-mono whitespace-nowrap">
-                                        <thead><tr id="arvogGridHeader" class="bg-slate-900 border-b border-brand-borderLine text-slate-500 uppercase tracking-wider font-sans font-bold"></tr></thead>
-                                        <tbody id="arvogGridBody" class="divide-y divide-brand-borderLine text-slate-300"></tbody>
+                                <div id="arvogGridWrapper" class="hidden overflow-x-auto rounded-lg border border-brand-borderLine">
+                                    <table class="preview-table">
+                                        <thead><tr id="arvogGridHeader"></tr></thead>
+                                        <tbody id="arvogGridBody"></tbody>
                                     </table>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- RIGHT COLUMN: Controls -->
-                        <div class="space-y-3">
-                            <!-- Output Format -->
+                        <!-- RIGHT COLUMN: run parameters -->
+                        <div class="card space-y-4">
                             <div>
-                                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Output Format</label>
-                                <div class="bg-slate-900 p-0.5 rounded-lg border border-brand-borderLine flex">
-                                    <button onclick="setArvogFormat('PDF ONLY')" id="arvogFormat-PDFONLY" class="flex-1 py-1 text-xs font-semibold text-slate-400 hover:text-white">PDF ONLY</button>
-                                    <button onclick="setArvogFormat('EXCEL ONLY')" id="arvogFormat-EXCELONLY" class="flex-1 py-1 text-xs font-semibold text-slate-400 hover:text-white">EXCEL ONLY</button>
-                                    <button onclick="setArvogFormat('BOTH')" id="arvogFormat-BOTH" class="flex-1 py-1 text-xs font-bold rounded-md bg-emerald-500 text-white">BOTH</button>
+                                <label class="field-label">Output Format</label>
+                                <div class="chip-group" id="arvogFormatGroup">
+                                    <button onclick="setArvogFormat('PDF ONLY')" id="arvogFormat-PDFONLY" class="chip-btn">PDF Only</button>
+                                    <button onclick="setArvogFormat('EXCEL ONLY')" id="arvogFormat-EXCELONLY" class="chip-btn">Excel Only</button>
+                                    <button onclick="setArvogFormat('BOTH')" id="arvogFormat-BOTH" class="chip-btn selected dynamic-accent-bg">Both</button>
                                 </div>
                             </div>
 
-                            <!-- Packaging Mode -->
                             <div>
-                                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Packaging Mode</label>
-                                <div class="bg-slate-900 p-0.5 rounded-lg border border-brand-borderLine flex">
-                                    <button onclick="setArvogMode('FOLDER')" id="arvogMode-FOLDER" class="flex-1 py-1 text-xs font-semibold text-slate-400 hover:text-white">FOLDER</button>
-                                    <button onclick="setArvogMode('ZIP ONLY')" id="arvogMode-ZIPONLY" class="flex-1 py-1 text-xs font-semibold text-slate-400 hover:text-white">ZIP ONLY</button>
-                                    <button onclick="setArvogMode('BOTH')" id="arvogMode-BOTH" class="flex-1 py-1 text-xs font-bold rounded-md bg-emerald-500 text-white">BOTH</button>
+                                <label class="field-label">Packaging Mode</label>
+                                <div class="chip-group" id="arvogModeGroup">
+                                    <button onclick="setArvogMode('FOLDER')" id="arvogMode-FOLDER" class="chip-btn">Folder</button>
+                                    <button onclick="setArvogMode('ZIP ONLY')" id="arvogMode-ZIPONLY" class="chip-btn">Zip Only</button>
+                                    <button onclick="setArvogMode('BOTH')" id="arvogMode-BOTH" class="chip-btn selected dynamic-accent-bg">Both</button>
                                 </div>
                             </div>
 
-                            <!-- Download info -->
-                            <div class="text-2xs text-slate-500 italic">
-                                Files available for download after generation.
-                            </div>
+                            <p class="text-2xs text-slate-500 italic">Files are available for download once generation finishes.</p>
 
-                            <!-- Action Buttons -->
+                            <div class="border-t border-brand-borderLine"></div>
+
                             <div class="flex gap-2">
-                                <button id="arvogBtnRun" onclick="startGeneration()" class="flex-1 bg-emerald-600 text-white text-xs font-bold py-2 px-4 rounded-lg hover:bg-emerald-500">Generate Reports</button>
-                                <button id="arvogBtnCancel" onclick="cancelGeneration()" disabled class="bg-rose-600 text-white text-xs font-bold py-2 px-4 rounded-lg hover:bg-rose-500 disabled:opacity-40 disabled:pointer-events-none">Stop</button>
+                                <button id="arvogBtnRun" onclick="startGeneration()" class="btn btn-success flex-1">Generate Reports</button>
+                                <button id="arvogBtnCancel" onclick="cancelGeneration()" disabled class="btn btn-danger">Stop</button>
                             </div>
 
                             <!-- Progress -->
-                            <div id="arvogProgressContainer" class="hidden bg-slate-950/30 border border-brand-borderLine rounded-lg p-3">
-                                <div class="flex items-center gap-3">
-                                    <div class="relative w-12 h-12 flex-shrink-0">
-                                        <svg class="w-full h-full -rotate-90">
-                                            <circle cx="24" cy="24" r="20" stroke-width="4" stroke="#232a36" fill="transparent"/>
-                                            <circle id="arvogProgressRing" cx="24" cy="24" r="20" stroke-width="4" stroke="#34c98c" fill="transparent" stroke-dasharray="125.6" stroke-dashoffset="125.6" stroke-linecap="round" class="transition-all duration-300"/>
-                                        </svg>
-                                        <span id="arvogProgressPct" class="absolute inset-0 flex items-center justify-center text-2xs font-bold text-white">0%</span>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span id="arvogProgressBranch" class="block text-2xs font-bold text-slate-200">Initializing...</span>
-                                    </div>
+                            <div id="arvogProgressContainer" class="hidden progress-container">
+                                <div class="progress-ring-wrap">
+                                    <svg class="w-full h-full" viewBox="0 0 48 48">
+                                        <circle cx="24" cy="24" r="20" stroke-width="4" stroke="#232a36" fill="transparent"/>
+                                        <circle id="arvogProgressRing" cx="24" cy="24" r="20" stroke-width="4" stroke="#34c98c" fill="transparent" stroke-dasharray="125.6" stroke-dashoffset="125.6" stroke-linecap="round" class="transition-all duration-300"/>
+                                    </svg>
+                                    <span id="arvogProgressPct" class="progress-pct">0%</span>
                                 </div>
+                                <span id="arvogProgressBranch" class="text-xs font-bold text-slate-200 truncate">Initializing...</span>
                             </div>
                         </div>
 
                         <!-- FULL WIDTH: Console Logs -->
-                        <div class="process-grid-full mt-1">
-                            <div class="flex items-center gap-2">
-                                <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
-                            </div>
-                            <div id="arvogConsole" class="bg-brand-termBg border border-brand-borderLine rounded-lg h-20 font-mono text-2xs p-2 overflow-y-auto space-y-0.5">
+                        <div class="process-grid-full space-y-2">
+                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
+                            <div id="arvogConsole" class="console-terminal" style="height:6rem">
                                 <div class="text-slate-500">[00:00:00] Terminal logger online. Ready.</div>
                             </div>
                         </div>
@@ -956,8 +925,8 @@
                     </div><!-- /arvogPanel-GENERATE -->
 
                     <!-- The return leg: a filled audit sheet folded back into the master layout -->
-                    <div id="arvogPanel-REBUILD" class="hidden space-y-3">
-                        <div class="bg-brand-panelBg border border-brand-borderLine rounded-lg p-4 space-y-3">
+                    <div id="arvogPanel-REBUILD" class="hidden" style="max-width:32rem">
+                        <div class="card space-y-4">
                             <p class="text-xs text-slate-400 leading-relaxed">
                                 Takes the audit sheet after the branch has filled in the
                                 <span class="text-emerald-400 font-semibold">Sumeru</span> block and folds it back
@@ -966,55 +935,52 @@
                             </p>
 
                             <div>
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Filled Audit Sheet</label>
+                                <label class="field-label">Filled Audit Sheet</label>
                                 <div class="flex gap-2">
                                     <input type="text" id="arvogRebuildPath" readonly
                                            placeholder="No file selected"
-                                           class="flex-1 bg-brand-termBg border border-brand-borderLine rounded-lg px-3 py-2 text-xs text-slate-300">
-                                    <button onclick="browseArvogRebuildFile()" id="arvogRebuildBtnBrowse"
-                                            class="px-3 py-2 text-xs font-bold rounded-lg bg-slate-700 hover:bg-slate-600 text-white">Browse</button>
+                                           class="input-field flex-1">
+                                    <button onclick="browseArvogRebuildFile()" id="arvogRebuildBtnBrowse" class="btn btn-ghost">Browse</button>
                                 </div>
                             </div>
 
-                            <button onclick="runArvogRebuild()" id="arvogRebuildBtnRun"
-                                    class="w-full py-2 text-xs font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white">
+                            <button onclick="runArvogRebuild()" id="arvogRebuildBtnRun" class="btn btn-success w-full">
                                 Rebuild Master Sheet
                             </button>
 
-                            <div id="arvogRebuildProgressContainer" class="hidden space-y-1">
-                                <div class="flex justify-between text-2xs text-slate-400">
+                            <div id="arvogRebuildProgressContainer" class="hidden space-y-1.5">
+                                <div class="flex justify-between text-2xs font-semibold text-slate-400">
                                     <span id="arvogRebuildProgressText">Starting…</span>
                                     <span id="arvogRebuildProgressPct">0%</span>
                                 </div>
-                                <div class="w-full bg-brand-termBg rounded-full h-1.5 border border-brand-borderLine">
-                                    <div id="arvogRebuildProgressBar" class="bg-emerald-500 h-full rounded-full" style="width:0%"></div>
+                                <div class="w-full bg-brand-termBg rounded-full h-1.5 border border-brand-borderLine overflow-hidden">
+                                    <div id="arvogRebuildProgressBar" class="bg-emerald-500 h-full rounded-full transition-all" style="width:0%"></div>
                                 </div>
                             </div>
 
-                            <div id="arvogRebuildResults" class="hidden space-y-2">
-                                <div class="flex gap-2">
-                                    <div class="flex-1 bg-brand-termBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                        <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Loans</span>
-                                        <span id="arvogRebuildStat-loans" class="text-sm font-bold mt-0.5 block text-sky-400">0</span>
+                            <div id="arvogRebuildResults" class="hidden space-y-3">
+                                <div class="stats-row">
+                                    <div class="stat-card">
+                                        <span class="stat-label">Loans</span>
+                                        <span id="arvogRebuildStat-loans" class="stat-value text-sky-400">0</span>
                                     </div>
-                                    <div class="flex-1 bg-brand-termBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                        <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Ornaments</span>
-                                        <span id="arvogRebuildStat-ornaments" class="text-sm font-bold mt-0.5 block text-emerald-400">0</span>
+                                    <div class="stat-card">
+                                        <span class="stat-label">Ornaments</span>
+                                        <span id="arvogRebuildStat-ornaments" class="stat-value text-emerald-400">0</span>
                                     </div>
-                                    <div class="flex-1 bg-brand-termBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                        <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Columns</span>
-                                        <span id="arvogRebuildStat-columns" class="text-sm font-bold mt-0.5 block text-emerald-500">0</span>
+                                    <div class="stat-card">
+                                        <span class="stat-label">Columns</span>
+                                        <span id="arvogRebuildStat-columns" class="stat-value text-emerald-500">0</span>
                                     </div>
                                 </div>
-                                <button onclick="openArvogRebuildOutput()" id="arvogRebuildBtnOpen"
-                                        class="w-full py-2 text-xs font-bold rounded-lg bg-slate-700 hover:bg-slate-600 text-white">
+                                <button onclick="openArvogRebuildOutput()" id="arvogRebuildBtnOpen" class="btn btn-ghost w-full">
                                     Open Containing Folder
                                 </button>
                             </div>
 
                             <div>
                                 <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
-                                <div id="arvogRebuildConsole" class="bg-brand-termBg border border-brand-borderLine rounded-lg h-24 font-mono text-2xs p-2 overflow-y-auto space-y-0.5 mt-1">
+                                <div id="arvogRebuildConsole" class="console-terminal mt-1.5" style="height:6rem">
                                     <div class="text-slate-500">[00:00:00] Ready.</div>
                                 </div>
                             </div>
@@ -1024,164 +990,150 @@
 
                 <!-- SECTION: PROCESS (EQUITAS WORKFLOW) -->
                 <section id="tab-PROCESS-EQUITAS" class="tab-content process-layout hidden">
-                    <!-- Title Header -->
-                    <div class="flex justify-between items-center">
-                        <h2 class="text-xl font-bold tracking-tight text-white">Generate Reports</h2>
-                        <span class="px-2 py-1 text-2xs font-bold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">Equitas Small Finance Bank</span>
-                    </div>
-
-                    <!-- Stage Tab Selector full width above grid -->
-                    <div class="w-full">
-                        <div class="bg-brand-panelBg p-0.5 rounded-lg border border-brand-borderLine flex">
-                            <button onclick="setEquitasStage('STAGE 1')" id="eqStage-S1" class="flex-1 py-1 text-xs font-bold rounded-md text-white shadow-sm" style="background:#9F6A19">STAGE 1: GENERATE BRANCH TEMPLATES</button>
-                            <button onclick="setEquitasStage('STAGE 2')" id="eqStage-S2" class="flex-1 py-1 text-xs font-semibold text-slate-400 hover:text-white">STAGE 2: CONSOLIDATE REPORTS</button>
+                    <div class="section-header">
+                        <div>
+                            <h2 class="section-title">Generate Reports</h2>
+                            <p class="text-sm text-slate-400 mt-1">Single-packet audit reports, then consolidate them into one branch bundle.</p>
                         </div>
+                        <span class="section-badge badge-amber">Equitas Small Finance Bank</span>
                     </div>
 
-                    <!-- Statistics + Controls in 2-column grid -->
+                    <!-- Stage selector, full width above the grid -->
+                    <div class="chip-group w-full" id="eqStageGroup">
+                        <button onclick="setEquitasStage('STAGE 1')" id="eqStage-S1" class="chip-btn selected dynamic-accent-bg" style="padding:0.6rem 0.75rem">Stage 1: Generate Branch Templates</button>
+                        <button onclick="setEquitasStage('STAGE 2')" id="eqStage-S2" class="chip-btn" style="padding:0.6rem 0.75rem">Stage 2: Consolidate Reports</button>
+                    </div>
+
                     <div class="process-grid">
-                        <!-- LEFT COLUMN: Stats + File Upload -->
-                        <div class="space-y-3">
-                            <!-- Statistics inline -->
-                            <div class="flex gap-2">
-                                <div class="flex-1 bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Sessions</span>
-                                    <span id="eqStat-sessions" class="text-sm font-bold mt-0.5 block text-sky-400">0</span>
+                        <!-- LEFT COLUMN: source file + preview -->
+                        <div class="space-y-4">
+                            <div class="stats-row">
+                                <div class="stat-card">
+                                    <span class="stat-label">Sessions</span>
+                                    <span id="eqStat-sessions" class="stat-value text-sky-400">0</span>
                                 </div>
-                                <div class="flex-1 bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Last Run</span>
-                                    <span id="eqStat-lastRun" class="text-xs font-bold mt-0.5 block text-emerald-400 truncate">No activity yet</span>
+                                <div class="stat-card">
+                                    <span class="stat-label">Last Run</span>
+                                    <span id="eqStat-lastRun" class="stat-value text-sm text-emerald-400 truncate">No activity yet</span>
                                 </div>
-                                <div class="flex-1 bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
-                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">PDFs</span>
-                                    <span id="eqStat-pdfs" class="text-sm font-bold mt-0.5 block" style="color:#C7841F">0</span>
+                                <div class="stat-card">
+                                    <span class="stat-label">PDFs</span>
+                                    <span id="eqStat-pdfs" class="stat-value" style="color:#C7841F">0</span>
                                 </div>
                             </div>
 
-                            <!-- Source File / Drag Zone -->
                             <div>
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Source Master Excel</label>
+                                <label class="field-label">Source Master Excel</label>
                                 <input type="file" id="eqFileInputHidden" multiple accept=".xlsx,.xls,.xlsm" class="hidden" onchange="handleNativeFileSelect(event)">
-                                <div id="eqDropZone" class="arvog-drag-zone rounded-lg p-4 flex flex-col items-center justify-center text-center cursor-pointer border border-dashed border-brand-borderLine hover:border-amber-500/50"
+                                <div id="eqDropZone" class="drop-zone drag-zone-compact"
                                      onclick="browseMultipleFiles()"
                                      ondragover="handleDragOver(event)"
                                      ondragleave="handleDragLeave(event)"
-                                     ondrop="handleDrop(event)">
-                                    <div class="flex flex-col items-center space-y-1 pointer-events-none">
-                                        <svg class="icon w-6 h-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                            <polyline points="17 8 12 3 7 8"/>
-                                            <line x1="12" y1="3" x2="12" y2="15"/>
-                                        </svg>
-                                        <span class="text-xs text-slate-200">Drag & drop or <span style="color: #C7841F; font-weight: 600;">browse</span></span>
-                                        <span class="text-2xs text-slate-500">.xlsx, .xls, .xlsm</span>
-                                    </div>
+                                     ondrop="handleDrop(event)"
+                                     tabindex="0" role="button" aria-label="Browse or drop master Excel files">
+                                    <svg class="icon drop-zone-icon w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                    <span class="drop-zone-title">Drag &amp; drop or <span style="color: #C7841F; font-weight: 600;">browse</span></span>
+                                    <span class="drop-zone-sub">.xlsx, .xls, .xlsm</span>
                                 </div>
                                 <input type="text" id="eqInputFile" class="hidden">
                             </div>
 
                             <!-- Selected Files List -->
-                            <div id="eqSelectedFilesContainer" class="hidden">
-                                <div class="flex justify-between items-center text-2xs font-bold text-slate-400">
-                                    <span>FILES (<span id="eqSelectedCount">0</span>)</span>
-                                    <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 text-2xs">Clear</button>
+                            <div id="eqSelectedFilesContainer" class="hidden space-y-1.5">
+                                <div class="flex justify-between items-center text-2xs font-bold text-slate-400 uppercase tracking-wider">
+                                    <span>Files (<span id="eqSelectedCount">0</span>)</span>
+                                    <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 text-2xs font-bold">Clear</button>
                                 </div>
-                                <div id="eqSelectedFilesList" class="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                <div id="eqSelectedFilesList" class="file-list-container space-y-1 p-1.5">
                                 </div>
                             </div>
 
-                            <div id="eqValidationBox" class="hidden text-xs rounded-lg px-3 py-2"></div>
+                            <div id="eqValidationBox" class="hidden validation-box"></div>
                             <div id="eqPreviewBox" class="hidden"><span id="eqPreviewText"></span></div>
 
                             <!-- Excel Preview Grid -->
                             <div id="eqGridContainer" class="hidden space-y-1">
-                                <button onclick="togglePreviewGrid('eq')" class="flex items-center space-x-1 text-2xs text-slate-400 hover:text-white">
+                                <button onclick="togglePreviewGrid('eq')" class="flex items-center space-x-1 text-2xs font-semibold text-slate-400 hover:text-white">
                                     <svg id="eqGridIcon" class="icon w-3 h-3 transition-transform duration-200" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
                                     <span>Preview (5 rows)</span>
                                 </button>
-                                <div id="eqGridWrapper" class="hidden overflow-x-auto rounded-lg border border-brand-borderLine bg-slate-950/40">
-                                    <table class="w-full text-left border-collapse text-2xs font-mono whitespace-nowrap">
-                                        <thead><tr id="eqGridHeader" class="bg-slate-900 border-b border-brand-borderLine text-slate-500 uppercase tracking-wider font-sans font-bold"></tr></thead>
-                                        <tbody id="eqGridBody" class="divide-y divide-brand-borderLine text-slate-300"></tbody>
+                                <div id="eqGridWrapper" class="hidden overflow-x-auto rounded-lg border border-brand-borderLine">
+                                    <table class="preview-table">
+                                        <thead><tr id="eqGridHeader"></tr></thead>
+                                        <tbody id="eqGridBody"></tbody>
                                     </table>
                                 </div>
                             </div>
 
                             <!-- Column Mapper -->
-                            <div id="eqMapperContainer" class="hidden p-2 bg-slate-900/30 border border-brand-borderLine rounded-lg">
-                                <span class="block text-2xs font-bold text-slate-400 uppercase tracking-wider">Column Mapping</span>
-                                <div class="grid grid-cols-2 gap-1 mt-1">
-                                    <div><label class="text-2xs font-semibold text-slate-400">SVS Loan</label><select id="eqMap-svs" class="w-full bg-slate-950 border border-brand-borderLine rounded px-1 py-1 text-2xs text-slate-200"></select></div>
-                                    <div><label class="text-2xs font-semibold text-slate-400">Sole ID</label><select id="eqMap-sole" class="w-full bg-slate-950 border border-brand-borderLine rounded px-1 py-1 text-2xs text-slate-200"></select></div>
-                                    <div><label class="text-2xs font-semibold text-slate-400">Branch</label><select id="eqMap-branch" class="w-full bg-slate-950 border border-brand-borderLine rounded px-1 py-1 text-2xs text-slate-200"></select></div>
-                                    <div><label class="text-2xs font-semibold text-slate-400">Loan No</label><select id="eqMap-loan" class="w-full bg-slate-950 border border-brand-borderLine rounded px-1 py-1 text-2xs text-slate-200"></select></div>
+                            <div id="eqMapperContainer" class="hidden card-compact card">
+                                <span class="field-label mb-2">Column Mapping</span>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div><label class="text-2xs font-semibold text-slate-400">SVS Loan</label><select id="eqMap-svs" class="input-field text-2xs py-1"></select></div>
+                                    <div><label class="text-2xs font-semibold text-slate-400">Sole ID</label><select id="eqMap-sole" class="input-field text-2xs py-1"></select></div>
+                                    <div><label class="text-2xs font-semibold text-slate-400">Branch</label><select id="eqMap-branch" class="input-field text-2xs py-1"></select></div>
+                                    <div><label class="text-2xs font-semibold text-slate-400">Loan No</label><select id="eqMap-loan" class="input-field text-2xs py-1"></select></div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- RIGHT COLUMN: Controls -->
-                        <div class="space-y-3">
-                            <!-- Stage Title -->
-                            <div>
-                                <h3 id="eqStageTitle" class="text-xs font-bold text-slate-300">Stage 1: Generate Branch Audits & Excels</h3>
-                            </div>
+                        <!-- RIGHT COLUMN: run parameters -->
+                        <div class="card space-y-4">
+                            <h3 id="eqStageTitle" class="text-xs font-bold text-slate-300">Stage 1: Generate Branch Audits &amp; Excels</h3>
 
-                            <!-- Format & Packaging wrapper (eqStage1Config preserved) -->
-                            <div id="eqStage1Config" class="space-y-3">
-                                <!-- Output Format -->
+                            <div id="eqStage1Config" class="space-y-4">
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Output Format</label>
-                                    <div class="bg-slate-900 p-0.5 rounded-lg border border-brand-borderLine flex">
-                                        <button onclick="setEqFormat('PDF ONLY')" id="eqFormat-PDFONLY" class="flex-1 py-1 text-xs font-semibold text-slate-400 hover:text-white">PDF ONLY</button>
-                                        <button onclick="setEqFormat('EXCEL ONLY')" id="eqFormat-EXCELONLY" class="flex-1 py-1 text-xs font-semibold text-slate-400 hover:text-white">EXCEL ONLY</button>
-                                        <button onclick="setEqFormat('BOTH')" id="eqFormat-BOTH" class="flex-1 py-1 text-xs font-bold rounded-md text-white" style="background:#9F6A19">BOTH</button>
+                                    <label class="field-label">Output Format</label>
+                                    <div class="chip-group" id="eqFormatGroup">
+                                        <button onclick="setEqFormat('PDF ONLY')" id="eqFormat-PDFONLY" class="chip-btn">PDF Only</button>
+                                        <button onclick="setEqFormat('EXCEL ONLY')" id="eqFormat-EXCELONLY" class="chip-btn">Excel Only</button>
+                                        <button onclick="setEqFormat('BOTH')" id="eqFormat-BOTH" class="chip-btn selected dynamic-accent-bg">Both</button>
                                     </div>
                                 </div>
 
-                                <!-- Packaging Mode -->
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Packaging Mode</label>
-                                    <select id="eqPackagingSelector" class="w-full bg-slate-900 border border-brand-borderLine rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none">
-                                        <option value="FOLDER">FOLDER</option>
-                                        <option value="ZIP OF PDF">ZIP OF PDF</option>
-                                        <option value="ZIP OF EXCEL">ZIP OF EXCEL</option>
-                                        <option value="ZIP OF BOTH">ZIP OF BOTH</option>
-                                        <option value="BOTH (FOLDER + ZIP OF PDF)">BOTH (FOLDER + ZIP OF PDF)</option>
-                                        <option value="BOTH (FOLDER + ZIP OF EXCEL)">BOTH (FOLDER + ZIP OF EXCEL)</option>
-                                        <option value="BOTH (FOLDER + ZIP OF BOTH)">BOTH (FOLDER + ZIP OF BOTH)</option>
+                                    <label class="field-label">Packaging Mode</label>
+                                    <select id="eqPackagingSelector" class="input-field">
+                                        <option value="FOLDER">Folder</option>
+                                        <option value="ZIP OF PDF">Zip of PDF</option>
+                                        <option value="ZIP OF EXCEL">Zip of Excel</option>
+                                        <option value="ZIP OF BOTH">Zip of Both</option>
+                                        <option value="BOTH (FOLDER + ZIP OF PDF)">Folder + Zip of PDF</option>
+                                        <option value="BOTH (FOLDER + ZIP OF EXCEL)">Folder + Zip of Excel</option>
+                                        <option value="BOTH (FOLDER + ZIP OF BOTH)">Folder + Zip of Both</option>
                                     </select>
                                 </div>
                             </div>
 
-                            <!-- Download info -->
-                            <div class="text-2xs text-slate-500 italic">
-                                Files available for download after generation.
-                            </div>
+                            <p class="text-2xs text-slate-500 italic">Files are available for download once generation finishes.</p>
 
-                            <!-- Action Buttons -->
+                            <div class="border-t border-brand-borderLine"></div>
+
                             <div class="flex gap-2">
-                                <button id="eqBtnRun" onclick="startGeneration()" class="flex-1 text-white text-xs font-bold py-2 px-4 rounded-lg hover:bg-amber-500" style="background:#9F6A19">Generate Reports</button>
-                                <button id="eqBtnCancel" onclick="cancelGeneration()" disabled class="bg-rose-600 text-white text-xs font-bold py-2 px-4 rounded-lg hover:bg-rose-500 disabled:opacity-40 disabled:pointer-events-none">Stop</button>
+                                <button id="eqBtnRun" onclick="startGeneration()" class="btn btn-primary flex-1" style="background:#9F6A19">Generate Reports</button>
+                                <button id="eqBtnCancel" onclick="cancelGeneration()" disabled class="btn btn-danger">Stop</button>
                             </div>
 
                             <!-- Progress -->
-                            <div id="eqProgressContainer" class="hidden bg-slate-950/30 border border-brand-borderLine rounded-lg p-3">
-                                <div class="flex items-center gap-3">
-                                    <div class="relative w-12 h-12 flex-shrink-0">
-                                        <svg class="w-full h-full -rotate-90">
-                                            <circle cx="24" cy="24" r="20" stroke-width="4" stroke="#232a36" fill="transparent"/>
-                                            <circle id="eqProgressRing" cx="24" cy="24" r="20" stroke-width="4" stroke="#C7841F" fill="transparent" stroke-dasharray="125.6" stroke-dashoffset="125.6" stroke-linecap="round" class="transition-all duration-300"/>
-                                        </svg>
-                                        <span id="eqProgressPct" class="absolute inset-0 flex items-center justify-center text-2xs font-bold text-white">0%</span>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span id="eqProgressBranch" class="block text-2xs font-bold text-slate-200">Initializing...</span>
-                                        <span id="eqProgressSpeed" class="block text-2xs text-slate-500">Speed: --</span>
-                                        <span id="eqProgressEta" class="block text-2xs" style="color:#C7841F">ETA: --</span>
-                                    </div>
+                            <div id="eqProgressContainer" class="hidden progress-container">
+                                <div class="progress-ring-wrap">
+                                    <svg class="w-full h-full" viewBox="0 0 48 48">
+                                        <circle cx="24" cy="24" r="20" stroke-width="4" stroke="#232a36" fill="transparent"/>
+                                        <circle id="eqProgressRing" cx="24" cy="24" r="20" stroke-width="4" stroke="#C7841F" fill="transparent" stroke-dasharray="125.6" stroke-dashoffset="125.6" stroke-linecap="round" class="transition-all duration-300"/>
+                                    </svg>
+                                    <span id="eqProgressPct" class="progress-pct">0%</span>
                                 </div>
-                                <div class="flex gap-2 mt-2 text-2xs text-slate-500">
-                                    <span id="eqStatusBadge-read" class="flex items-center gap-1"><svg class="icon w-3 h-3 text-slate-600" id="eqStatusIcon-read" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg> READ</span>
+                                <div class="space-y-1 min-w-0">
+                                    <span id="eqProgressBranch" class="block text-xs font-bold text-slate-200 truncate">Initializing...</span>
+                                    <span id="eqProgressSpeed" class="block text-2xs text-slate-500">Speed: --</span>
+                                    <span id="eqProgressEta" class="block text-2xs" style="color:#C7841F">ETA: --</span>
+                                </div>
+                                <div id="eqStatusStrip" class="flex gap-3 text-2xs text-slate-500 font-semibold w-full mt-1">
+                                    <span id="eqStatusBadge-read" class="flex items-center gap-1"><svg class="icon w-3 h-3 text-slate-600" id="eqStatusIcon-read" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg> Read</span>
                                     <span id="eqStatusBadge-pdf" class="flex items-center gap-1"><svg class="icon w-3 h-3 text-slate-600" id="eqStatusIcon-pdf" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg> PDF</span>
                                     <span id="eqStatusBadge-zip" class="flex items-center gap-1"><svg class="icon w-3 h-3 text-slate-600" id="eqStatusIcon-zip" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg> ZIP</span>
                                 </div>
@@ -1189,11 +1141,9 @@
                         </div>
 
                         <!-- FULL WIDTH: Console Logs -->
-                        <div class="process-grid-full mt-1">
-                            <div class="flex items-center gap-2">
-                                <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
-                            </div>
-                            <div id="eqConsole" class="bg-brand-termBg border border-brand-borderLine rounded-lg h-20 font-mono text-2xs p-2 overflow-y-auto space-y-0.5">
+                        <div class="process-grid-full space-y-2">
+                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
+                            <div id="eqConsole" class="console-terminal" style="height:6rem">
                                 <div class="text-slate-500">[00:00:00] Terminal logger online. Ready.</div>
                             </div>
                         </div>
@@ -1323,7 +1273,21 @@
                         <h2 class="text-3xl font-bold tracking-tight text-white font-sans">Settings</h2>
                     </div>
 
-                    <!-- Card 1: Output naming customizer -->
+                    <!-- Card 1: Output location -->
+                    <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Output Location</h3>
+                        <p class="text-xs text-slate-500">Where every bank's generated reports are written. Every screen shares this one folder.</p>
+                        <div class="flex space-x-3">
+                            <input type="text" id="settingsOutputDir" readonly class="flex-1 bg-slate-900 border border-brand-borderLine rounded-lg px-4 py-2.5 text-sm text-slate-200 focus:outline-none" placeholder="Auto (temp directory)">
+                            <button onclick="browseFolder('settingsOutputDir')" class="bg-slate-800 text-slate-300 hover:bg-slate-700 border border-brand-borderLine text-sm font-semibold px-6 py-2.5 rounded-lg transition">Browse</button>
+                        </div>
+                        <label class="flex items-center space-x-2.5 text-sm text-slate-300 cursor-pointer w-max">
+                            <input type="checkbox" id="prefAutoOpen">
+                            <span>Open the output folder automatically once a run finishes</span>
+                        </label>
+                    </div>
+
+                    <!-- Card 2: Output naming customizer -->
                     <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
                         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Output File Naming Pattern</h3>
                         <p class="text-xs text-slate-500">Placeholders: <code>{branch}</code> = branch name, <code>{type}</code> = audit type (POA or TAF)</p>
@@ -1334,15 +1298,22 @@
                         <div class="text-xs text-slate-500 italic">Preview: <span id="namingPreview" class="font-mono text-slate-400">e.g. BRANCH_A_POA.pdf</span></div>
                     </div>
 
-                    <!-- Card 2: Version info -->
-                    <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-2 shadow-sm">
+                    <!-- Card 3: Version + updates -->
+                    <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-3 shadow-sm">
                         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Version</h3>
-                        <div class="text-sm text-slate-200">
-                            Running: <strong class="font-mono text-white">{{VERSION}}</strong>
+                        <div class="flex items-center justify-between flex-wrap gap-3">
+                            <div class="text-sm text-slate-200">
+                                Running: <strong class="font-mono text-white">{{VERSION}}</strong>
+                            </div>
+                            <button id="btnCheckUpdates" onclick="manualCheckUpdates()" class="bg-slate-800 text-slate-300 hover:bg-slate-700 border border-brand-borderLine text-xs font-bold px-4 py-2 rounded-lg transition">Check for Updates</button>
+                        </div>
+                        <div id="updateStatusText" class="text-xs text-slate-500"></div>
+                        <div id="updateProgressBarContainer" class="hidden w-full bg-slate-900 border border-brand-borderLine rounded-full h-1.5 overflow-hidden">
+                            <div id="updateProgressBar" class="h-full bg-blue-500 dynamic-accent-bg transition-all" style="width:0%"></div>
                         </div>
                     </div>
 
-                    <!-- Card 3: Cache & History -->
+                    <!-- Card 4: Cache & History -->
                     <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-3 shadow-sm">
                         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cache & History</h3>
                         <button onclick="clearRecentFiles()" class="bg-slate-900 text-rose-500 hover:text-white hover:bg-rose-900 border border-brand-borderLine text-xs font-bold px-4 py-2 rounded-lg transition">Clear Recent Cache</button>
@@ -1352,24 +1323,20 @@
 
                 <!-- SECTION: CONSOLIDATE -->
                 <section id="tab-CONSOLIDATE" class="space-y-6 hidden tab-content">
-                    <div class="border-b border-slate-800 pb-4">
-                        <h2 class="text-xl font-bold tracking-tight text-white">Batch Workbook Consolidation</h2>
-                        <p class="text-xs text-slate-400 mt-1">Upload Payment Tracker and Master Data client workbooks to consolidate records into standard schema.</p>
+                    <div class="section-header">
+                        <div>
+                            <h2 class="section-title">Batch Workbook Consolidation</h2>
+                            <p class="text-sm text-slate-400 mt-1">Upload Payment Tracker and Master Data client workbooks to consolidate records into one standard schema.</p>
+                        </div>
                     </div>
 
                     <!-- Dropzone Area -->
-                    <div id="newConsolDropzone" class="border border-dashed border-slate-700 bg-slate-900/50 hover:border-slate-500 hover:bg-slate-900 rounded-xl p-8 text-center cursor-pointer transition" onclick="document.getElementById('newConsolFileInput').click()">
+                    <div id="newConsolDropzone" class="drop-zone" onclick="document.getElementById('newConsolFileInput').click()">
                         <input type="file" id="newConsolFileInput" multiple accept=".xlsx,.XLSX,.xls" class="hidden" onchange="handleNewConsolFilesSelected(event)">
-                        <div class="flex flex-col items-center justify-center space-y-3">
-                            <div class="p-3 rounded-lg bg-slate-800 text-blue-400 border border-slate-700">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                            </div>
-                            <div>
-                                <p class="text-sm font-semibold text-slate-200">Upload Client Excel Workbooks</p>
-                                <p class="text-xs text-slate-400 mt-0.5">Drag & drop .xlsx files here or click to select from file system</p>
-                            </div>
-                            <button type="button" class="px-4 py-2 rounded-md bg-slate-800 text-slate-200 text-xs font-medium border border-slate-700">Select Workbooks</button>
-                        </div>
+                        <svg class="icon drop-zone-icon w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                        <span class="drop-zone-title">Upload Client Excel Workbooks</span>
+                        <span class="drop-zone-sub">Drag &amp; drop .xlsx files here or click to select from file system</span>
+                        <button type="button" class="btn btn-ghost btn-sm mt-3">Select Workbooks</button>
                     </div>
 
                     <!-- Staged Files List -->
@@ -1378,12 +1345,12 @@
                             <div class="flex items-center space-x-2">
                                 <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-200">Staged Client Workbooks (<span id="newConsolFileCount">0</span>)</h3>
                             </div>
-                            <button onclick="clearNewConsolFiles()" class="text-xs text-slate-400 hover:text-red-400 transition">Clear Batch</button>
+                            <button onclick="clearNewConsolFiles()" class="text-xs font-semibold text-slate-400 hover:text-rose-400 transition">Clear Batch</button>
                         </div>
                         <div id="newConsolFilesList" class="max-h-60 overflow-y-auto divide-y divide-slate-800/60 text-xs"></div>
                         <div class="p-4 border-t border-slate-800 bg-slate-900/60 flex justify-between items-center">
                             <span class="text-xs text-slate-400">Ready to process selected client workbooks.</span>
-                            <button id="btnRunNewConsolidation" onclick="executeNewConsolidation()" class="px-6 py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">Run Batch Consolidation</button>
+                            <button id="btnRunNewConsolidation" onclick="executeNewConsolidation()" class="btn btn-primary">Run Batch Consolidation</button>
                         </div>
                     </div>
 
@@ -1663,12 +1630,8 @@
                 </section>
             </div>
 
-            <!-- Bottom status status bar -->
-            <footer class="h-10 bg-brand-slateBlack border-t border-brand-borderLine flex items-center justify-between px-6 flex-shrink-0">
-                <span id="footerStatusText" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider"><span class="status-dot"></span>STATUS: Idle. Ready.</span>
-                <span class="text-[9px] text-slate-700 italic">PDF Generator</span>
-            </footer>
         </main>
+    </div>
 
     <!-- MODAL POPUP: SUMMARY DIALOG -->
     <div id="summaryModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">

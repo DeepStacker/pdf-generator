@@ -151,12 +151,60 @@
             
             // Sync initial tab from URL hash
             handleHashRouting();
-            
-            // Poll once at startup to check for previous run statistics
-            pollConsolidationProgress(true);
         });
 
-        // BANK SELECTION via pills
+        // SIDEBAR NAVIGATION
+        //
+        // Every item in the sidebar -- the four report generators and the
+        // five tools/utilities below them -- is one flat, equal list from the
+        // user's side. Underneath, two different mechanisms still handle
+        // them: switchBank() for the four report generators (it also owns
+        // per-bank theming) and switchTab() for everything else. This wrapper
+        // is the single entry point every sidebar item calls, so that split
+        // is an implementation detail nobody clicking the sidebar needs to
+        // know about -- including making sure clicking a bank while looking
+        // at, say, Settings actually takes you to that bank's screen, which
+        // switchBank() alone has never done (it only re-themes; showing the
+        // right section was switchTab('PROCESS')'s job, and nothing forced
+        // that pairing before).
+        const SIDEBAR_BANK_NAMES = {
+            IDFC: 'IDFC First Bank',
+            EQUITAS: 'Equitas Small Finance Bank',
+            ARVOG: 'Arvog Bank',
+            CONSOLIDATION: 'CONSOLIDATION',
+        };
+
+        const SIDEBAR_ITEM_IDS = {
+            IDFC: 'bankPill-IDFC',
+            EQUITAS: 'bankPill-EQUITAS',
+            ARVOG: 'bankPill-ARVOG',
+            CONSOLIDATION: 'bankPill-CONSOLIDATION',
+            VALIDATOR: 'tabBtn-VALIDATOR',
+            FLATTEN: 'tabBtn-FLATTEN',
+            STATS: 'tabBtn-STATS',
+            HISTORY: 'tabBtn-HISTORY',
+            SETTINGS: 'tabBtn-SETTINGS',
+        };
+
+        function selectScreen(screenId) {
+            if (screenId in SIDEBAR_BANK_NAMES) {
+                switchBank(SIDEBAR_BANK_NAMES[screenId]);
+                switchTab('PROCESS');
+            } else {
+                switchTab(screenId);
+            }
+
+            // switchBank() and switchTab() each manage their own active
+            // class independently (a bank pill, a nav button) and neither
+            // clears the other's — so navigating to Settings left the last
+            // bank pill highlighted too, two "active" items in one list.
+            // This is the single source of truth for what the sidebar shows
+            // as current, layered on top of both.
+            document.querySelectorAll('.sidebar-item.active').forEach(el => el.classList.remove('active'));
+            const current = document.getElementById(SIDEBAR_ITEM_IDS[screenId]);
+            if (current) current.classList.add('active');
+        }
+
         function switchBank(bankName, force = false) {
             if (state.activeBank === bankName && !force) return;
             
@@ -176,11 +224,6 @@
                     const s = document.getElementById(id);
                     if (s) s.classList.add('hidden');
                 });
-                // loadConsolidationBanks() used to be called here and has never
-                // existed, so selecting Consolidation threw a ReferenceError -
-                // which also stopped the progress poll on the next line from
-                // ever running.
-                pollConsolidationProgress();
                 return;
             }
             
@@ -204,7 +247,11 @@
         }
 
         // OUTPUT DIRECTORY SYNC & PERSIST LISTENERS
-        ['idfcOutputDir', 'eqOutputDir', 'arvogOutputDir'].forEach(id => {
+        //
+        // settingsOutputDir is the one visible control (Settings screen); the
+        // three per-bank fields are hidden mirrors every run reads from.
+        // Whichever one changes, all four are kept equal and saved.
+        ['idfcOutputDir', 'eqOutputDir', 'arvogOutputDir', 'settingsOutputDir'].forEach(id => {
             const el = document.getElementById(id);
             if (el) {
                 el.addEventListener('change', () => {
@@ -212,6 +259,8 @@
                     idfcOutputDir.value = val;
                     eqOutputDir.value = val;
                     arvogOutputDir.value = val;
+                    const settingsDir = document.getElementById('settingsOutputDir');
+                    if (settingsDir) settingsDir.value = val;
                     saveConfig('out_path', val);
                 });
             }
@@ -287,9 +336,13 @@
             if (isIDFC) { primaryColor = '#4c6fff'; primaryColorFill = '#4768F0'; }
             else if (isArvog) { primaryColor = '#34c98c'; primaryColorFill = '#18855B'; }
 
-            // Apply style dynamically
+            // Apply style dynamically. A solid-fill element's border, if it
+            // has one, always matches its own fill -- not the lighter
+            // primaryColor used for text -- so this sets both from the same
+            // value rather than asking callers to add a second class for it.
             document.querySelectorAll('.dynamic-accent-bg').forEach(el => {
                 el.style.backgroundColor = primaryColorFill;
+                el.style.borderColor = primaryColorFill;
             });
             document.querySelectorAll('.dynamic-accent-fg').forEach(el => {
                 el.style.color = primaryColor;
@@ -370,160 +423,80 @@
             if (tabId === 'STATS') refreshStats();
             if (tabId === 'HISTORY') refreshHistory();
             if (tabId === 'SETTINGS') refreshSettings();
-            if (tabId === 'CONSOLIDATE') pollConsolidationProgress();
         }
 
         // DYNAMIC WIDGET OPTION UPDATERS
+        //
+        // Every segmented control (Audit Type, Output Mode, Format, Stage,
+        // Packaging) is a .chip-group of .chip-btn's, and choosing one is
+        // always the same operation: mark it .selected, un-mark its
+        // siblings, and let updateThemeBranding() paint the selected one in
+        // the active bank's own colour. This used to be six near-identical
+        // copies of that logic, each hand-building a full className string
+        // per button (small enough to type past a spelling mistake unnoticed).
+        function selectChip(groupId, selectedBtnId) {
+            document.querySelectorAll(`#${groupId} .chip-btn`).forEach(btn => {
+                const isSelected = btn.id === selectedBtnId;
+                btn.classList.toggle('selected', isSelected);
+                btn.classList.toggle('dynamic-accent-bg', isSelected);
+            });
+            updateThemeBranding();
+        }
+
         function setIdfcAuditType(type) {
             state.idfc.auditType = type;
             saveConfig('audit_type', type);
-            
-            const btnPOA = document.getElementById('idfcOpt-POA');
-            const btnTAF = document.getElementById('idfcOpt-TAF');
-            
-            const isIDFC = (state.activeBank === 'IDFC First Bank');
-            const colorClass = isIDFC ? 'bg-blue-500' : 'bg-amber-500';
-            
-            if (type === 'POA') {
-                btnPOA.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-                btnTAF.className = 'flex-1 py-1.5 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition';
-            } else {
-                btnPOA.className = 'flex-1 py-1.5 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition';
-                btnTAF.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            }
-            updateThemeBranding();
+            selectChip('idfcAuditTypeGroup', type === 'POA' ? 'idfcOpt-POA' : 'idfcOpt-TAF');
         }
 
         function setIdfcOutputMode(mode) {
             state.idfc.outputMode = mode;
             saveConfig('output_mode', mode);
-            
-            const btnFolder = document.getElementById('idfcMode-FOLDER');
-            const btnZip = document.getElementById('idfcMode-ZIPONLY');
-            const btnBoth = document.getElementById('idfcMode-BOTH');
-            
-            const isIDFC = (state.activeBank === 'IDFC First Bank');
-            const colorClass = isIDFC ? 'bg-blue-500' : 'bg-amber-500';
-            
-            [btnFolder, btnZip, btnBoth].forEach(btn => {
-                btn.className = 'px-5 py-1.5 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition';
-            });
-            
-            if (mode === 'FOLDER') {
-                btnFolder.className = `px-5 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            } else if (mode === 'ZIP ONLY') {
-                btnZip.className = `px-5 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            } else {
-                btnBoth.className = `px-5 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            }
-            updateThemeBranding();
+            const idByMode = { 'FOLDER': 'idfcMode-FOLDER', 'ZIP ONLY': 'idfcMode-ZIPONLY', 'BOTH': 'idfcMode-BOTH' };
+            selectChip('idfcOutputModeGroup', idByMode[mode] || 'idfcMode-BOTH');
         }
 
         function setEquitasStage(stage) {
             state.equitas.stage = stage;
-            
-            const btnS1 = document.getElementById('eqStage-S1');
-            const btnS2 = document.getElementById('eqStage-S2');
-            
-            const isIDFC = (state.activeBank === 'IDFC First Bank');
-            const colorClass = isIDFC ? 'bg-blue-500' : 'bg-amber-500';
-            
+            selectChip('eqStageGroup', stage === 'STAGE 1' ? 'eqStage-S1' : 'eqStage-S2');
+
             const configRow = document.getElementById('eqStage1Config');
             const fileLabel = document.getElementById('eqFileLabel');
             const stageTitle = document.getElementById('eqStageTitle');
             const btnRun = document.getElementById('eqBtnRun');
-            
+
             if (stage === 'STAGE 1') {
-                btnS1.className = `px-6 py-2 text-xs font-bold rounded-lg ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-                btnS2.className = 'px-6 py-2 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition';
-                
                 configRow.classList.remove('hidden');
                 fileLabel.textContent = 'Source Excel (Normal + JSR sheets)';
                 stageTitle.textContent = 'Stage 1: Generate Branch Audits & Excels';
                 btnRun.textContent = 'Generate (Stage 1)';
             } else {
-                btnS1.className = 'px-6 py-2 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition';
-                btnS2.className = `px-6 py-2 text-xs font-bold rounded-lg ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-                
                 configRow.classList.add('hidden');
                 fileLabel.textContent = 'Select Consolidation Folder (containing generated stage 1 excels)';
                 stageTitle.textContent = 'Stage 2: Consolidate Audit Worksheets & ZIP outputs';
                 btnRun.textContent = 'Consolidate (Stage 2)';
             }
-            updateThemeBranding();
         }
 
         function setEqFormat(fmt) {
             state.equitas.outputFormat = fmt;
             saveConfig('equitas_format', fmt);
-            
-            const btnPdf = document.getElementById('eqFormat-PDFONLY');
-            const btnExcel = document.getElementById('eqFormat-EXCELONLY');
-            const btnBoth = document.getElementById('eqFormat-BOTH');
-            
-            const isIDFC = (state.activeBank === 'IDFC First Bank');
-            const colorClass = isIDFC ? 'bg-blue-500' : 'bg-amber-500';
-            
-            [btnPdf, btnExcel, btnBoth].forEach(btn => {
-                btn.className = 'flex-1 py-1.5 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition';
-            });
-            
-            if (fmt === 'PDF ONLY') {
-                btnPdf.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            } else if (fmt === 'EXCEL ONLY') {
-                btnExcel.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            } else {
-                btnBoth.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            }
-            updateThemeBranding();
+            const idByFormat = { 'PDF ONLY': 'eqFormat-PDFONLY', 'EXCEL ONLY': 'eqFormat-EXCELONLY', 'BOTH': 'eqFormat-BOTH' };
+            selectChip('eqFormatGroup', idByFormat[fmt] || 'eqFormat-BOTH');
         }
 
         function setArvogFormat(fmt) {
             state.arvog.outputFormat = fmt;
             saveConfig('arvog_format', fmt);
-            
-            const btnPdf = document.getElementById('arvogFormat-PDFONLY');
-            const btnExcel = document.getElementById('arvogFormat-EXCELONLY');
-            const btnBoth = document.getElementById('arvogFormat-BOTH');
-            
-            const colorClass = 'bg-emerald-500';
-            
-            [btnPdf, btnExcel, btnBoth].forEach(btn => {
-                if (btn) btn.className = 'flex-1 py-1.5 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition';
-            });
-            
-            if (fmt === 'PDF ONLY') {
-                if (btnPdf) btnPdf.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            } else if (fmt === 'EXCEL ONLY') {
-                if (btnExcel) btnExcel.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            } else {
-                if (btnBoth) btnBoth.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            }
-            updateThemeBranding();
+            const idByFormat = { 'PDF ONLY': 'arvogFormat-PDFONLY', 'EXCEL ONLY': 'arvogFormat-EXCELONLY', 'BOTH': 'arvogFormat-BOTH' };
+            selectChip('arvogFormatGroup', idByFormat[fmt] || 'arvogFormat-BOTH');
         }
 
         function setArvogMode(mode) {
             state.arvog.outputMode = mode;
             saveConfig('arvog_mode', mode);
-            
-            const btnFolder = document.getElementById('arvogMode-FOLDER');
-            const btnZip = document.getElementById('arvogMode-ZIPONLY');
-            const btnBoth = document.getElementById('arvogMode-BOTH');
-            
-            const colorClass = 'bg-emerald-500';
-            
-            [btnFolder, btnZip, btnBoth].forEach(btn => {
-                if (btn) btn.className = 'flex-1 py-1.5 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition';
-            });
-            
-            if (mode === 'FOLDER') {
-                if (btnFolder) btnFolder.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            } else if (mode === 'ZIP ONLY') {
-                if (btnZip) btnZip.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            } else {
-                if (btnBoth) btnBoth.className = `flex-1 py-1.5 text-xs font-bold rounded-md ${colorClass} text-white shadow-sm transition dynamic-accent-bg`;
-            }
-            updateThemeBranding();
+            const idByMode = { 'FOLDER': 'arvogMode-FOLDER', 'ZIP ONLY': 'arvogMode-ZIPONLY', 'BOTH': 'arvogMode-BOTH' };
+            selectChip('arvogModeGroup', idByMode[mode] || 'arvogMode-BOTH');
         }
 
         // LOADING STATE INDICATORS
@@ -593,6 +566,8 @@
                     idfcOutputDir.value = data.out_path;
                     eqOutputDir.value = data.out_path;
                     arvogOutputDir.value = data.out_path;
+                    const settingsDir = document.getElementById('settingsOutputDir');
+                    if (settingsDir) settingsDir.value = data.out_path;
                 }
                 
                 // Restore saved file checklists for each bank
@@ -920,10 +895,6 @@
             }
         }
 
-        function triggerBrowseMultipleFiles() {
-            browseMultipleFiles();
-        }
-
         async function browseMultipleFiles() {
             if (isWebMode()) {
                 const prefix = getActivePrefix();
@@ -1210,29 +1181,8 @@
             list.innerHTML = html;
         }
 
-        // HEADLESS BROWSE DIALOG TRIGGERS
-        async function browseFile(fieldId) {
-            if (isWebMode()) {
-                const prefix = getActivePrefix();
-                const hiddenInput = document.getElementById(`${prefix}FileInputHidden`);
-                if (hiddenInput) hiddenInput.click();
-                return;
-            }
-            try {
-                const resp = await fetch('/api/browse/file');
-                const data = await resp.json();
-                if (data.path) {
-                    document.getElementById(fieldId).value = data.path;
-                    idfcInputFile.value = data.path;
-                    eqInputFile.value = data.path;
-                    if (arvogInputFile) arvogInputFile.value = data.path;
-                    saveConfig('last_file', data.path);
-                    validateFile(data.path);
-                }
-            } catch (err) {
-                console.error('Browse file trigger failed:', err);
-            }
-        }
+        // Every bank's drop zone already routes through browseMultipleFiles();
+        // this single-file variant was never wired to anything on any screen.
 
         async function browseFolder(fieldId) {
             if (isWebMode()) {
@@ -2045,292 +1995,11 @@
             document.getElementById('updateBanner').classList.add('hidden');
         }
 
-        // CONSOLIDATION CONTROLLER LOGIC
-        state.consolSelectedFiles = [];
-        let consolPollTimer = null;
-
-        async function browseConsolidateFiles() {
-            if (isWebMode()) {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.multiple = true;
-                input.accept = '.xlsx,.xls';
-                input.onchange = async (e) => {
-                    const files = e.target.files;
-                    if (files && files.length > 0) {
-                        const paths = await uploadMultipleFilesToServer(files);
-                        if (paths.length > 0) {
-                            state.consolSelectedFiles = paths;
-                            renderConsolFilesList();
-                            showToast(`✓ Loaded ${paths.length} spreadsheets. Ready to consolidate.`, 'success');
-                        }
-                    }
-                };
-                input.click();
-                return;
-            }
-            try {
-                const res = await fetch('/api/browse/files');
-                const data = await res.json();
-                if (data.paths && data.paths.length > 0) {
-                    state.consolSelectedFiles = data.paths;
-                    renderConsolFilesList();
-                    showToast(`✓ Loaded ${data.paths.length} spreadsheets. Ready to consolidate.`, 'success');
-                }
-            } catch (err) {
-                console.error(err);
-                showToast('Failed to select files', 'error');
-            }
-        }
-
-        function renderConsolFilesList() {
-            const container = document.getElementById('consolFilesContainer');
-            const list = document.getElementById('consolFilesList');
-            const count = document.getElementById('consolFilesCount');
-            const runBtn = document.getElementById('consolBtnRun');
-            
-            if (!container || !list || !count || !runBtn) return;
-            
-            if (state.consolSelectedFiles.length === 0) {
-                container.classList.add('hidden');
-                runBtn.disabled = true;
-                return;
-            }
-            
-            count.textContent = state.consolSelectedFiles.length;
-            let html = '';
-            state.consolSelectedFiles.forEach((f, idx) => {
-                const name = f.split('/').pop().split('\\').pop();
-                html += `<div class="arvog-file-tile flex items-center justify-between text-xs text-slate-300 px-3 py-1.5 rounded-lg bg-slate-900/50 border border-brand-borderLine/30">
-                    <span class="truncate pr-2 flex-1" title="${escapeHtml(f)}">${escapeHtml(name)}</span>
-                    <button onclick="removeConsolidateFile(${idx})" class="text-rose-400 hover:text-rose-300 transition bg-transparent border-0 cursor-pointer p-0.5 flex-shrink-0" title="Remove file" style="font-weight: 600;">&times;</button>
-                </div>`;
-            });
-            list.innerHTML = html;
-            container.classList.remove('hidden');
-            runBtn.disabled = false;
-        }
-
-        function removeConsolidateFile(index) {
-            state.consolSelectedFiles.splice(index, 1);
-            renderConsolFilesList();
-            if (state.consolSelectedFiles.length === 0) {
-                document.getElementById('consolResultsFrame').classList.add('hidden');
-            }
-        }
-
-        async function addConsolidateFile() {
-            if (isWebMode()) {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.xlsx,.xls';
-                input.onchange = async (e) => {
-                    const files = e.target.files;
-                    if (files && files.length > 0) {
-                        const paths = await uploadMultipleFilesToServer(files);
-                        for (const p of paths) {
-                            if (!state.consolSelectedFiles.includes(p)) {
-                                state.consolSelectedFiles.push(p);
-                            }
-                        }
-                        renderConsolFilesList();
-                        if (paths.length > 0) showToast(`✓ Added ${paths.length} file(s)`, 'success');
-                    }
-                };
-                input.click();
-                return;
-            }
-            try {
-                const res = await fetch('/api/browse/file');
-                const data = await res.json();
-                if (data.path) {
-                    if (!state.consolSelectedFiles.includes(data.path)) {
-                        state.consolSelectedFiles.push(data.path);
-                        renderConsolFilesList();
-                        showToast(`✓ Added ${data.path.split('/').pop().split('\\').pop()}`, 'success');
-                    } else {
-                        showToast('File already selected', 'info');
-                    }
-                }
-            } catch (err) {
-                console.error(err);
-                showToast('Failed to select file', 'error');
-            }
-        }
-
-        function clearConsolidateFiles() {
-            state.consolSelectedFiles = [];
-            renderConsolFilesList();
-            document.getElementById('consolResultsFrame').classList.add('hidden');
-            showToast('Files list cleared', 'info');
-        }
-
-        async function openMappingRulesExcel() {
-            try {
-                showToast('Launching mapping rules in Excel...', 'info');
-                const res = await fetch('/api/open', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: 'settings/mapping_rules.xlsx' })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    showToast('✓ Mapping rules opened in Excel', 'success');
-                } else {
-                    showToast(data.error || 'Failed to open mapping rules', 'error');
-                }
-            } catch (err) {
-                showToast('Failed to launch rules spreadsheet', 'error');
-            }
-        }
-
-        async function openConsolidatedExcel() {
-            if (isWebMode()) {
-                const outPath = document.getElementById('consolOutputPath')?.textContent || '';
-                if (outPath) {
-                    window.open(getDownloadUrl(outPath), '_blank');
-                }
-                return;
-            }
-            try {
-                showToast('Opening consolidated workbook in Excel...', 'info');
-                await fetch('/api/open', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: 'output/consolidated_output.xlsx' })
-                });
-            } catch (err) {
-                showToast('Failed to open output workbook', 'error');
-            }
-        }
-
-        async function runConsolidation() {
-            if (state.consolSelectedFiles.length === 0) return;
-            
-            const month = document.getElementById('consolMonth').value;
-            const runBtn = document.getElementById('consolBtnRun');
-            const progress = document.getElementById('consolProgressContainer');
-            const status = document.getElementById('consolStatusText');
-            
-            runBtn.disabled = true;
-            progress.classList.remove('hidden');
-            status.textContent = "Executing mapping solvers...";
-            
-            try {
-                const res = await fetch('/api/consolidate/run', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        files: state.consolSelectedFiles,
-                        month: month
-                    })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    showToast('Consolidation pipeline active on background threads...', 'info');
-                    pollConsolidationProgress();
-                } else {
-                    showToast(data.error || 'Failed to start consolidation', 'error');
-                    runBtn.disabled = false;
-                    progress.classList.add('hidden');
-                }
-            } catch (err) {
-                showToast('Network error starting pipeline', 'error');
-                runBtn.disabled = false;
-                progress.classList.add('hidden');
-            }
-        }
-
-        function pollConsolidationProgress(once = false) {
-            if (consolPollTimer) {
-                if (once) return;
-                clearInterval(consolPollTimer);
-            }
-            
-            const runBtn = document.getElementById('consolBtnRun');
-            const progress = document.getElementById('consolProgressContainer');
-            const status = document.getElementById('consolStatusText');
-            
-            const fn = async () => {
-                try {
-                    const res = await fetch('/api/consolidate/progress');
-                    const data = await res.json();
-                    
-                    if (data.is_running) {
-                        if (progress) progress.classList.remove('hidden');
-                        if (status) status.textContent = data.progress_text || "Processing...";
-                        if (runBtn) runBtn.disabled = true;
-                    } else {
-                        if (!once) {
-                            if (progress) progress.classList.add('hidden');
-                            if (runBtn) runBtn.disabled = (state.consolSelectedFiles.length === 0);
-                        }
-                        
-                        if (data.summary && Object.keys(data.summary).length > 0) {
-                            const resultsFrame = document.getElementById('consolResultsFrame');
-                            const statFiles = document.getElementById('consolStat-files');
-                            const statPt = document.getElementById('consolStat-pt');
-                            const statMd = document.getElementById('consolStat-md');
-                            const statAlerts = document.getElementById('consolStat-alerts');
-                            const warnFrame = document.getElementById('consolWarnFrame');
-                            const warnList = document.getElementById('consolWarnList');
-                            
-                            if (resultsFrame) resultsFrame.classList.remove('hidden');
-                            if (statFiles) statFiles.textContent = data.summary.sources_processed || '0';
-                            if (statPt) statPt.textContent = data.summary.total_pt_rows || '0';
-                            if (statMd) statMd.textContent = data.summary.total_md_rows || '0';
-                            if (isWebMode() && data.summary.output_path) {
-                                const dlDiv = document.getElementById('consolDownloadDiv') || (() => {
-                                    const d = document.createElement('div');
-                                    d.id = 'consolDownloadDiv';
-                                    d.className = 'mt-3';
-                                    const frame = document.getElementById('consolResultsFrame');
-                                    if (frame) frame.appendChild(d);
-                                    return d;
-                                })();
-                                dlDiv.innerHTML = `<a href="${getDownloadUrl(data.summary.output_path)}" class="block w-full text-center px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-sm transition" download>Download Consolidated Report</a>`;
-                            }
-                            
-                            const dups = data.summary.cross_duplicates || [];
-                            if (statAlerts) statAlerts.textContent = dups.length;
-                            
-                            if (dups.length > 0) {
-                                if (warnFrame) warnFrame.classList.remove('hidden');
-                                if (warnList) {
-                                    let html = '';
-                                    dups.forEach(d => {
-                                        html += `<div>• Assayer Code <b>${escapeHtml(d.assayer_code)}</b> (${escapeHtml(d.assayer_name)}) was double-paid in both '${escapeHtml(d.source_1_client)}' and '${escapeHtml(d.source_2_client)}'!</div>`;
-                                    });
-                                    warnList.innerHTML = html;
-                                }
-                            } else {
-                                if (warnFrame) warnFrame.classList.add('hidden');
-                            }
-                            
-                            if (!once && !data.error_msg) {
-                                showToast('✓ Consolidation Ingestion Completed Successfully!', 'success');
-                            }
-                        }
-                        
-                        if (data.error_msg && !once) {
-                            showToast(`Pipeline error: ${data.error_msg}`, 'error');
-                        }
-                        
-                        if (!once) {
-                            clearInterval(consolPollTimer);
-                            consolPollTimer = null;
-                        }
-                    }
-                } catch (e) {
-                    console.error(e);
-                }
-            };
-            
-            fn();
-            if (!once) {
-                consolPollTimer = setInterval(fn, 1000);
-            }
-        }
+        // The old, single-file Consolidation UI (browse/render/remove/run,
+        // one file at a time, plus a poller whose DOM targets no longer
+        // exist) was fully superseded by executeNewConsolidation() below,
+        // which does the same job with drag-and-drop batching and instant
+        // per-file pre-parsing. Removed rather than kept alongside it.
 
         // -------- WEB MODE HELPERS --------
         async function uploadFileToServer(file) {
@@ -2379,9 +2048,6 @@
             });
             document.querySelectorAll('[id$="OutputDir"]').forEach(el => {
                 if (el.tagName === 'INPUT') el.placeholder = 'Auto (temp directory)';
-            });
-            document.querySelectorAll('[onclick*="openConsolidatedFolder"]').forEach(el => {
-                el.style.display = 'none';
             });
         }
 
@@ -2937,10 +2603,13 @@
             document.getElementById('arvogPanel-GENERATE').classList.toggle('hidden', isRebuild);
             document.getElementById('arvogPanel-REBUILD').classList.toggle('hidden', !isRebuild);
 
-            const active = 'px-3 py-1 text-xs font-bold rounded-md bg-emerald-500 text-white';
-            const idle = 'px-3 py-1 text-xs font-semibold text-slate-400 hover:text-white';
-            document.getElementById('arvogPanelBtn-GENERATE').className = isRebuild ? idle : active;
-            document.getElementById('arvogPanelBtn-REBUILD').className = isRebuild ? active : idle;
+            const btnGenerate = document.getElementById('arvogPanelBtn-GENERATE');
+            const btnRebuild = document.getElementById('arvogPanelBtn-REBUILD');
+            [[btnGenerate, !isRebuild], [btnRebuild, isRebuild]].forEach(([btn, selected]) => {
+                btn.classList.toggle('selected', selected);
+                btn.classList.toggle('dynamic-accent-bg', selected);
+            });
+            updateThemeBranding();
 
             const heading = document.getElementById('arvogHeading');
             if (heading) heading.textContent = isRebuild ? 'Rebuild Master Sheet' : 'Generate Reports';

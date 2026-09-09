@@ -27,7 +27,7 @@ def test_no_absolute_static_references_survive(html):
 def test_stylesheet_is_inlined(html):
     assert "<link" not in html or 'rel="stylesheet"' not in html
     # chrome classes that only exist in web.css must be present in the document
-    for cls in (".logo-mark", ".top-navbar", ".nav-btn", ".bank-pill"):
+    for cls in (".logo-mark", ".sidebar", ".nav-btn", ".bank-pill"):
         assert cls in html, f"{cls} missing — stylesheet was not inlined"
 
 
@@ -160,6 +160,31 @@ def test_dim_text_tier_is_readable_on_the_canvas():
     not just decoration, so they need the same 4.5:1 floor as body text."""
     ratio = _contrast_ratio("717B89", "0A0D12")
     assert ratio >= 4.5, f"text-dim only reaches {ratio:.2f}:1 against the canvas"
+
+
+def test_every_wh_size_class_used_is_defined(html):
+    """An SVG icon sized with .w-7.h-7 rendered at roughly ten times its
+    intended size -- neither class exists in this file's hand-rolled utility
+    set (only w-3/4/5/8/12/20/44/64 do), so the browser fell back to the
+    element's unconstrained intrinsic size. Four icons shipped that way
+    before this was caught by eye rather than by a test.
+    """
+    defined_w = set(re.findall(r'\.w-(\d+(?:\\\.\d+)?)\s*\{', html))
+    defined_h = set(re.findall(r'\.h-(\d+(?:\\\.\d+)?)\s*\{', html))
+
+    body = html[html.index("<body"):]
+    missing = set()
+    for m in re.finditer(r'class="([^"]*)"', body):
+        classes = m.group(1).split()
+        for cls in classes:
+            mw = re.fullmatch(r"w-(\d+)", cls)
+            if mw and mw.group(1) not in defined_w:
+                missing.add(cls)
+            mh = re.fullmatch(r"h-(\d+)", cls)
+            if mh and mh.group(1) not in defined_h:
+                missing.add(cls)
+
+    assert not missing, f"used but never defined -- would render unconstrained: {sorted(missing)}"
 
 
 def test_every_static_ref_in_index_html_resolves():

@@ -149,7 +149,7 @@ def worker_idfc_thread(inp: str | list[str], out_base: str, typ: str, output_mod
             {"label": "Total Output Size", "value": _format_size(total_size) if total_size > 0 else "0 KB"},
             {"label": "Staging Directory", "value": out_base}
         ], output_dir=out_base)
-        trigger_notification("Audit Engine Elite", f"✓ IDFC Bulk generation complete! Created {pdf_count} branch reports.")
+        trigger_notification("GSS-MIS", f"✓ IDFC Bulk generation complete! Created {pdf_count} branch reports.")
 
     except Exception as e:
         global_tracker.log("ERROR", f"FAILURE: {e}")
@@ -236,7 +236,7 @@ def worker_equitas_thread(inp: str | list[str], out_base: str, stage: str, equit
             {"label": "Total File Size", "value": _format_size(total_size) if total_size > 0 else "0 KB"},
             {"label": "Output Directory", "value": out_base}
         ], output_dir=out_base)
-        trigger_notification("Audit Engine Elite", f"✓ Equitas Bulk {stage} complete! Generated {item_count} items.")
+        trigger_notification("GSS-MIS", f"✓ Equitas Bulk {stage} complete! Generated {item_count} items.")
 
     except Exception as e:
         global_tracker.log("ERROR", f"FAILURE: {e}")
@@ -335,7 +335,7 @@ def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool, ou
             {"label": "Total Output Size", "value": _format_size(total_size) if total_size > 0 else "0 KB"},
             {"label": "Output Directory", "value": out_base}
         ], output_dir=out_base)
-        trigger_notification("Audit Engine Elite", f"✓ Bulk generation complete! Created {pdf_count} branch reports.")
+        trigger_notification("GSS-MIS", f"✓ Bulk generation complete! Created {pdf_count} branch reports.")
 
     except Exception as e:
         global_tracker.log("ERROR", f"FAILURE: {e}")

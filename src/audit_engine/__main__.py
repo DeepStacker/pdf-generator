@@ -109,7 +109,7 @@ def _show_fatal_error(message: str) -> None:
         root.withdraw()
         root.attributes("-topmost", True)
         messagebox.showerror(
-            "Audit Engine Elite — Startup Error",
+            "GSS-MIS — Startup Error",
             f"{message}\n\n"
             "The application requires pywebview to run.\n"
             "Please contact your IT administrator if this error persists.",
@@ -123,7 +123,7 @@ def _show_fatal_error(message: str) -> None:
             try:
                 err_path = os.path.join(err_dir, "audit_engine_error.txt")
                 with open(err_path, "w") as f:
-                    f.write(f"Audit Engine Elite — Startup Error\n\n{message}\n")
+                    f.write(f"GSS-MIS — Startup Error\n\n{message}\n")
                 break
             except Exception:
                 continue
@@ -154,7 +154,7 @@ def main() -> None:
         logger.info("Loading UI from: %s", file_uri)
 
         webview.create_window(
-            "Audit Engine Elite",
+            "GSS-MIS",
             url=file_uri,
             js_api=bridge,
             width=1200,
