@@ -350,6 +350,9 @@
             document.querySelectorAll('.dynamic-accent-border').forEach(el => {
                 el.style.borderColor = primaryColor;
             });
+            document.querySelectorAll('.dynamic-accent-stroke').forEach(el => {
+                el.style.stroke = primaryColor;
+            });
 
             // Toggle show workflow sections
             const idfcSection = document.getElementById('tab-PROCESS-IDFC');
