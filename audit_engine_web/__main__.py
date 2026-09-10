@@ -41,22 +41,69 @@ atexit.register(_cleanup_temp)
 import time
 import threading
 
+# How long an abandoned upload or an undownloaded report may sit before the
+# sweeper takes it. Anything still wanted is deleted explicitly long before
+# this: inputs the moment their job ends, outputs the moment they are served.
+IDLE_FILE_TTL = 120
+
+
 def _start_temp_garbage_collector():
+    """Delete what jobs leave behind, without deleting the workspace itself.
+
+    This used to glob /tmp/audit_engine_* and remove any *directory* older
+    than the TTL -- which matches UPLOAD_DIR and OUTPUT_DIR themselves, both
+    created once at startup. Two quiet minutes and the server deleted the two
+    directories it writes everything into. It was survivable between jobs
+    because the run route recreates OUTPUT_DIR, but a job running longer than
+    the TTL had its own inputs and half-written reports swept out from under
+    it, since a deep write does not touch the root's mtime.
+
+    So the roots are now off limits and only their contents age out, a run in
+    progress is left alone entirely, and directories from *previous* server
+    processes -- genuinely orphaned, nothing holds a handle on them -- are
+    still removed.
+    """
+    def _job_running() -> bool:
+        try:
+            from audit_engine.tasks.workers import global_tracker
+            return bool(global_tracker.is_running)
+        except Exception:
+            return False
+
     def gc_loop():
         while True:
-            time.sleep(30)  # Check every 30 seconds for zero-trace security
+            time.sleep(30)
             try:
+                if _job_running():
+                    continue
                 now = time.time()
-                temp_root = Path(tempfile.gettempdir())
-                for p in temp_root.glob("audit_engine_*"):
-                    if p.is_dir():
+
+                # This process's workspace: age out the contents, keep the roots.
+                for root in (UPLOAD_DIR, OUTPUT_DIR):
+                    root.mkdir(parents=True, exist_ok=True)
+                    for child in root.iterdir():
                         try:
-                            # Prune if directory modified > 120 seconds (2 mins) ago
-                            if now - p.stat().st_mtime > 120:
-                                shutil.rmtree(str(p), ignore_errors=True)
-                                logger.info("Zero-Trace Security GC pruned temp dir: %s", p.name)
-                        except Exception:
+                            if now - child.stat().st_mtime <= IDLE_FILE_TTL:
+                                continue
+                            if child.is_dir():
+                                shutil.rmtree(str(child), ignore_errors=True)
+                            else:
+                                child.unlink()
+                            logger.info("Zero-trace: swept idle %s", child.name)
+                        except OSError:
                             pass
+
+                # Workspaces left by earlier runs of this server.
+                keep = {UPLOAD_DIR.resolve(), OUTPUT_DIR.resolve()}
+                for stale in Path(tempfile.gettempdir()).glob("audit_engine_*"):
+                    try:
+                        if not stale.is_dir() or stale.resolve() in keep:
+                            continue
+                        if now - stale.stat().st_mtime > IDLE_FILE_TTL:
+                            shutil.rmtree(str(stale), ignore_errors=True)
+                            logger.info("Zero-trace: removed orphaned workspace %s", stale.name)
+                    except OSError:
+                        pass
             except Exception as e:
                 logger.warning("Temp GC error: %s", e)
 
@@ -145,6 +192,50 @@ def _purge_workspace(keep_paths=()) -> int:
             except OSError as e:
                 logger.warning("Could not clear %s: %s", child, e)
     return removed
+
+
+def _reap_inputs_when_job_ends(paths) -> None:
+    """Delete the uploaded workbooks as soon as the run stops needing them.
+
+    They used to sit in the workspace until the idle sweeper noticed them,
+    so a customer's source file outlived the job that consumed it by up to
+    the TTL. Waiting on the tracker rather than a timer means the file goes
+    the moment the run is over, however long the run took.
+    """
+    targets = [Path(p) for p in paths if p]
+    if not targets:
+        return
+
+    def _wait_then_remove():
+        try:
+            from audit_engine.tasks.workers import global_tracker
+            deadline = time.time() + 6 * 60 * 60
+            # Give the worker thread a moment to raise the flag before watching it fall.
+            time.sleep(2)
+            while global_tracker.is_running and time.time() < deadline:
+                time.sleep(2)
+        except Exception:
+            pass
+        for target in targets:
+            try:
+                if target.is_dir():
+                    shutil.rmtree(str(target), ignore_errors=True)
+                elif target.exists():
+                    target.unlink()
+                else:
+                    continue
+                logger.info("Zero-trace: removed input after job")
+            except OSError as e:
+                logger.warning("Could not remove an input after the job: %s", e)
+            # the per-upload folder goes too, so nothing is left naming the file
+            parent = target.parent
+            try:
+                if parent.is_dir() and parent.resolve() != UPLOAD_DIR.resolve() and not any(parent.iterdir()):
+                    parent.rmdir()
+            except OSError:
+                pass
+
+    threading.Thread(target=_wait_then_remove, daemon=True).start()
 
 
 def _delete_after_download(*paths) -> None:
@@ -244,7 +335,8 @@ def handle_upload():
     subdir.mkdir(parents=True, exist_ok=True)
     dest = subdir / safe_name
     upload.save(str(dest))
-    logger.info("Uploaded: %s -> %s", upload.filename, dest)
+    # The name is the customer's, and this log outlives the file itself.
+    logger.info("Upload received (%d bytes)", dest.stat().st_size if dest.exists() else 0)
     return {"success": True, "path": str(dest), "name": safe_name}
 
 @route("/api/upload/multiple", method=["OPTIONS", "POST"])
@@ -461,7 +553,10 @@ def web_run():
     if cleared:
         logger.info("Zero-trace: cleared %d item(s) left by the previous job", cleared)
 
-    return handle_run(data)
+    result = handle_run(data)
+    if isinstance(result, dict) and result.get("success"):
+        _reap_inputs_when_job_ends(inputs)
+    return result
 
 
 @route("/api/update/check")
