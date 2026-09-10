@@ -1190,7 +1190,7 @@
                 }
                 
                 html += `
-                <div class="arvog-file-tile ${activeClass} ${cursorStyle} flex items-center justify-between space-x-3" ${clickAction}>
+                <div class="file-row ${activeClass} ${cursorStyle}" ${clickAction}>
                     <div class="flex items-center space-x-3 min-w-0 flex-1">
                         ${iconHtml}
                         <div class="min-w-0 flex-1">
@@ -1271,9 +1271,6 @@
             // UI Toggle to busy
             setUiGeneratingState(true);
             
-            // Console clearing and focus
-            const consoleBox = document.getElementById(`${prefix}Console`);
-            consoleBox.innerHTML = '<div class="text-slate-500">[00:00:00] Initializing generation background worker thread...</div>';
             state.logsCount = 0;
             
             // Gather custom column mappings
@@ -1477,29 +1474,20 @@
             }
         }
 
-        function appendConsoleLog(level, message, timestamp) {
-            const isIDFC = (state.activeBank === 'IDFC First Bank');
-            const isArvog = (state.activeBank === 'Arvog Bank');
-            let consoleBox;
-            if (isIDFC) {
-                consoleBox = document.getElementById('idfcConsole');
-            } else if (isArvog) {
-                consoleBox = document.getElementById('arvogConsole');
-            } else {
-                consoleBox = document.getElementById('eqConsole');
-            }
-            
-            const time = timestamp || new Date().toTimeString().split(' ')[0];
-            
-            let color = 'text-sky-400';
-            if (level === 'OK') color = 'text-emerald-400';
-            if (level === 'WARN') color = 'text-amber-500 font-semibold';
-            if (level === 'ERROR') color = 'text-rose-500 font-bold';
-            if (level === 'DEBUG') color = 'text-slate-500';
-            
-            const row = `<div class="font-mono text-[11px]"><span class="text-slate-600">[${time}]</span> <span class="${color}">[${escapeHtml(level)}]</span> <span class="text-slate-200">${escapeHtml(message)}</span></div>`;
-            consoleBox.insertAdjacentHTML('beforeend', row);
-            consoleBox.scrollTop = consoleBox.scrollHeight;
+        // The run consoles are gone -- a scrolling wall of INFO lines was never
+        // what anyone came here for, and the ring, the step name and the
+        // summary already say where a run is up to. What the console *did*
+        // carry that nothing else does is failure: a branch that could not be
+        // written scrolled past in red and nowhere else. So these four keep
+        // their call sites and their signatures, and forward exactly that --
+        // WARN and ERROR become toasts, the rest is dropped.
+        function reportRunProblem(level, message) {
+            if (level !== 'ERROR' && level !== 'WARN') return;
+            showToast(message, level === 'ERROR' ? 'error' : 'warning', 7000);
+        }
+
+        function appendConsoleLog(level, message) {
+            reportRunProblem(level, message);
         }
 
         function setUiGeneratingState(busy) {
@@ -1602,11 +1590,6 @@
             clearAllSelectedFiles();
 
             const prefix = getActivePrefix();
-            const consoleBox = document.getElementById(`${prefix}Console`);
-            if (consoleBox) {
-                consoleBox.innerHTML = '<div class="font-mono text-[11px]"><span class="text-slate-600">[00:00:00]</span> <span class="text-sky-400">[INFO]</span> <span class="text-slate-200">Ready for the next batch.</span></div>';
-            }
-
             const pct = document.getElementById(`${prefix}ProgressPct`);
             if (pct) pct.textContent = '0%';
             const ring = document.getElementById(`${prefix}ProgressRing`);
@@ -2265,18 +2248,8 @@
         // How many backend log lines we have already mirrored into the console.
         let validatorLoggedCount = 0;
 
-        function validatorLog(level, message, timestamp) {
-            const box = document.getElementById('validatorConsole');
-            if (!box) return;
-            const time = timestamp || new Date().toTimeString().split(' ')[0];
-            let color = 'text-sky-400';
-            if (level === 'OK') color = 'text-emerald-400';
-            if (level === 'WARN') color = 'text-amber-500 font-semibold';
-            if (level === 'ERROR') color = 'text-rose-500 font-bold';
-            if (level === 'DEBUG') color = 'text-slate-500';
-            const row = `<div class="font-mono text-[11px]"><span class="text-slate-600">[${time}]</span> <span class="${color}">[${escapeHtml(level)}]</span> <span class="text-slate-200">${escapeHtml(message)}</span></div>`;
-            box.insertAdjacentHTML('beforeend', row);
-            box.scrollTop = box.scrollHeight;
+        function validatorLog(level, message) {
+            reportRunProblem(level, message);
         }
 
         async function browseValidatorFile() {
@@ -2329,7 +2302,6 @@
             document.getElementById('validatorProgressFile').textContent = filepath.split(/[\\/]/).pop();
             validatorOutputPath = '';
             validatorLoggedCount = 0;
-            document.getElementById('validatorConsole').innerHTML = '';
 
             try {
                 const resp = await fetch('/api/report/run', {
@@ -2470,7 +2442,6 @@
             document.getElementById('validatorPdfPath').value = '';
             document.getElementById('validatorResults').classList.add('hidden');
             document.getElementById('validatorProgressContainer').classList.add('hidden');
-            document.getElementById('validatorConsole').innerHTML = '<div class="text-slate-500">[00:00:00] Ready. Select a report to validate.</div>';
             finishValidatorRun();
         }
 
@@ -2486,17 +2457,8 @@
         let flattenOutputPath = '';
         let flattenLoggedCount = 0;
 
-        function flattenLog(level, message, timestamp) {
-            const box = document.getElementById('flattenConsole');
-            if (!box) return;
-            const time = timestamp || new Date().toTimeString().split(' ')[0];
-            let color = 'text-sky-400';
-            if (level === 'OK') color = 'text-emerald-400';
-            if (level === 'WARN') color = 'text-amber-500 font-semibold';
-            if (level === 'ERROR') color = 'text-rose-500 font-bold';
-            const row = `<div class="font-mono text-[11px]"><span class="text-slate-600">[${time}]</span> <span class="${color}">[${escapeHtml(level)}]</span> <span class="text-slate-200">${escapeHtml(message)}</span></div>`;
-            box.insertAdjacentHTML('beforeend', row);
-            box.scrollTop = box.scrollHeight;
+        function flattenLog(level, message) {
+            reportRunProblem(level, message);
         }
 
         function formatFileSize(bytes) {
@@ -2533,7 +2495,6 @@
             document.getElementById('flattenResults').classList.add('hidden');
             document.getElementById('flattenProgressContainer').classList.remove('hidden');
             document.getElementById('flattenProgressFile').textContent = filepath.split(/[\\/]/).pop();
-            document.getElementById('flattenConsole').innerHTML = '';
             flattenOutputPath = '';
             flattenLoggedCount = 0;
 
@@ -2643,7 +2604,6 @@
             document.getElementById('flattenFilePath').value = '';
             document.getElementById('flattenResults').classList.add('hidden');
             document.getElementById('flattenProgressContainer').classList.add('hidden');
-            document.getElementById('flattenConsole').innerHTML = '<div class="text-slate-500">[00:00:00] Ready. Select a PDF to flatten.</div>';
             finishFlattenRun();
         }
 
@@ -2677,15 +2637,7 @@
         }
 
         function arvogRebuildLog(level, message) {
-            const el = document.getElementById('arvogRebuildConsole');
-            if (!el) return;
-            const colours = { INFO: 'text-slate-400', OK: 'text-emerald-400', WARN: 'text-amber-400', ERROR: 'text-red-400' };
-            const stamp = new Date().toLocaleTimeString('en-GB', { hour12: false });
-            const line = document.createElement('div');
-            line.className = colours[level] || 'text-slate-400';
-            line.textContent = `[${stamp}] ${message}`;
-            el.appendChild(line);
-            el.scrollTop = el.scrollHeight;
+            reportRunProblem(level, message);
         }
 
         async function browseArvogRebuildFile() {
@@ -2709,7 +2661,6 @@
                 return;
             }
 
-            document.getElementById('arvogRebuildConsole').innerHTML = '';
             document.getElementById('arvogRebuildResults').classList.add('hidden');
             document.getElementById('arvogRebuildProgressContainer').classList.remove('hidden');
             document.getElementById('arvogRebuildBtnRun').disabled = true;

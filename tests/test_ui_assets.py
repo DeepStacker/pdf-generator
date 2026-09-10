@@ -26,6 +26,8 @@ def test_no_absolute_static_references_survive(html):
 
 def test_stylesheet_is_inlined(html):
     assert "<link" not in html or 'rel="stylesheet"' not in html
+    # the palette is its own asset now and must be inlined too, not just linked
+    assert "--accent-blue-fill" in html, "tokens.css was not inlined"
     # chrome classes that only exist in web.css must be present in the document
     for cls in (".logo-mark", ".sidebar", ".nav-btn", ".bank-pill"):
         assert cls in html, f"{cls} missing — stylesheet was not inlined"
@@ -107,7 +109,7 @@ def test_inlining_is_idempotent_on_already_inlined_html(html):
 def test_assets_actually_ship_in_the_package():
     """web.css/app.js must live beside index.html so PyInstaller bundles them."""
     import os
-    for name in ("index.html", "app.js", "web.css"):
+    for name in ("index.html", "app.js", "web.css", "tokens.css"):
         assert os.path.isfile(os.path.join(ui._ASSETS_DIR, name)), f"{name} missing from ui/static"
 
 

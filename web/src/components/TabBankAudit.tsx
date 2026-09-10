@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, Play, AlertCircle, CheckCircle2, Download, Terminal, FileSpreadsheet, FileText, Archive, Eye, Trash2, ShieldCheck, Sparkles, RotateCcw } from 'lucide-react';
+import {
+  Upload, Play, AlertCircle, AlertTriangle, CheckCircle2, Download, Loader2,
+  FileSpreadsheet, FileText, Archive, Eye, Trash2, RotateCcw,
+} from 'lucide-react';
 import { FilePreviewModal } from './FilePreviewModal';
 import { ArvogRebuildPanel } from './ArvogRebuildPanel';
 import { DocumentViewerModal } from './DocumentViewerModal';
+import { BANKS } from '../banks';
 
 export interface BankAuditOptions {
   audit_type?: string;
@@ -17,6 +21,8 @@ export interface BankAuditOptions {
 export interface BankAuditProps {
   onRunReport: (bank: string, filePaths: string[], options: BankAuditOptions) => Promise<any>;
   onUploadFiles: (files: File[]) => Promise<string[]>;
+  /** Owned by App, because the sidebar selects it -- as it does on the desktop. */
+  selectedBank: string;
 }
 
 export interface OutputFileInfo {
@@ -25,11 +31,64 @@ export interface OutputFileInfo {
   size: number;
 }
 
-export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFiles }) => {
-  const [selectedBank, setSelectedBank] = useState<string>(() => {
-    return localStorage.getItem('bank_audit_selectedBank') || 'IDFC First Bank';
-  });
-  
+/**
+ * A failure the user has to see.
+ *
+ * This screen used to carry a terminal-style console, which nobody read but
+ * which was also the only place a failure showed up. The console is gone; the
+ * ERROR and WARN lines the backend reports are pulled out of the log stream
+ * and raised into the alert strip below the header instead, so a run that goes
+ * wrong still says so.
+ */
+interface RunAlert {
+  level: 'ERROR' | 'WARN';
+  text: string;
+}
+
+const LEVEL_IN_TEXT = /\[(ERROR|WARN|WARNING|CRITICAL|FATAL)\]/i;
+
+const extractAlerts = (items: unknown[]): RunAlert[] => {
+  const out: RunAlert[] = [];
+
+  for (const item of items) {
+    let level = '';
+    let text = '';
+
+    if (item && typeof item === 'object') {
+      // The tracker's own shape: { timestamp, level, message }.
+      const entry = item as { level?: unknown; message?: unknown };
+      level = String(entry.level ?? '').toUpperCase();
+      text = String(entry.message ?? '');
+    } else {
+      // An older server (or a hand-pushed line) sends a bare string.
+      text = String(item ?? '');
+      const found = text.match(LEVEL_IN_TEXT);
+      if (found) {
+        level = found[1].toUpperCase();
+        text = text.replace(found[0], '').trim();
+      }
+    }
+
+    if (!text) continue;
+    if (level === 'ERROR' || level === 'CRITICAL' || level === 'FATAL') {
+      out.push({ level: 'ERROR', text });
+    } else if (level === 'WARN' || level === 'WARNING') {
+      out.push({ level: 'WARN', text });
+    }
+  }
+
+  return out;
+};
+
+
+/** 2 x pi x r for the r=20 progress ring, the same number the desktop uses. */
+const RING = 125.6;
+
+const ROSE_EDGE = 'rgba(242, 85, 90, 0.35)';
+const AMBER_EDGE = 'rgba(199, 132, 31, 0.35)';
+
+export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFiles, selectedBank }) => {
+
   // Bank options with localStorage persistence.
   //
   // These values go straight to the API, which validates them against its own
@@ -81,16 +140,12 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressPct, setProgressPct] = useState(0);
-  const [logs, setLogs] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('bank_audit_logs');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [progressStep, setProgressStep] = useState('Initializing…');
+  const [cancelling, setCancelling] = useState(false);
+  const [alerts, setAlerts] = useState<RunAlert[]>([]);
   const [error, setError] = useState<string | null>(null);
-  
+  const [isDragging, setIsDragging] = useState(false);
+
   // Inspection Modal & Output states with localStorage persistence
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [outputDir, setOutputDir] = useState<string | null>(() => {
@@ -108,10 +163,6 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
   const [docViewerState, setDocViewerState] = useState<{ path: string; name: string } | null>(null);
 
   // Sync state changes to localStorage
-  useEffect(() => {
-    localStorage.setItem('bank_audit_selectedBank', selectedBank);
-  }, [selectedBank]);
-
   useEffect(() => {
     localStorage.setItem('bank_audit_idfcAuditType', idfcAuditType);
   }, [idfcAuditType]);
@@ -140,9 +191,12 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
     localStorage.setItem('bank_audit_arvogMode', arvogMode);
   }, [arvogMode]);
 
+  // The console this screen used to carry kept its transcript in the browser.
+  // The panel is gone; the saved transcript should go with it rather than sit
+  // there forever in everyone's localStorage.
   useEffect(() => {
-    localStorage.setItem('bank_audit_logs', JSON.stringify(logs));
-  }, [logs]);
+    localStorage.removeItem('bank_audit_logs');
+  }, []);
 
   useEffect(() => {
     if (outputDir) {
@@ -156,37 +210,10 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
     localStorage.setItem('bank_audit_outputFiles', JSON.stringify(outputFiles));
   }, [outputFiles]);
 
-  const banks = [
-    {
-      name: 'IDFC First Bank',
-      label: 'IDFC First Bank',
-      desc: 'Physical Verification & Touch & Feel Reports',
-      activeClass: 'bg-rose-600 text-white shadow-md shadow-rose-600/20 font-bold',
-      textClass: 'text-rose-400',
-      borderClass: 'border-rose-500/30',
-      badgeClass: 'bg-rose-950/80 text-rose-400 border-rose-800/60',
-    },
-    {
-      name: 'Equitas Small Finance Bank',
-      label: 'Equitas Bank',
-      desc: 'Single Packet Audit & Consolidated Bundles',
-      activeClass: 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 font-bold',
-      textClass: 'text-emerald-400',
-      borderClass: 'border-emerald-500/30',
-      badgeClass: 'bg-emerald-950/80 text-emerald-400 border-emerald-800/60',
-    },
-    {
-      name: 'Arvog Bank',
-      label: 'Arvog Bank',
-      desc: 'Branch & Single PDF Groupings',
-      activeClass: 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-bold',
-      textClass: 'text-indigo-400',
-      borderClass: 'border-indigo-500/30',
-      badgeClass: 'bg-indigo-950/80 text-indigo-400 border-indigo-800/60',
-    },
-  ];
-
-  const currentBankMeta = banks.find((b) => b.name === selectedBank) || banks[0];
+  const currentBankMeta = BANKS.find((b) => b.name === selectedBank) || BANKS[0];
+  const isArvog = selectedBank.includes('Arvog');
+  const isEquitas = selectedBank.includes('Equitas');
+  const isRebuildLeg = isArvog && arvogPanel === 'REBUILD';
 
   const [elapsedSec, setElapsedSec] = useState(0);
 
@@ -222,6 +249,7 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const selected = Array.from(e.dataTransfer.files);
       if (validateFiles(selected)) {
@@ -244,6 +272,7 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
       }
     } catch (err) {
       console.error('Failed to list output files:', err);
+      setAlerts((prev) => [...prev, { level: 'WARN', text: 'The reports were generated but the output folder could not be listed.' }]);
     }
   };
 
@@ -262,7 +291,7 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
   useEffect(() => stopPolling, []);
 
   const handleCancel = async () => {
-    setLogs((prev) => [...prev, '[WARN] Cancelling…']);
+    setCancelling(true);
     try {
       await fetch('/api/cancel');
     } catch {
@@ -281,13 +310,19 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
           if (typeof data.pct === 'number') {
             setProgressPct(Math.round(data.pct));
           }
+          if (data.active_branch) {
+            setProgressStep(String(data.active_branch));
+          }
+          // No console any more, so only the lines that report trouble are
+          // kept — the whole point is that a failure still reaches the user.
           if (Array.isArray(data.logs)) {
-            setLogs(data.logs);
+            setAlerts(extractAlerts(data.logs));
           }
 
           if (data.is_running === false) {
             stopPolling();
             setIsProcessing(false);
+            setCancelling(false);
 
             // The backend states this now. The label matching below is kept
             // only so an older server still works; on its own it missed the
@@ -325,21 +360,22 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
     }
 
     setIsProcessing(true);
+    setCancelling(false);
     setError(null);
+    setAlerts([]);
     setOutputDir(null);
     setOutputFiles([]);
     setProgressPct(5);
-    setLogs([`[INFO] Initializing PDF Report Generation for ${selectedBank}...`]);
+    setProgressStep(`Uploading ${stagedFiles.length} spreadsheet(s)…`);
 
     try {
-      setLogs((prev) => [...prev, `[INFO] Uploading ${stagedFiles.length} audit spreadsheet(s)...`]);
       const filePaths = await onUploadFiles(stagedFiles);
 
       if (filePaths.length === 0) {
         throw new Error('Failed to upload source spreadsheet files.');
       }
 
-      setLogs((prev) => [...prev, `[INFO] Launching generation pipeline...`]);
+      setProgressStep('Launching generation pipeline…');
 
       const options: BankAuditOptions = {
         audit_type: idfcAuditType,
@@ -360,20 +396,9 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
       }
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred during report generation.');
-      setLogs((prev) => [...prev, `[ERROR] ${err.message}`]);
       setIsProcessing(false);
+      setCancelling(false);
     }
-  };
-
-  const renderLogText = (logItem: any): string => {
-    if (typeof logItem === 'string') return logItem;
-    if (logItem && typeof logItem === 'object') {
-      const time = logItem.timestamp ? `[${logItem.timestamp}] ` : '';
-      const level = logItem.level ? `[${logItem.level}] ` : '';
-      const msg = logItem.message || JSON.stringify(logItem);
-      return `${time}${level}${msg}`;
-    }
-    return String(logItem);
   };
 
   const pdfFiles = outputFiles.filter((f) => f.name.toLowerCase().endsWith('.pdf'));
@@ -381,12 +406,12 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
     setStagedFiles([]);
     setOutputDir(null);
     setOutputFiles([]);
-    setLogs([]);
+    setAlerts([]);
     setError(null);
     setProgressPct(0);
+    setProgressStep('Initializing…');
     localStorage.removeItem('bank_audit_outputDir');
     localStorage.removeItem('bank_audit_outputFiles');
-    localStorage.removeItem('bank_audit_logs');
   };
 
   const zipFiles = outputFiles.filter((f) => f.name.toLowerCase().endsWith('.zip'));
@@ -401,525 +426,481 @@ export const TabBankAudit: React.FC<BankAuditProps> = ({ onRunReport, onUploadFi
     return true;
   });
 
+  // A selected chip takes the current bank's own fill, which is what the
+  // desktop's dynamic-accent-bg does to every chip on a Process screen. The
+  // fills are the darkened variants -- white chip text on the lighter dot
+  // colours does not clear the AA contrast floor.
+  const selectedChip: React.CSSProperties = {
+    background: currentBankMeta.fill,
+    borderColor: currentBankMeta.fill,
+    color: '#fff',
+  };
+
+  /** A labelled segmented control, the same one the desktop uses. */
+  const chipRow = (
+    label: string,
+    options: { value: string; label: string }[],
+    current: string,
+    onSelect: (value: string) => void
+  ) => (
+    <div>
+      <label className="field-label">{label}</label>
+      <div className="chip-group">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onSelect(opt.value)}
+            className={`chip-btn${current === opt.value ? ' selected' : ''}`}
+            style={current === opt.value ? selectedChip : undefined}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="tab-content process-layout space-y-5">
       {/* File Inspection Modal */}
       <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
 
-      {/* Header & Bank Selection Cards */}
-      <div className="space-y-4">
-        <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-100 tracking-tight flex items-center space-x-2">
-            <FileText className="w-5 h-5 text-blue-400" />
-            <span>Bank Audit Generator</span>
-          </h2>
-
+      {/* Page header */}
+      <div className="section-header">
+        <div>
+          <h2 className="section-title">Generate Reports</h2>
+          <p className="text-sm text-slate-400 mt-1">{currentBankMeta.desc}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className={`section-badge ${currentBankMeta.badge}`}>{currentBankMeta.label}</span>
           <button
             onClick={handleResetAll}
-            className="px-4 py-2 rounded-xl border border-rose-600/60 bg-gradient-to-r from-rose-950/80 via-slate-900 to-amber-950/80 hover:from-rose-900 hover:to-amber-900 text-rose-200 hover:text-white text-xs font-extrabold flex items-center space-x-2 cursor-pointer transition shadow-lg shadow-rose-950/40 border-glow group"
-            title="Clear all staged files, terminal logs, and generated outputs to start fresh"
+            className="btn btn-ghost btn-sm"
+            title="Clear staged files and generated outputs to start fresh"
           >
-            <RotateCcw className="w-4 h-4 text-rose-400 group-hover:rotate-180 transition duration-500" />
-            <span>Start New Audit Batch</span>
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Start New Batch</span>
           </button>
         </div>
-
-        {/* Bank Selection Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {banks.map((b) => {
-            const isSelected = selectedBank === b.name;
-            return (
-              <div
-                key={b.name}
-                onClick={() => {
-                  setSelectedBank(b.name);
-                  setError(null);
-                }}
-                className={`glass-panel glass-panel-hover p-4 rounded-xl cursor-pointer transition relative overflow-hidden border-2 ${
-                  isSelected ? `${b.borderClass} bg-[#0f172a]` : 'border-transparent bg-[#0d1322]/80'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-bold ${isSelected ? b.textClass : 'text-slate-300'}`}>
-                    {b.label}
-                  </span>
-                  {isSelected && (
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${b.badgeClass}`}>
-                      Active
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1.5 line-clamp-1">{b.desc}</p>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
-      {/* Bank Options Panel */}
-      <div className={`glass-panel p-6 space-y-4 border-l-4 ${
-        selectedBank === 'IDFC First Bank'
-          ? 'border-l-rose-500'
-          : selectedBank.includes('Equitas')
-          ? 'border-l-emerald-500'
-          : 'border-l-indigo-500'
-      }`}>
-        <div className="flex items-center justify-between">
-          <h3 className={`text-xs font-bold uppercase tracking-wider ${currentBankMeta.textClass}`}>
-            {selectedBank} Parameters & Output Configuration
-          </h3>
-          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">In-Memory Engine</span>
-        </div>
 
-        {selectedBank.includes('Arvog') && (
-          <div className="flex bg-[#0b0f19] border border-slate-800 rounded-lg p-0.5 w-max">
-            {(['GENERATE', 'REBUILD'] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => {
-                  setArvogPanel(mode);
-                  localStorage.setItem('bank_audit_arvogPanel', mode);
-                }}
-                className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                  arvogPanel === mode
-                    ? 'bg-emerald-500 text-white font-bold'
-                    : 'text-slate-400 hover:text-white font-semibold'
-                }`}
-              >
-                {mode === 'GENERATE' ? 'Generate PDF / Excel' : 'Rebuild Master Sheet'}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {selectedBank.includes('Arvog') && arvogPanel === 'REBUILD' && <ArvogRebuildPanel />}
-
-        {selectedBank === 'IDFC First Bank' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="idfcAuditType" className="block text-xs font-semibold text-slate-300 mb-1.5">Audit Type</label>
-              <select
-                id="idfcAuditType"
-                name="idfcAuditType"
-                value={idfcAuditType}
-                onChange={(e) => setIdfcAuditType(e.target.value)}
-                className="app-input font-medium"
-              >
-                <option value="POA">POA (Physical Verification)</option>
-                <option value="TAF">TAF (Touch and Feel)</option>
-              </select>
+      {/* Anything that went wrong, and anything the run warned about */}
+      {(error || alerts.length > 0) && (
+        <div className="space-y-2 max-h-48 overflow-y-auto">
+          {error && (
+            <div className="validation-box flex items-start gap-2" style={{ borderColor: ROSE_EDGE }}>
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--accent-rose)' }} />
+              <span style={{ color: 'var(--accent-rose)' }}>{error}</span>
             </div>
-
-            <div>
-              <label htmlFor="idfcOutputMode" className="block text-xs font-semibold text-slate-300 mb-1.5">Packaging Mode</label>
-              <select
-                id="idfcOutputMode"
-                name="idfcOutputMode"
-                value={idfcOutputMode}
-                onChange={(e) => setIdfcOutputMode(e.target.value)}
-                className="app-input font-medium"
-              >
-                <option value="BOTH">Folder & ZIP Archive (Recommended)</option>
-                <option value="FOLDER">Folder Only</option>
-                <option value="ZIP ONLY">ZIP Archive Only</option>
-              </select>
+          )}
+          {alerts.map((a, idx) => (
+            <div
+              key={idx}
+              className="validation-box flex items-start gap-2"
+              style={{ borderColor: a.level === 'ERROR' ? ROSE_EDGE : AMBER_EDGE }}
+            >
+              {a.level === 'ERROR' ? (
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--accent-rose)' }} />
+              ) : (
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--accent-amber)' }} />
+              )}
+              <span style={{ color: a.level === 'ERROR' ? 'var(--accent-rose)' : 'var(--accent-amber)' }}>
+                {a.text}
+              </span>
             </div>
-          </div>
-        )}
-
-        {selectedBank.includes('Equitas') && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="equitasStage" className="block text-xs font-semibold text-slate-300 mb-1.5">Workflow Stage</label>
-              <select
-                id="equitasStage"
-                name="equitasStage"
-                value={equitasStage}
-                onChange={(e) => setEquitasStage(e.target.value)}
-                className="app-input font-medium"
-              >
-                <option value="STAGE 1">STAGE 1: Single-Packet Audit Report</option>
-                <option value="STAGE 2">STAGE 2: Consolidate Reports</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="equitasFormat" className="block text-xs font-semibold text-slate-300 mb-1.5">Output Package Format</label>
-              <select
-                id="equitasFormat"
-                name="equitasFormat"
-                value={equitasFormat}
-                onChange={(e) => setEquitasFormat(e.target.value)}
-                className="app-input font-medium"
-              >
-                <option value="BOTH">PDF & Excel Spreadsheet</option>
-                <option value="PDF ONLY">PDF Only</option>
-                <option value="EXCEL ONLY">Excel Only</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="equitasPack" className="block text-xs font-semibold text-slate-300 mb-1.5">Packaging Mode</label>
-              <select
-                id="equitasPack"
-                name="equitasPack"
-                value={equitasPack}
-                onChange={(e) => setEquitasPack(e.target.value)}
-                className="app-input font-medium"
-              >
-                {EQUITAS_PACKS.map((mode) => (
-                  <option key={mode} value={mode}>{mode}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        {selectedBank.includes('Arvog') && arvogPanel === 'GENERATE' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="arvogMode" className="block text-xs font-semibold text-slate-300 mb-1.5">Packaging Mode</label>
-              <select
-                id="arvogMode"
-                name="arvogMode"
-                value={arvogMode}
-                onChange={(e) => setArvogMode(e.target.value)}
-                className="app-input font-medium"
-              >
-                <option value="BOTH">Folder & ZIP Archive</option>
-                <option value="FOLDER">Folder Only</option>
-                <option value="ZIP ONLY">ZIP Archive Only</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="arvogFormat" className="block text-xs font-semibold text-slate-300 mb-1.5">Output Package Format</label>
-              <select
-                id="arvogFormat"
-                name="arvogFormat"
-                value={arvogFormat}
-                onChange={(e) => setArvogFormat(e.target.value)}
-                className="app-input font-medium"
-              >
-                <option value="BOTH">PDF & Excel Spreadsheet</option>
-                <option value="PDF ONLY">PDF Only</option>
-                <option value="EXCEL ONLY">Excel Only</option>
-              </select>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {error && (
-        <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/60 text-red-300 text-xs flex items-center space-x-2.5 animate-in fade-in">
-          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-          <span>{error}</span>
+          ))}
         </div>
       )}
 
-      {/* Step 1 & Step 2 Workflows */}
-      {/* Staging and execution belong to the generate leg. The rebuild carries
-          its own upload, and showing both would offer two conflicting ways in. */}
-      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 ${
-        selectedBank.includes('Arvog') && arvogPanel === 'REBUILD' ? 'hidden' : ''
-      }`}>
-        {/* File Dropzone & Queue Manager */}
-        <div className="glass-panel p-6 space-y-4 flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                Step 1: Select Audit Spreadsheets
-              </h3>
-              {stagedFiles.length > 0 && (
-                <button
-                  onClick={() => setStagedFiles([])}
-                  className="text-[11px] text-slate-400 hover:text-red-400 transition cursor-pointer flex items-center space-x-1"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  <span>Clear Queue</span>
-                </button>
-              )}
-            </div>
+      {/* Equitas runs in two stages; the choice sits above everything else */}
+      {isEquitas && (
+        <div className="chip-group">
+          {[
+            { value: 'STAGE 1', label: 'Stage 1: Single-Packet Audit Report' },
+            { value: 'STAGE 2', label: 'Stage 2: Consolidate Reports' },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setEquitasStage(opt.value)}
+              className={`chip-btn${equitasStage === opt.value ? ' selected' : ''}`}
+              style={{ padding: '0.6rem 0.75rem', ...(equitasStage === opt.value ? selectedChip : {}) }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
+      {/* Which leg of the Arvog round trip: out to the branch, or back */}
+      {isArvog && (
+        <div className="chip-group w-max">
+          {(['GENERATE', 'REBUILD'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => {
+                setArvogPanel(mode);
+                localStorage.setItem('bank_audit_arvogPanel', mode);
+              }}
+              className={`chip-btn whitespace-nowrap${arvogPanel === mode ? ' selected' : ''}`}
+              style={{ padding: '0.5rem 0.9rem', ...(arvogPanel === mode ? selectedChip : {}) }}
+            >
+              {mode === 'GENERATE' ? 'Generate PDF / Excel' : 'Rebuild Master Sheet'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* The return leg carries its own upload, so the staging grid steps
+          aside for it rather than offering two conflicting ways in. */}
+      {isRebuildLeg && (
+        <div className="card" style={{ maxWidth: '32rem' }}>
+          <ArvogRebuildPanel />
+        </div>
+      )}
+
+      <div className={`process-grid${isRebuildLeg ? ' hidden' : ''}`}>
+        {/* LEFT COLUMN: source files */}
+        <div className="space-y-4">
+          <div className="stats-row">
+            <div className="stat-card">
+              <span className="stat-label">Staged</span>
+              <span className="stat-value text-sky-400">{stagedFiles.length}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Generated</span>
+              <span className="stat-value text-emerald-400">{outputFiles.length}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">PDFs</span>
+              <span className="stat-value" style={{ color: currentBankMeta.dot }}>{pdfFiles.length}</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="field-label" htmlFor="bankFileInput">Source Master Excel</label>
             <div
-              onDragOver={(e) => e.preventDefault()}
+              className={`drop-zone drag-zone-compact relative${isDragging ? ' is-dragging' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
-              className="border-2 border-dashed border-slate-700/80 bg-[#090d16]/80 hover:border-blue-500/60 hover:bg-[#0f172a]/90 rounded-2xl p-8 text-center cursor-pointer transition shadow-inner relative group"
             >
               <input
                 type="file"
                 id="bankFileInput"
                 multiple
                 accept=".xlsx,.XLSX,.xls"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 onChange={handleFileChange}
               />
-              <div className="pointer-events-none space-y-2">
-                <Upload className={`w-8 h-8 mx-auto mb-2 ${currentBankMeta.textClass} group-hover:scale-110 transition duration-200`} />
-                <p className="text-xs font-bold text-slate-100">
-                  Drag & drop audit spreadsheets or click anywhere to browse
-                </p>
-                <p className="text-[11px] text-slate-400">Click anywhere in this area to select .xlsx / .xls files</p>
+              <Upload className="drop-zone-icon w-8 h-8" />
+              <span className="drop-zone-title">
+                Drag &amp; drop or{' '}
+                <span style={{ color: currentBankMeta.dot, fontWeight: 600 }}>browse</span>
+              </span>
+              <span className="drop-zone-sub">.xlsx, .xls</span>
+            </div>
+          </div>
+
+          {stagedFiles.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-2xs font-bold text-slate-400 uppercase tracking-wider">
+                <span>Files ({stagedFiles.length})</span>
+                <button
+                  onClick={() => setStagedFiles([])}
+                  className="text-2xs font-bold text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="file-list-container space-y-1 p-1.5">
+                {stagedFiles.map((f, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2 px-2 py-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileSpreadsheet
+                        className="w-3.5 h-3.5 shrink-0"
+                        style={{ color: currentBankMeta.dot }}
+                      />
+                      <span className="text-xs text-slate-300 truncate">{f.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-2xs font-mono text-slate-500">
+                        {(f.size / 1024).toFixed(1)} KB
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewFile(f);
+                        }}
+                        className="btn btn-ghost btn-sm cursor-pointer"
+                        title="Inspect File"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveFile(i);
+                        }}
+                        className="btn btn-danger btn-sm cursor-pointer"
+                        title="Remove File"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-
-            {stagedFiles.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs text-slate-400 font-semibold uppercase tracking-wider">
-                  <span>Queue Staging ({stagedFiles.length} files)</span>
-                </div>
-                <div className="max-h-48 overflow-y-auto custom-scrollbar divide-y divide-slate-800/80 border border-slate-800 rounded-xl bg-[#090d16]">
-                  {stagedFiles.map((f, i) => (
-                    <div key={i} className="px-3.5 py-2.5 text-xs flex items-center justify-between text-slate-200 hover:bg-slate-800/30">
-                      <div className="flex items-center space-x-2 truncate pr-2">
-                        <FileSpreadsheet className={`w-4 h-4 flex-shrink-0 ${currentBankMeta.textClass}`} />
-                        <span className="truncate font-medium">{f.name}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 flex-shrink-0">
-                        <span className="text-[10px] font-mono text-slate-400">
-                          {(f.size / 1024).toFixed(1)} KB
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewFile(f);
-                          }}
-                          className="p-1 rounded text-slate-400 hover:text-blue-400 hover:bg-slate-800 transition cursor-pointer"
-                          title="Inspect File"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveFile(i);
-                          }}
-                          className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800 transition cursor-pointer"
-                          title="Remove File"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* Execution & Live Pipeline Stepper */}
-        <div className="glass-panel p-6 space-y-5 flex flex-col justify-between">
-          <div className="space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              Step 2: Pipeline Execution & Status
-            </h3>
+        {/* RIGHT COLUMN: run parameters */}
+        <div className="card space-y-4">
+          {selectedBank === 'IDFC First Bank' && (
+            <>
+              {chipRow(
+                'Audit Type',
+                [
+                  { value: 'POA', label: 'POA' },
+                  { value: 'TAF', label: 'TAF' },
+                ],
+                idfcAuditType,
+                setIdfcAuditType
+              )}
+              {chipRow(
+                'Packaging Mode',
+                [
+                  { value: 'FOLDER', label: 'Folder' },
+                  { value: 'ZIP ONLY', label: 'Zip Only' },
+                  { value: 'BOTH', label: 'Both' },
+                ],
+                idfcOutputMode,
+                setIdfcOutputMode
+              )}
+            </>
+          )}
 
+          {isEquitas && (
+            <>
+              {chipRow(
+                'Output Format',
+                [
+                  { value: 'PDF ONLY', label: 'PDF Only' },
+                  { value: 'EXCEL ONLY', label: 'Excel Only' },
+                  { value: 'BOTH', label: 'Both' },
+                ],
+                equitasFormat,
+                setEquitasFormat
+              )}
+              <div>
+                <label htmlFor="equitasPack" className="field-label">Packaging Mode</label>
+                <select
+                  id="equitasPack"
+                  name="equitasPack"
+                  value={equitasPack}
+                  onChange={(e) => setEquitasPack(e.target.value)}
+                  className="input-field"
+                >
+                  {EQUITAS_PACKS.map((mode) => (
+                    <option key={mode} value={mode}>{mode}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {isArvog && (
+            <>
+              {chipRow(
+                'Output Format',
+                [
+                  { value: 'PDF ONLY', label: 'PDF Only' },
+                  { value: 'EXCEL ONLY', label: 'Excel Only' },
+                  { value: 'BOTH', label: 'Both' },
+                ],
+                arvogFormat,
+                setArvogFormat
+              )}
+              {chipRow(
+                'Packaging Mode',
+                [
+                  { value: 'FOLDER', label: 'Folder' },
+                  { value: 'ZIP ONLY', label: 'Zip Only' },
+                  { value: 'BOTH', label: 'Both' },
+                ],
+                arvogMode,
+                setArvogMode
+              )}
+            </>
+          )}
+
+          <p className="text-2xs text-slate-500 italic">
+            Files are available for download once generation finishes.
+          </p>
+
+          <div style={{ borderTop: '1px solid var(--border-subtle)' }} />
+
+          <div className="flex gap-2">
             <button
               onClick={handleExecute}
               disabled={isProcessing || stagedFiles.length === 0}
-              className={`relative overflow-hidden w-full py-3 px-4 rounded-xl text-xs font-bold text-white transition flex items-center justify-center space-x-2 shadow-lg cursor-pointer ${
-                isProcessing
-                  ? 'bg-slate-800 border border-slate-700 text-slate-200'
-                  : stagedFiles.length === 0
-                  ? 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed'
-                  : selectedBank === 'IDFC First Bank'
-                  ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
-                  : selectedBank.includes('Equitas')
-                  ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
-                  : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20'
-              }`}
+              className={`btn ${currentBankMeta.runClass} flex-1`}
+              style={currentBankMeta.runStyle}
             >
-              {isProcessing && (
-                <div
-                  className={`absolute inset-0 transition-all duration-300 pointer-events-none ${
-                    selectedBank === 'IDFC First Bank'
-                      ? 'bg-rose-600/50'
-                      : selectedBank.includes('Equitas')
-                      ? 'bg-emerald-600/50'
-                      : 'bg-indigo-600/50'
-                  }`}
-                  style={{ width: `${progressPct}%` }}
-                />
-              )}
               {isProcessing ? (
-                <div className="relative z-10 flex items-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span className="font-mono font-bold">Processing... {progressPct.toFixed(1)}% ({elapsedSec}s)</span>
-                </div>
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Generating… {progressPct}%</span>
+                </>
               ) : (
-                <div className="relative z-10 flex items-center space-x-2">
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>Execute Audit Generation ({stagedFiles.length} files)</span>
-                </div>
+                <>
+                  <Play className="w-4 h-4" />
+                  <span>Generate Reports ({stagedFiles.length})</span>
+                </>
               )}
             </button>
-
-            {isProcessing && (
-              <button
-                onClick={handleCancel}
-                className="w-full py-2 rounded-lg text-xs font-bold bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 transition-colors"
-              >
-                Stop Generation
-              </button>
-            )}
-
-            {isProcessing && (
-              <div className="space-y-2 pt-1">
-                <div className="flex justify-between text-[11px] font-mono text-slate-400">
-                  <span>Processing Execution Time ({elapsedSec}s)</span>
-                  <span className="font-bold text-slate-200">{progressPct}%</span>
-                </div>
-                <div className="w-full bg-[#090d16] h-2.5 rounded-full overflow-hidden border border-slate-800 shadow-inner">
-                  <div
-                    className={`h-full transition-all duration-300 ${
-                      selectedBank === 'IDFC First Bank'
-                        ? 'bg-rose-500'
-                        : selectedBank.includes('Equitas')
-                        ? 'bg-emerald-500'
-                        : 'bg-indigo-500'
-                    }`}
-                    style={{ width: `${progressPct}%` }}
-                  ></div>
-                </div>
-              </div>
-            )}
+            <button onClick={handleCancel} disabled={!isProcessing} className="btn btn-danger">
+              Stop
+            </button>
           </div>
 
-          {/* Terminal Console */}
-          <div className="bg-[#090d16] rounded-xl p-3.5 border border-slate-800/80 font-mono text-[11px] text-slate-300 space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar shadow-inner">
-            <div className="flex items-center justify-between text-slate-500 text-[10px] pb-1.5 border-b border-slate-900">
-              <div className="flex items-center space-x-1.5">
-                <Terminal className="w-3 h-3 text-blue-400" />
-                <span className="font-bold uppercase tracking-wider">Console Log</span>
+          {isProcessing && (
+            <div className="progress-container">
+              <div className="progress-ring-wrap">
+                <svg className="w-full h-full" viewBox="0 0 48 48">
+                  <circle cx="24" cy="24" r="20" strokeWidth="4" stroke="#232a36" fill="transparent" />
+                  <circle
+                    cx="24"
+                    cy="24"
+                    r="20"
+                    strokeWidth="4"
+                    stroke={currentBankMeta.dot}
+                    fill="transparent"
+                    strokeDasharray={RING}
+                    strokeDashoffset={RING - (RING * progressPct) / 100}
+                    strokeLinecap="round"
+                    className="transition-all duration-300"
+                  />
+                </svg>
+                <span className="progress-pct">{progressPct}%</span>
               </div>
-              <span className="text-slate-600">Confidential Processing</span>
+              <div className="space-y-1 min-w-0">
+                <span className="block text-xs font-bold text-slate-300 truncate">
+                  {cancelling ? 'Cancelling…' : progressStep}
+                </span>
+                <span className="block text-2xs text-slate-500 font-mono">Elapsed: {elapsedSec}s</span>
+              </div>
             </div>
-            {logs.length === 0 ? (
-              <span className="text-slate-600 italic">Ready to process audit job.</span>
-            ) : (
-              logs.map((l, idx) => <div key={idx}>{renderLogText(l)}</div>)
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Generated Outputs Panel */}
+      {/* Generated Outputs */}
       {outputDir && (
-        <div className="glass-panel p-6 space-y-6 bg-emerald-950/20 border-emerald-800/60 animate-in fade-in duration-300">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-emerald-800/40 pb-4">
-            <div className="flex items-center space-x-3">
-              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
+        <div className="card space-y-4">
+          <div
+            // web.css redefines .flex-col, and being imported after Tailwind it
+            // wins over a `sm:flex-row` -- so this row is never a column.
+            className="flex flex-wrap items-center justify-between gap-4 pb-4"
+            style={{ borderBottom: '1px solid var(--border-subtle)' }}
+          >
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="w-6 h-6 shrink-0" style={{ color: 'var(--accent-emerald)' }} />
               <div>
-                <h3 className="text-base font-bold text-slate-100">
-                  Audit Reports Generated Successfully
-                </h3>
+                <h3 className="text-sm font-bold text-slate-200">Reports Generated</h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Output directory contains {outputFiles.length} generated files (.pdf, .zip, .xlsx). Zero trace retained on disk.
+                  {outputFiles.length} file(s) ready — download them one by one, or take the whole folder as a ZIP.
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={handleResetAll}
-                className="px-4 py-2.5 rounded-xl border border-rose-600/60 bg-gradient-to-r from-rose-950/90 via-slate-900 to-amber-950/90 hover:from-rose-900 hover:to-amber-900 text-rose-200 hover:text-white text-xs font-extrabold flex items-center space-x-2 cursor-pointer transition shadow-lg group"
-              >
-                <RotateCcw className="w-4 h-4 text-rose-400 group-hover:rotate-180 transition duration-500" />
-                <span>Start New Audit Batch</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={handleResetAll} className="btn btn-ghost btn-sm">
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Start New Batch</span>
               </button>
-
               <a
                 href={`/api/download?path=${encodeURIComponent(outputDir)}`}
                 download="audit_reports_all.zip"
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center space-x-2 transition"
+                className="btn btn-success btn-sm"
               >
-                <Archive className="w-4 h-4" />
-                <span>Download All (ZIP Archive)</span>
+                <Archive className="w-3.5 h-3.5" />
+                <span>Download All (ZIP)</span>
               </a>
             </div>
           </div>
 
-          {/* Filter Pills */}
-          <div className="flex items-center space-x-2">
-            <span className="text-xs font-semibold text-slate-400 mr-1">Filter Files:</span>
-            <button
-              onClick={() => setFileFilter('ALL')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${
-                fileFilter === 'ALL' ? 'bg-blue-600 text-white' : 'bg-[#090d16] text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              All ({outputFiles.length})
-            </button>
-            <button
-              onClick={() => setFileFilter('PDF')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${
-                fileFilter === 'PDF' ? 'bg-emerald-600 text-white' : 'bg-[#090d16] text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              PDFs ({pdfFiles.length})
-            </button>
-            <button
-              onClick={() => setFileFilter('ZIP')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${
-                fileFilter === 'ZIP' ? 'bg-purple-600 text-white' : 'bg-[#090d16] text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              ZIPs ({zipFiles.length})
-            </button>
-            <button
-              onClick={() => setFileFilter('EXCEL')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${
-                fileFilter === 'EXCEL' ? 'bg-amber-600 text-white' : 'bg-[#090d16] text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Excel ({excelFiles.length})
-            </button>
+          <div className="chip-group w-max">
+            {([
+              { value: 'ALL', label: `All (${outputFiles.length})` },
+              { value: 'PDF', label: `PDFs (${pdfFiles.length})` },
+              { value: 'ZIP', label: `ZIPs (${zipFiles.length})` },
+              { value: 'EXCEL', label: `Excel (${excelFiles.length})` },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setFileFilter(opt.value)}
+                className={`chip-btn whitespace-nowrap${fileFilter === opt.value ? ' selected' : ''}`}
+                style={fileFilter === opt.value ? selectedChip : undefined}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
 
-          {/* Output Files Grid */}
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 overflow-y-auto custom-scrollbar">
-              {filteredDisplayFiles.map((file, idx) => (
-                <div
-                  key={idx}
-                  className="p-3.5 rounded-xl bg-[#090d16] border border-slate-800 flex items-center justify-between hover:border-slate-700 transition"
-                >
-                  <div className="flex items-center space-x-3 truncate pr-2">
-                    {file.name.endsWith('.pdf') ? (
-                      <FileText className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    ) : file.name.endsWith('.zip') ? (
-                      <Archive className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                    ) : (
-                      <FileSpreadsheet className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    )}
-                    <div className="truncate">
-                      <p className="text-xs font-bold text-slate-200 truncate">{file.name}</p>
-                      <p className="text-[10px] font-mono text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2 flex-shrink-0">
-                    <button
-                      onClick={() => setDocViewerState({ path: file.path, name: file.name })}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center space-x-1 transition cursor-pointer"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Preview</span>
-                    </button>
-                    <a
-                      href={`/api/download?path=${encodeURIComponent(file.path)}`}
-                      download={file.name}
-                      className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-sm transition"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download</span>
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="file-list-container" style={{ maxHeight: '20rem' }}>
+            <table className="preview-table">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Size</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDisplayFiles.map((file, idx) => (
+                  <tr key={idx}>
+                    <td>
+                      <span className="flex items-center gap-2">
+                        {file.name.endsWith('.pdf') ? (
+                          <FileText className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent-blue)' }} />
+                        ) : file.name.endsWith('.zip') ? (
+                          <Archive className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent-violet)' }} />
+                        ) : (
+                          <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent-emerald)' }} />
+                        )}
+                        <span className="truncate" style={{ maxWidth: '22rem' }}>{file.name}</span>
+                      </span>
+                    </td>
+                    <td>{(file.size / 1024).toFixed(1)} KB</td>
+                    <td>
+                      <span className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setDocViewerState({ path: file.path, name: file.name })}
+                          className="btn btn-ghost btn-sm cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Preview</span>
+                        </button>
+                        <a
+                          href={`/api/download?path=${encodeURIComponent(file.path)}`}
+                          download={file.name}
+                          className="btn btn-primary btn-sm"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download</span>
+                        </a>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

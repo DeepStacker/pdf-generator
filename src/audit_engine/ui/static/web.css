@@ -1,60 +1,9 @@
 /* ============================================================
-   AUDIT ENGINE WEB — Premium Dark Glassmorphism Design System
+   GSS-MIS — Component styles
+   ============================================================
+   Shared by both front ends. The palette these rules draw from
+   lives in tokens.css, which must load first.
    ============================================================ */
-
-/* --- CSS Custom Properties --- */
-:root {
-  --bg-deep: #0a0d12;
-  --bg-surface: #10141b;
-  --bg-card: rgba(20, 25, 34, 0.65);
-  --bg-card-hover: rgba(27, 33, 44, 0.8);
-  --bg-elevated: rgba(35, 42, 54, 0.5);
-  --bg-input: rgba(10, 12, 16, 0.8);
-  --border-subtle: rgba(58, 68, 82, 0.25);
-  --border-active: rgba(92, 124, 250, 0.4);
-  --text-primary: #e9ecf1;
-  --text-secondary: #a6afbd;
-  --text-muted: #7c8695;
-  /* Lightened from #5b6472 -- that measured 3.25:1 against the canvas, under
-     the 4.5:1 AA floor for the small caption/label text this token is
-     actually used for (stat labels, table headers, sub-captions). */
-  --text-dim: #717b89;
-  --accent-blue: #5c7cfa;
-  --accent-amber: #c7841f;
-  --accent-emerald: #34c98c;
-  --accent-violet: #8b7fe8;
-  --accent-rose: #f2555a;
-  --accent-sky: #4c9aff;
-  /* --accent-blue/emerald/amber above are tuned to read well as TEXT and
-     badge fills on a dark background -- which is the opposite of what a
-     SOLID button needs. White text at 0.8rem bold on the un-darkened
-     --accent-emerald measured 2.1:1, nowhere near the 4.5:1 AA floor. These
-     three are the same hues, darkened only as far as needed for white text
-     on top of them to pass, and are used solely for that: .btn-primary,
-     .btn-success, .chip-btn.selected and their equivalents in app.js/HTML. */
-  --accent-blue-fill: #506cdb;
-  --accent-emerald-fill: #18855b;
-  --accent-amber-fill: #9f6a19;
-  /* A hair tighter than the previous 8/12/16/20 scale — enough to read as
-     considered rather than soft/bubbly, without breaking anyone's sense of
-     where a corner is. */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  /* A standard two-layer elevation shadow, not a colored glow — the card
-     lifts off the page because of light and shadow, not because it's
-     radiating its own accent color. */
-  --shadow-card: 0 1px 2px rgba(0,0,0,0.24), 0 8px 20px -6px rgba(0,0,0,0.32);
-  /* Visible, brand-neutral focus ring for keyboard navigation. Used by
-     :focus-visible rules below rather than the browser default outline,
-     which this system's dark backgrounds render nearly invisible. */
-  --focus-ring: 0 0 0 2px var(--bg-deep), 0 0 0 4px rgba(92, 124, 250, 0.6);
-  --transition-fast: 150ms ease;
-  --transition-smooth: 250ms cubic-bezier(0.4, 0, 0.2, 1);
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-}
 
 /* --- Reset & Base --- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -448,19 +397,6 @@ main.flex-1 { min-height: 0; }
 .drop-zone-title { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
 .drop-zone-sub { font-size: 0.72rem; color: var(--text-dim); margin-top: 0.3rem; }
 
-/* --- Console Terminal --- */
-.console-terminal {
-  background: rgba(10, 13, 18, 0.85);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  line-height: 1.7;
-  padding: 1rem 1.25rem;
-  height: 14rem;
-  overflow-y: auto;
-  color: var(--text-dim);
-}
 
 /* --- Progress Ring --- */
 .progress-container {
@@ -719,6 +655,7 @@ svg.icon {
 .badge-amber { background: rgba(199, 132, 31,0.1); color: var(--accent-amber); border: 1px solid rgba(199, 132, 31,0.2); }
 .badge-emerald { background: rgba(52, 201, 140,0.1); color: var(--accent-emerald); border: 1px solid rgba(52, 201, 140,0.2); }
 .badge-violet { background: rgba(139, 127, 232,0.1); color: var(--accent-violet); border: 1px solid rgba(139, 127, 232,0.2); }
+.badge-rose { background: rgba(242, 85, 90,0.1); color: var(--accent-rose); border: 1px solid rgba(242, 85, 90,0.2); }
 
 /* Label */
 .field-label {
@@ -788,6 +725,25 @@ svg.icon {
   border-radius: var(--radius-sm);
   background: var(--bg-input);
 }
+
+/* One row inside .file-list-container. The desktop carried this as
+   .arvog-file-tile in index.html's own inline <style> -- emerald glow and
+   all -- so the web build had nothing to reuse. Same row, flat, shared. */
+.file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.file-row:hover { border-color: var(--border-active); background: var(--bg-card-hover); }
+/* The row whose preview is open. It used to be hardcoded emerald, so a
+   file on the IDFC or Equitas screen lit up in Arvog's colour. */
+.file-row.active-preview { border-color: var(--border-active); background: var(--bg-card-hover); }
 
 /* Donut Chart */
 .donut-chart-wrap {
@@ -908,7 +864,6 @@ select.input-field {
   .tab-content.process-layout .drag-zone-compact {
     padding: 0.75rem !important;
   }
-  .console-terminal { height: 8rem; font-size: 0.6rem; padding: 0.75rem; }
   .progress-container { flex-direction: column; gap: 1rem; text-align: center; }
   .card { padding: 1rem; }
   .card-compact { padding: 0.85rem; }
@@ -947,7 +902,6 @@ select.input-field {
   .btn-sm { padding: 0.3rem 0.5rem; font-size: 0.6rem; }
   .card { padding: 0.75rem; border-radius: 10px; }
   .section-title { font-size: 0.95rem; }
-  .console-terminal { height: 6rem; font-size: 0.55rem; padding: 0.5rem; }
   .drop-zone { padding: 1rem 0.75rem; }
   .drop-zone-title { font-size: 0.7rem; }
   .drop-zone-sub { font-size: 0.6rem; }

@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Header, ActiveTab } from './components/Header';
+import { Sidebar, ActiveTab } from './components/Sidebar';
+
+// Served by audit_engine_web, which substitutes the real number into the meta
+// tag. In `vite dev` the placeholder is still there, so show nothing rather
+// than the literal "{{VERSION}}".
+const rawVersion = document.querySelector('meta[name="app-version"]')?.getAttribute('content') ?? '';
+const APP_VERSION = rawVersion.startsWith('{{') ? '' : rawVersion;
 import { TabBankAudit } from './components/TabBankAudit';
 import { TabConsolidation } from './components/TabConsolidation';
 import { TabStats } from './components/TabStats';
@@ -26,13 +32,17 @@ export default function App() {
     return 'audit';
   };
 
-  const getInitialTheme = (): 'dark' | 'light' => {
-    const saved = localStorage.getItem('audit_engine_theme');
-    return saved === 'light' ? 'light' : 'dark';
-  };
-
   const [activeTab, setActiveTabState] = useState<ActiveTab>(getInitialTab);
-  const [theme, setTheme] = useState<'dark' | 'light'>(getInitialTheme);
+
+  // The sidebar selects the bank, so it is owned here rather than inside the
+  // audit screen -- the same shape as the desktop, where the bank is a nav item.
+  const [selectedBank, setSelectedBankState] = useState<string>(
+    () => localStorage.getItem('bank_audit_selectedBank') || 'IDFC First Bank'
+  );
+  const setSelectedBank = (bank: string) => {
+    setSelectedBankState(bank);
+    localStorage.setItem('bank_audit_selectedBank', bank);
+  };
 
   // Sync tab changes with URL hash & localStorage
   const setActiveTab = (tab: ActiveTab) => {
@@ -41,24 +51,8 @@ export default function App() {
     localStorage.setItem('audit_engine_active_tab', tab);
   };
 
-  // Sync theme changes with localStorage & body class
-  const handleThemeChange = (newTheme: 'dark' | 'light') => {
-    setTheme(newTheme);
-    localStorage.setItem('audit_engine_theme', newTheme);
-    if (newTheme === 'light') {
-      document.documentElement.classList.add('light-mode');
-    } else {
-      document.documentElement.classList.remove('light-mode');
-    }
-  };
-
   // Listen for browser Back / Forward / Refresh navigation
   useEffect(() => {
-    // Initial theme setup
-    if (theme === 'light') {
-      document.documentElement.classList.add('light-mode');
-    }
-
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
       if (isTab(hash)) {
@@ -73,7 +67,7 @@ export default function App() {
       window.removeEventListener('hashchange', handleHashChange);
       window.removeEventListener('popstate', handleHashChange);
     };
-  }, [theme]);
+  }, []);
 
   const handleUploadFiles = async (files: File[]): Promise<string[]> => {
     // Uploads run together rather than one after another, and a file that
@@ -129,36 +123,40 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${theme === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-[#0b0f17] text-slate-100'}`}>
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} theme={theme} setTheme={handleThemeChange} />
+    <div className="app-shell">
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        selectedBank={selectedBank}
+        setSelectedBank={setSelectedBank}
+        version={APP_VERSION}
+      />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
-        <div className={activeTab === 'audit' ? 'block' : 'hidden'}>
-          <TabBankAudit onRunReport={handleRunReport} onUploadFiles={handleUploadFiles} />
-        </div>
-        <div className={activeTab === 'consolidation' ? 'block' : 'hidden'}>
-          <TabConsolidation onConsolidateRun={handleConsolidateRun} onUploadFiles={handleUploadFiles} />
-        </div>
-        <div className={activeTab === 'stats' ? 'block' : 'hidden'}>
-          <TabStats />
-        </div>
-        <div className={activeTab === 'report' ? 'block' : 'hidden'}>
-          <TabReportAutomation />
-        </div>
-        <div className={activeTab === 'flatten' ? 'block' : 'hidden'}>
-          <TabFlatten />
-        </div>
-        <div className={activeTab === 'history' ? 'block' : 'hidden'}>
-          <TabHistory />
-        </div>
-        <div className={activeTab === 'settings' ? 'block' : 'hidden'}>
-          <TabSettings />
-        </div>
-      </main>
-
-      <footer className="bg-[#070a12] border-t border-slate-800/80 py-4 px-6 text-center text-xs text-slate-500 mt-auto font-medium">
-        FinConsolidate Pro Operations Suite • Enterprise Financial Consolidation System
-      </footer>
+      <div className="app-main">
+        <main className="main-content">
+          <div className={activeTab === 'audit' ? 'block' : 'hidden'}>
+            <TabBankAudit onRunReport={handleRunReport} onUploadFiles={handleUploadFiles} selectedBank={selectedBank} />
+          </div>
+          <div className={activeTab === 'consolidation' ? 'block' : 'hidden'}>
+            <TabConsolidation onConsolidateRun={handleConsolidateRun} onUploadFiles={handleUploadFiles} />
+          </div>
+          <div className={activeTab === 'stats' ? 'block' : 'hidden'}>
+            <TabStats />
+          </div>
+          <div className={activeTab === 'report' ? 'block' : 'hidden'}>
+            <TabReportAutomation />
+          </div>
+          <div className={activeTab === 'flatten' ? 'block' : 'hidden'}>
+            <TabFlatten />
+          </div>
+          <div className={activeTab === 'history' ? 'block' : 'hidden'}>
+            <TabHistory />
+          </div>
+          <div className={activeTab === 'settings' ? 'block' : 'hidden'}>
+            <TabSettings />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

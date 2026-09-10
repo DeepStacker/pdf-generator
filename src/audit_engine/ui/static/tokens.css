@@ -1,0 +1,63 @@
+/* ============================================================
+   GSS-MIS — Design tokens
+   ============================================================
+   The single source of truth for the palette, shared by BOTH
+   front ends: the desktop shell inlines this file alongside
+   web.css, and web/src/index.css imports this exact path. A
+   colour changed here changes in both apps or in neither --
+   which is the only way the two stay the same product.
+   ============================================================ */
+
+/* --- CSS Custom Properties --- */
+:root {
+  --bg-deep: #0a0d12;
+  --bg-surface: #10141b;
+  --bg-card: rgba(20, 25, 34, 0.65);
+  --bg-card-hover: rgba(27, 33, 44, 0.8);
+  --bg-elevated: rgba(35, 42, 54, 0.5);
+  --bg-input: rgba(10, 12, 16, 0.8);
+  --border-subtle: rgba(58, 68, 82, 0.25);
+  --border-active: rgba(92, 124, 250, 0.4);
+  --text-primary: #e9ecf1;
+  --text-secondary: #a6afbd;
+  --text-muted: #7c8695;
+  /* Lightened from #5b6472 -- that measured 3.25:1 against the canvas, under
+     the 4.5:1 AA floor for the small caption/label text this token is
+     actually used for (stat labels, table headers, sub-captions). */
+  --text-dim: #717b89;
+  --accent-blue: #5c7cfa;
+  --accent-amber: #c7841f;
+  --accent-emerald: #34c98c;
+  --accent-violet: #8b7fe8;
+  --accent-rose: #f2555a;
+  --accent-sky: #4c9aff;
+  /* --accent-blue/emerald/amber above are tuned to read well as TEXT and
+     badge fills on a dark background -- which is the opposite of what a
+     SOLID button needs. White text at 0.8rem bold on the un-darkened
+     --accent-emerald measured 2.1:1, nowhere near the 4.5:1 AA floor. These
+     three are the same hues, darkened only as far as needed for white text
+     on top of them to pass, and are used solely for that: .btn-primary,
+     .btn-success, .chip-btn.selected and their equivalents in app.js/HTML. */
+  --accent-blue-fill: #506cdb;
+  --accent-emerald-fill: #18855b;
+  --accent-amber-fill: #9f6a19;
+  /* A hair tighter than the previous 8/12/16/20 scale — enough to read as
+     considered rather than soft/bubbly, without breaking anyone's sense of
+     where a corner is. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  /* A standard two-layer elevation shadow, not a colored glow — the card
+     lifts off the page because of light and shadow, not because it's
+     radiating its own accent color. */
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.24), 0 8px 20px -6px rgba(0,0,0,0.32);
+  /* Visible, brand-neutral focus ring for keyboard navigation. Used by
+     :focus-visible rules below rather than the browser default outline,
+     which this system's dark backgrounds render nearly invisible. */
+  --focus-ring: 0 0 0 2px var(--bg-deep), 0 0 0 4px rgba(92, 124, 250, 0.6);
+  --transition-fast: 150ms ease;
+  --transition-smooth: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}

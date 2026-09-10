@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UploadCloud, FileSpreadsheet, Trash2, Play, CheckCircle2, AlertTriangle, RefreshCw, Download, Layers, TrendingUp, Users, Search, Eye, Check, Loader2 } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, X, Play, CheckCircle2, AlertTriangle, RefreshCw, Download, Layers, TrendingUp, Users, Search, Eye, Check, Loader2, Trash2 } from 'lucide-react';
 import { DocumentViewerModal } from './DocumentViewerModal';
 
 export interface FileSummary {
@@ -34,6 +34,11 @@ export interface TabConsolidationProps {
   onUploadFiles: (files: File[]) => Promise<string[]>;
 }
 
+/* Progress ring geometry: .progress-ring-wrap is 72x72 and already rotates
+   the svg -90deg, so the arc starts at twelve o'clock. */
+const RING_R = 30;
+const RING_C = 2 * Math.PI * RING_R;
+
 export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidateRun, onUploadFiles }) => {
   const [stagedItems, setStagedItems] = useState<StagedItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -43,6 +48,8 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
   const [searchLog, setSearchLog] = useState('');
   const [consolidationPct, setConsolidationPct] = useState<number>(0);
   const [progressText, setProgressText] = useState<string>('');
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Preview Modal state
   const [previewModal, setPreviewModal] = useState<{ path: string; name: string } | null>(null);
@@ -106,6 +113,7 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       addFilesToQueue(Array.from(e.dataTransfer.files));
     }
@@ -229,164 +237,170 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
 
   const totalSizeMb = (stagedItems.reduce((acc, i) => acc + i.file.size, 0) / (1024 * 1024)).toFixed(2);
   const readyCount = stagedItems.filter((i) => i.status === 'ready').length;
+  const failedCount = stagedItems.filter((i) => i.status === 'error').length;
 
   return (
     <div className="space-y-6">
-      {/* Title Header */}
-      <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-100 tracking-tight flex items-center space-x-2">
-          <Layers className="w-5 h-5 text-blue-400" />
-          <span>Multi-Bank Consolidation Engine</span>
-        </h2>
-        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-0.5 rounded border border-emerald-800/60 font-semibold">
-          Instant Pre-Parse Active
-        </span>
+      <div className="section-header">
+        <div>
+          <h2 className="section-title">Batch Workbook Consolidation</h2>
+          <p className="text-xs text-slate-400 mt-1">
+            Upload Payment Tracker and Master Data client workbooks to consolidate every record into one standard schema.
+          </p>
+        </div>
+        <span className="section-badge badge-emerald">Instant Pre-Parse</span>
       </div>
 
+      {/* The only place a failure is visible, so it sits above everything. */}
       {error && (
-        <div className="p-4 rounded-xl bg-red-950/50 border border-red-800/60 text-red-300 text-xs flex items-center space-x-2 animate-in fade-in duration-200">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0 text-red-400" />
-          <span>{error}</span>
+        <div className="validation-box flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+          <span className="text-rose-400">{error}</span>
         </div>
       )}
 
       {!summary ? (
         /* Upload & Staging View */
         <div className="space-y-6">
-          {/* Dropzone */}
           <div
-            onDragOver={(e) => e.preventDefault()}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
-            className="glass-panel p-10 rounded-2xl border-2 border-dashed border-slate-700 hover:border-blue-500/50 transition flex flex-col items-center justify-center text-center relative group cursor-pointer"
+            onClick={() => fileInputRef.current?.click()}
+            className={`drop-zone ${dragging ? 'dragover' : ''}`}
           >
             <input
+              ref={fileInputRef}
               type="file"
               id="consolidationFileInput"
               name="consolidationFileInput"
               multiple
               accept=".xlsx,.xls"
               onChange={handleFileChange}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+              className="hidden"
             />
-            <div className="flex flex-col items-center justify-center space-y-3 pointer-events-none">
-              <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 group-hover:scale-110 transition duration-200">
-                <UploadCloud className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-200">Drag & Drop Client Excel Workbooks Here</h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Click anywhere in this box or drop bank payment trackers (.xlsx / .xls).
-                </p>
-              </div>
-              <label htmlFor="consolidationFileInput" className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-200 transition border border-slate-700 cursor-pointer">
-                Browse Files
-              </label>
-            </div>
+            <UploadCloud className="drop-zone-icon w-8 h-8" />
+            <span className="drop-zone-title">Upload Client Excel Workbooks</span>
+            <span className="drop-zone-sub">Drag &amp; drop .xlsx files here, or click to select from your computer</span>
+            <button type="button" className="btn btn-ghost btn-sm mt-3">Select Workbooks</button>
           </div>
 
-          {/* Staged Files List */}
+          {/* Staged Files */}
           {stagedItems.length > 0 && (
-            <div className="glass-panel rounded-2xl overflow-hidden border border-slate-800">
-              <div className="p-4 border-b border-slate-800 bg-[#0f172a] flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                    Staged Workbooks ({stagedItems.length})
+            <div className="card space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                    Staged Client Workbooks ({stagedItems.length})
+                  </h3>
+                  <span className="section-badge badge-blue font-mono">{totalSizeMb} MB</span>
+                  <span className="section-badge badge-emerald font-mono">
+                    {readyCount} / {stagedItems.length} pre-parsed
                   </span>
-                  <span className="text-[10px] font-mono text-blue-400 bg-blue-950 px-2 py-0.5 rounded border border-blue-800 font-bold">
-                    {totalSizeMb} MB Total
-                  </span>
-                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800 font-bold">
-                    {readyCount} / {stagedItems.length} Pre-Parsed
-                  </span>
+                  {failedCount > 0 && (
+                    <span className="section-badge badge-rose font-mono">{failedCount} failed</span>
+                  )}
                 </div>
-                <button
-                  onClick={handleClear}
-                  className="text-xs text-slate-400 hover:text-red-400 transition flex items-center space-x-1 cursor-pointer"
-                >
+                <button onClick={handleClear} className="btn btn-ghost btn-sm">
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Clear Queue</span>
+                  <span>Clear Batch</span>
                 </button>
               </div>
 
-              <div className="max-h-60 overflow-y-auto custom-scrollbar divide-y divide-slate-800/80 bg-[#090d16]">
+              <div className="file-list-container space-y-1 p-1.5">
                 {stagedItems.map((item) => (
-                  <div key={item.id} className="px-4 py-3 flex items-center justify-between text-xs hover:bg-slate-800/30">
-                    <div className="flex items-center space-x-2.5 truncate">
-                      <FileSpreadsheet className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                      <span className="truncate font-medium text-slate-200">{item.file.name}</span>
-                      {item.clientName && (
-                        <span className="text-[10px] font-mono text-indigo-300 bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-800/60">
-                          {item.clientName}
+                  <div key={item.id} className="file-row">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <FileSpreadsheet className="w-4 h-4 text-blue-400 shrink-0" />
+                      <div className="min-w-0">
+                        <span className="block text-xs font-semibold text-slate-200 truncate" title={item.file.name}>
+                          {item.file.name}
                         </span>
-                      )}
+                        <span className="block text-2xs font-mono text-slate-500">
+                          {(item.file.size / 1024).toFixed(1)} KB
+                          {item.clientName ? ` · ${item.clientName}` : ''}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-3">
-                      <span className="text-[10px] font-mono text-slate-400">{(item.file.size / 1024).toFixed(1)} KB</span>
 
-                      {/* Status Badges */}
+                    <div className="flex items-center gap-2 shrink-0">
                       {item.status === 'pending' || item.status === 'uploading' ? (
-                        <span className="text-[10px] font-mono text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/60 flex items-center space-x-1">
-                          <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
-                          <span>Pre-parsing...</span>
+                        <span className="section-badge badge-amber inline-flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Pre-parsing</span>
                         </span>
                       ) : item.status === 'ready' ? (
-                        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/60 flex items-center space-x-1 font-bold">
-                          <Check className="w-3 h-3 text-emerald-400" />
-                          <span>Pre-parsed (Instant)</span>
+                        <span className="section-badge badge-emerald inline-flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          <span>Ready</span>
                         </span>
                       ) : (
-                        <span className="text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800/60">
-                          Upload Failed
+                        <span className="section-badge badge-rose inline-flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Upload failed</span>
                         </span>
                       )}
 
-                      <button onClick={() => handleRemoveItem(item.id)} className="text-slate-400 hover:text-red-400 transition cursor-pointer">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button
+                        onClick={() => handleRemoveItem(item.id)}
+                        className="btn btn-ghost btn-sm"
+                        aria-label={`Remove ${item.file.name}`}
+                      >
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="p-4 border-t border-slate-800 bg-[#0f172a] flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-col space-y-1">
-                  <span className="text-xs text-slate-300 font-medium">
-                    {isProcessing
-                      ? progressText || `Consolidating batch (${consolidationPct.toFixed(1)}%)...`
-                      : readyCount === stagedItems.length
-                      ? 'All files pre-parsed in memory. Ready for instant batch consolidation!'
-                      : 'Background pre-parsing in progress...'}
-                  </span>
-                  {isProcessing && (
-                    <div className="w-64 bg-[#090d16] h-1.5 rounded-full overflow-hidden border border-slate-800">
-                      <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${consolidationPct}%` }}></div>
-                    </div>
-                  )}
+              {isProcessing && (
+                <div className="progress-container">
+                  <div className="progress-ring-wrap">
+                    <svg width="72" height="72">
+                      <circle
+                        cx="36" cy="36" r={RING_R} fill="transparent" strokeWidth="6"
+                        style={{ stroke: 'var(--bg-elevated)' }}
+                      />
+                      <circle
+                        cx="36" cy="36" r={RING_R} fill="transparent" strokeWidth="6" strokeLinecap="round"
+                        strokeDasharray={RING_C}
+                        strokeDashoffset={RING_C * (1 - Math.min(Math.max(consolidationPct, 0), 100) / 100)}
+                        style={{ stroke: 'var(--accent-blue)', transition: 'stroke-dashoffset 250ms ease' }}
+                      />
+                    </svg>
+                    <span className="progress-pct">{Math.round(consolidationPct)}%</span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-xs font-bold text-slate-200 truncate">
+                      {progressText || 'Consolidating batch…'}
+                    </span>
+                    <span className="block text-xs text-slate-400 mt-1">
+                      {stagedItems.length} workbook{stagedItems.length === 1 ? '' : 's'} in this batch
+                    </span>
+                  </div>
                 </div>
+              )}
 
-                <button
-                  onClick={handleConsolidate}
-                  disabled={isProcessing}
-                  className={`relative overflow-hidden px-6 py-2.5 rounded-xl text-xs font-bold text-white transition flex items-center justify-center space-x-2 cursor-pointer shadow-lg min-w-[200px] ${
-                    isProcessing ? 'bg-slate-800 border border-blue-500/40 text-slate-200' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20'
-                  }`}
-                >
-                  {isProcessing && (
-                    <div
-                      className="absolute inset-0 bg-blue-600/50 transition-all duration-300 pointer-events-none"
-                      style={{ width: `${consolidationPct}%` }}
-                    />
-                  )}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-xs text-slate-400">
+                  {isProcessing
+                    ? progressText || 'Consolidating batch…'
+                    : readyCount === stagedItems.length
+                    ? 'All workbooks pre-parsed. Ready for batch consolidation.'
+                    : 'Pre-parsing workbooks in the background…'}
+                </span>
+
+                <button onClick={handleConsolidate} disabled={isProcessing} className="btn btn-primary">
                   {isProcessing ? (
-                    <div className="relative z-10 flex items-center space-x-2">
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span className="font-mono font-bold">{consolidationPct.toFixed(1)}%</span>
-                    </div>
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span className="font-mono">{consolidationPct.toFixed(1)}%</span>
+                    </>
                   ) : (
-                    <div className="relative z-10 flex items-center space-x-2">
-                      <Play className="w-3.5 h-3.5 fill-current" />
+                    <>
+                      <Play className="w-3.5 h-3.5" />
                       <span>Run Batch Consolidation</span>
-                    </div>
+                    </>
                   )}
                 </button>
               </div>
@@ -395,25 +409,21 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
         </div>
       ) : (
         /* Summary Dashboard */
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <div className="glass-panel p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 bg-emerald-950/20 border-emerald-800/60 shadow-lg">
-            <div className="flex items-center space-x-3.5">
-              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
+        <div className="space-y-6">
+          <div className="card flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="w-6 h-6 shrink-0 text-emerald-400" />
               <div>
-                <h3 className="text-base font-bold text-slate-100">Batch Processing Complete</h3>
+                <h3 className="text-sm font-bold text-slate-200">Batch Processing Complete</h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Successfully compiled {summary.file_summaries.length} client workbooks into standard consolidated schema. Zero storage retained on disk.
+                  Consolidated {summary.file_summaries.length} client workbook
+                  {summary.file_summaries.length === 1 ? '' : 's'} into the standard schema. Nothing was retained on disk.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleReset}
-                className="px-4 py-2.5 rounded-xl border border-slate-700 bg-[#090d16] hover:bg-slate-800 text-slate-300 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer transition"
-              >
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={handleReset} className="btn btn-ghost btn-sm">
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Process New Batch</span>
               </button>
@@ -421,9 +431,9 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
               {outputPath && (
                 <button
                   onClick={() => setPreviewModal({ path: outputPath, name: outputPath ? outputPath.split(/[\\/]/).pop()! : 'consolidated.xlsx' })}
-                  className="px-4 py-2.5 rounded-xl border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-bold flex items-center space-x-1.5 cursor-pointer transition"
+                  className="btn btn-ghost btn-sm"
                 >
-                  <Eye className="w-4 h-4" />
+                  <Eye className="w-3.5 h-3.5" />
                   <span>Preview Master Excel</span>
                 </button>
               )}
@@ -432,9 +442,9 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
                 <a
                   href={`/api/download?path=${encodeURIComponent(outputPath)}`}
                   download={outputPath ? outputPath.split(/[\\/]/).pop()! : 'consolidated.xlsx'}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/20 flex items-center space-x-2 transition"
+                  className="btn btn-primary btn-sm"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5" />
                   <span>Export Consolidated Workbook (.xlsx)</span>
                 </a>
               )}
@@ -443,55 +453,50 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
 
           {/* Metric Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-blue-500 space-y-1">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[10px] font-bold uppercase tracking-wider">Total Consolidated Pay</span>
+            <div className="stat-card">
+              <div className="flex items-center justify-between gap-2">
+                <span className="stat-label">Total Consolidated Pay</span>
                 <TrendingUp className="w-4 h-4 text-blue-400" />
               </div>
-              <p className="text-2xl font-bold font-mono text-slate-100">
-                {formatCurrency(summary.total_pay)}
-              </p>
+              <span className="stat-value font-mono truncate">{formatCurrency(summary.total_pay)}</span>
             </div>
 
-            <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-indigo-500 space-y-1">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[10px] font-bold uppercase tracking-wider">Payment Tracker Rows</span>
-                <FileSpreadsheet className="w-4 h-4 text-indigo-400" />
+            <div className="stat-card">
+              <div className="flex items-center justify-between gap-2">
+                <span className="stat-label">Payment Tracker Rows</span>
+                <FileSpreadsheet className="w-4 h-4 text-violet-400" />
               </div>
-              <p className="text-2xl font-bold font-mono text-slate-100">
-                {summary.pt_rows.toLocaleString()}
-              </p>
+              <span className="stat-value font-mono">{summary.pt_rows.toLocaleString()}</span>
             </div>
 
-            <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-purple-500 space-y-1">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[10px] font-bold uppercase tracking-wider">Master Data Assignments</span>
-                <Layers className="w-4 h-4 text-purple-400" />
+            <div className="stat-card">
+              <div className="flex items-center justify-between gap-2">
+                <span className="stat-label">Master Data Assignments</span>
+                <Layers className="w-4 h-4 text-sky-400" />
               </div>
-              <p className="text-2xl font-bold font-mono text-slate-100">
-                {summary.md_rows.toLocaleString()}
-              </p>
+              <span className="stat-value font-mono">{summary.md_rows.toLocaleString()}</span>
             </div>
 
-            <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-emerald-500 space-y-1">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[10px] font-bold uppercase tracking-wider">Validated Clients</span>
+            <div className="stat-card">
+              <div className="flex items-center justify-between gap-2">
+                <span className="stat-label">Validated Clients</span>
                 <Users className="w-4 h-4 text-emerald-400" />
               </div>
-              <p className="text-2xl font-bold font-mono text-slate-100">
-                {summary.pt_clients.length} Clients
-              </p>
+              <span className="stat-value font-mono">{summary.pt_clients.length}</span>
             </div>
           </div>
 
           {/* Parsing Log Table */}
-          <div className="glass-panel rounded-2xl overflow-hidden border border-slate-800">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-[#0f172a]">
-              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                Workbook Parsing & Schema Mapping Log
+          <div className="card card-flush">
+            <div
+              className="p-4 border-b flex flex-wrap items-center justify-between gap-3"
+              style={{ borderColor: 'var(--border-subtle)' }}
+            >
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Workbook Parsing &amp; Schema Mapping Log
               </h4>
               <div className="relative w-64">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-500" />
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                 <input
                   type="text"
                   id="consolidationSearchLog"
@@ -500,37 +505,32 @@ export const TabConsolidation: React.FC<TabConsolidationProps> = ({ onConsolidat
                   placeholder="Filter log..."
                   value={searchLog}
                   onChange={(e) => setSearchLog(e.target.value)}
-                  className="w-full bg-[#090d16] border border-slate-800 text-slate-200 text-xs rounded-xl pl-9 pr-3 py-1.5 focus:outline-none focus:border-blue-500 font-mono"
+                  className="input-field"
+                  style={{ paddingLeft: '2.1rem' }}
                 />
               </div>
             </div>
 
-            <div className="overflow-x-auto custom-scrollbar bg-[#090d16]">
-              <table className="w-full text-left text-xs font-mono">
-                <thead className="bg-[#0f172a] text-slate-400 font-semibold border-b border-slate-800">
+            <div className="overflow-x-auto">
+              <table className="preview-table">
+                <thead>
                   <tr>
-                    <th className="py-3 px-4">Filename</th>
-                    <th className="py-3 px-4">Identified Client</th>
-                    <th className="py-3 px-4">PT Rows</th>
-                    <th className="py-3 px-4">MD Rows</th>
-                    <th className="py-3 px-4 text-right">Status</th>
+                    <th>Source Workbook</th>
+                    <th>Mapped Client Entity</th>
+                    <th>PT Records</th>
+                    <th>MD Records</th>
+                    <th style={{ textAlign: 'right' }}>Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody>
                   {filteredLogs.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-slate-800/40 transition">
-                      <td className="py-2.5 px-4 text-slate-300 truncate max-w-xs">{item.filename}</td>
-                      <td className="py-2.5 px-4 font-bold text-blue-400">{item.client}</td>
-                      <td className="py-2.5 px-4 text-slate-300">{item.pt_rows}</td>
-                      <td className="py-2.5 px-4 text-slate-300">{item.md_rows}</td>
-                      <td className="py-2.5 px-4 text-right">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            item.status === 'SUCCESS'
-                              ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
-                              : 'bg-red-950/80 text-red-400 border border-red-800/60'
-                          }`}
-                        >
+                    <tr key={idx}>
+                      <td className="truncate" style={{ maxWidth: '20rem' }}>{item.filename}</td>
+                      <td className="font-bold text-blue-400">{item.client}</td>
+                      <td>{item.pt_rows}</td>
+                      <td>{item.md_rows}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <span className={`section-badge ${item.status === 'SUCCESS' ? 'badge-emerald' : 'badge-rose'}`}>
                           {item.status}
                         </span>
                       </td>

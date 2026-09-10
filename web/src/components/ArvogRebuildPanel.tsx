@@ -8,6 +8,9 @@ import { Upload, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
  * thing, driving `/api/arvog/rebuild/upload` instead of the path-based
  * endpoints the desktop uses. One request: the filled audit sheet goes up, the
  * rebuilt master comes back, and the server keeps neither.
+ *
+ * It renders inside the bank options panel, so it deliberately carries no card
+ * of its own — the panel around it is the card.
  */
 
 interface RebuildResult {
@@ -96,73 +99,84 @@ export const ArvogRebuildPanel: React.FC = () => {
         branch&rsquo;s own figures. Your upload is removed from the server once the download is sent.
       </p>
 
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => { e.preventDefault(); setDragging(false); choose(e.dataTransfer.files?.[0] ?? null); }}
-        onClick={() => inputRef.current?.click()}
-        className={`rounded-lg border border-dashed p-6 text-center cursor-pointer transition-colors ${
-          dragging ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-700 hover:border-emerald-500/50'
-        }`}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xlsx,.xlsm,.xls"
-          className="hidden"
-          onChange={(e) => choose(e.target.files?.[0] ?? null)}
-        />
-        <Upload className="w-6 h-6 mx-auto text-slate-500 mb-2" />
-        <p className="text-sm font-semibold text-slate-300">Drop the filled audit sheet here, or click to browse</p>
-        <p className="text-[11px] text-slate-500 mt-1">Single workbook · .xlsx, .xlsm, .xls</p>
+      <div>
+        <label className="field-label">Filled Audit Sheet</label>
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); choose(e.dataTransfer.files?.[0] ?? null); }}
+          onClick={() => inputRef.current?.click()}
+          className={`drop-zone ${dragging ? 'dragover' : ''}`}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".xlsx,.xlsm,.xls"
+            className="hidden"
+            onChange={(e) => choose(e.target.files?.[0] ?? null)}
+          />
+          <Upload className="drop-zone-icon w-6 h-6" />
+          <span className="drop-zone-title">Drop the filled audit sheet here, or click to browse</span>
+          <span className="drop-zone-sub">Single workbook · .xlsx, .xlsm, .xls</span>
+        </div>
       </div>
 
       {file && (
-        <div className="flex items-center justify-between bg-[#0b0f19] border border-slate-800 rounded-lg px-3 py-2">
-          <span className="text-xs text-slate-300 truncate">{file.name}</span>
-          <button onClick={() => { setFile(null); setResult(null); }} className="text-slate-500 hover:text-red-400 shrink-0">
-            <X className="w-4 h-4" />
+        <div className="file-row">
+          <span className="text-xs font-semibold text-slate-200 truncate" title={file.name}>{file.name}</span>
+          <button
+            onClick={(e) => { e.stopPropagation(); setFile(null); setResult(null); }}
+            className="btn btn-ghost btn-sm"
+            aria-label="Remove selected workbook"
+          >
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
+      {/* Nothing else reports a failed rebuild, so this must always show. */}
       {error && (
-        <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
-          <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-          <span className="text-xs text-red-300">{error}</span>
+        <div className="validation-box flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+          <span className="text-rose-400">{error}</span>
         </div>
       )}
 
-      <button
-        onClick={run}
-        disabled={!file || busy}
-        className="w-full py-2.5 rounded-lg text-sm font-bold bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors flex items-center justify-center gap-2"
-      >
-        {busy ? (<><Loader2 className="w-4 h-4 animate-spin" /> Rebuilding…</>) : 'Rebuild Master Sheet'}
+      <button onClick={run} disabled={!file || busy} className="btn btn-success w-full">
+        {busy ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Rebuilding…</span>
+          </>
+        ) : (
+          'Rebuild Master Sheet'
+        )}
       </button>
 
       {result && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-emerald-400">
-            <CheckCircle2 className="w-4 h-4" />
-            <span className="text-xs font-semibold">Downloaded {result.name}</span>
+          <div className="validation-box flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <span className="text-slate-300 truncate">
+              Downloaded <span className="font-mono text-slate-200">{result.name}</span>
+            </span>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-3">
             {[
               ['Loans', result.loans ?? '—'],
               ['Ornaments', result.ornaments ?? '—'],
               ['Columns', result.columns ?? '—'],
             ].map(([label, value]) => (
-              <div key={label} className="bg-[#0b0f19] border border-slate-800 rounded-lg px-3 py-2">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
-                <span className="block text-sm font-bold text-slate-200 mt-0.5">{value}</span>
+              <div key={label} className="stat-card">
+                <span className="stat-label">{label}</span>
+                <span className="stat-value font-mono">{value}</span>
               </div>
             ))}
           </div>
           {result.auditColumns === '0' && (
-            <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-              <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-              <span className="text-xs text-amber-300">
+            <div className="validation-box flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+              <span className="text-amber-400">
                 This sheet had no audit block, so those columns came out empty. It may predate the
                 block, or be the wrong file.
               </span>

@@ -4,7 +4,11 @@
 <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GSS-MIS</title>
-    <link rel="stylesheet" href="/static/web.css?v=5.2.265">
+    <!-- tokens.css must precede web.css: it defines the custom properties
+         every rule below draws from, and web/src/index.css imports the
+         same two files so both apps render from one stylesheet. -->
+    <link rel="stylesheet" href="/static/tokens.css?v={{VERSION}}">
+    <link rel="stylesheet" href="/static/web.css?v={{VERSION}}">
     <style>
         /* ===== RESET & BASE ===== */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -417,22 +421,6 @@
             border-color: rgba(52, 201, 140, 0.5);
             background-color: rgba(52, 201, 140, 0.03);
         }
-        .arvog-file-tile {
-            background-color: rgba(35, 42, 54, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            transition: all 0.2s ease;
-            border-radius: 8px;
-            padding: 10px 14px;
-        }
-        .arvog-file-tile:hover {
-            border-color: rgba(52, 201, 140, 0.3);
-            background-color: rgba(35, 42, 54, 0.5);
-        }
-        .arvog-file-tile.active-preview {
-            border-color: #34c98c;
-            background-color: rgba(52, 201, 140, 0.05);
-            box-shadow: 0 0 10px rgba(52, 201, 140, 0.08);
-        }
         .emerald-spin {
             animation: arvog-spin 1s linear infinite;
         }
@@ -510,15 +498,6 @@
         }
         .tab-content {
             animation: tabFadeIn 0.2s ease-out forwards;
-        }
-
-        /* ===== CONSOLE LOG ENTRY ANIMATION ===== */
-        @keyframes logEntry {
-            from { opacity: 0; transform: translateX(-4px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-        .log-entry {
-            animation: logEntry 0.15s ease-out forwards;
         }
 
         /* ===== TOAST STAGGERED ENTRANCE ===== */
@@ -835,13 +814,6 @@
                             <span id="eqFileLabel"></span>
                         </div>
 
-                        <!-- FULL WIDTH: Console Logs -->
-                        <div class="process-grid-full space-y-2">
-                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
-                            <div id="idfcConsole" class="console-terminal" style="height:6rem">
-                                <div class="text-slate-500">[00:00:00] Terminal logger online. Ready.</div>
-                            </div>
-                        </div>
                     </div>
                 </section>
 
@@ -970,13 +942,6 @@
                             </div>
                         </div>
 
-                        <!-- FULL WIDTH: Console Logs -->
-                        <div class="process-grid-full space-y-2">
-                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
-                            <div id="arvogConsole" class="console-terminal" style="height:6rem">
-                                <div class="text-slate-500">[00:00:00] Terminal logger online. Ready.</div>
-                            </div>
-                        </div>
                     </div>
                     </div><!-- /arvogPanel-GENERATE -->
 
@@ -1032,13 +997,6 @@
                                 <button onclick="openArvogRebuildOutput()" id="arvogRebuildBtnOpen" class="btn btn-ghost w-full">
                                     Open Containing Folder
                                 </button>
-                            </div>
-
-                            <div>
-                                <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
-                                <div id="arvogRebuildConsole" class="console-terminal mt-1.5" style="height:6rem">
-                                    <div class="text-slate-500">[00:00:00] Ready.</div>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -1196,13 +1154,6 @@
                             </div>
                         </div>
 
-                        <!-- FULL WIDTH: Console Logs -->
-                        <div class="process-grid-full space-y-2">
-                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
-                            <div id="eqConsole" class="console-terminal" style="height:6rem">
-                                <div class="text-slate-500">[00:00:00] Terminal logger online. Ready.</div>
-                            </div>
-                        </div>
                     </div>
                 </section>
 
@@ -1535,12 +1486,6 @@
                         </div>
 
                         <div>
-                            <div class="flex items-center gap-2 mb-1">
-                                <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
-                            </div>
-                            <div id="validatorConsole" class="bg-brand-termBg border border-brand-borderLine rounded-lg h-20 font-mono text-2xs p-2 overflow-y-auto space-y-0.5">
-                                <div class="text-slate-500">[00:00:00] Ready. Select a report to validate.</div>
-                            </div>
                         </div>
                     </div>
 
@@ -1644,12 +1589,6 @@
                         </div>
 
                         <div>
-                            <div class="flex items-center gap-2 mb-1">
-                                <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Console</span>
-                            </div>
-                            <div id="flattenConsole" class="bg-brand-termBg border border-brand-borderLine rounded-lg h-20 font-mono text-2xs p-2 overflow-y-auto space-y-0.5">
-                                <div class="text-slate-500">[00:00:00] Ready. Select a PDF to flatten.</div>
-                            </div>
                         </div>
                     </div>
 

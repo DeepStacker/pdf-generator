@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FileStack, Upload, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Upload, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
 /**
  * Flatten PDF.
@@ -97,87 +97,98 @@ export const TabFlatten: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold tracking-tight flex items-center gap-2">
-          <FileStack className="w-5 h-5 text-emerald-400" />
-          Flatten PDF
-        </h2>
-        <span className="px-2.5 py-1 text-[10px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-          NOTHING STORED
-        </span>
+      <div className="section-header">
+        <div>
+          <h2 className="section-title">Flatten PDF</h2>
+          <p className="text-xs text-slate-400 mt-1">
+            Makes a PDF permanent: form fields, stamps and comments become part of the page and can no longer be edited.
+          </p>
+        </div>
+        <span className="section-badge badge-emerald">Nothing Stored</span>
       </div>
 
-      <div className="bg-[#0f1523] border border-slate-800/80 rounded-xl p-6 space-y-4 max-w-3xl">
+      <div className="card space-y-4 max-w-3xl">
         <p className="text-xs text-slate-400 leading-relaxed">
           Bakes form fields and annotations into the page so the values can no longer be edited
           or cleared, and drops link annotations. Filled values are preserved. Your upload and the
           flattened copy are both removed from the server as soon as the download is sent.
         </p>
 
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={handleDrop}
-          onClick={() => inputRef.current?.click()}
-          className={`rounded-lg border border-dashed p-8 text-center cursor-pointer transition-colors ${
-            dragging ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-700 hover:border-emerald-500/50'
-          }`}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={(e) => choose(e.target.files?.[0] ?? null)}
-          />
-          <Upload className="w-7 h-7 mx-auto text-slate-500 mb-2" />
-          <p className="text-sm font-semibold text-slate-300">Drop a PDF here, or click to browse</p>
-          <p className="text-[11px] text-slate-500 mt-1">Single file · .pdf only</p>
+        <div>
+          <label className="field-label">PDF File</label>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => inputRef.current?.click()}
+            className={`drop-zone ${dragging ? 'dragover' : ''}`}
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={(e) => choose(e.target.files?.[0] ?? null)}
+            />
+            <Upload className="drop-zone-icon w-7 h-7" />
+            <span className="drop-zone-title">Drop a PDF here, or click to browse</span>
+            <span className="drop-zone-sub">Single file · .pdf only</span>
+          </div>
         </div>
 
         {file && (
-          <div className="flex items-center justify-between bg-[#0b0f19] border border-slate-800 rounded-lg px-3 py-2">
-            <span className="text-xs text-slate-300 truncate">{file.name}</span>
-            <div className="flex items-center gap-3 shrink-0">
-              <span className="text-[11px] text-slate-500">{sizeLabel(file.size)}</span>
-              <button onClick={() => { setFile(null); setResult(null); }} className="text-slate-500 hover:text-red-400">
-                <X className="w-4 h-4" />
+          <div className="file-row">
+            <span className="text-xs font-semibold text-slate-200 truncate" title={file.name}>{file.name}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-2xs font-mono text-slate-500">{sizeLabel(file.size)}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); setFile(null); setResult(null); }}
+                className="btn btn-ghost btn-sm"
+                aria-label="Remove selected file"
+              >
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
         )}
 
+        {/* The single place a failure shows up, so it stays next to the button. */}
         {error && (
-          <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
-            <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-            <span className="text-xs text-red-300">{error}</span>
+          <div className="validation-box flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+            <span className="text-rose-400">{error}</span>
           </div>
         )}
 
-        <button
-          onClick={run}
-          disabled={!file || busy}
-          className="w-full py-2.5 rounded-lg text-sm font-bold bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors flex items-center justify-center gap-2"
-        >
-          {busy ? (<><Loader2 className="w-4 h-4 animate-spin" /> Flattening…</>) : 'Flatten PDF'}
+        <button onClick={run} disabled={!file || busy} className="btn btn-primary w-full">
+          {busy ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Flattening…</span>
+            </>
+          ) : (
+            'Flatten PDF'
+          )}
         </button>
 
         {result && (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-emerald-400">
-              <CheckCircle2 className="w-4 h-4" />
-              <span className="text-xs font-semibold">Downloaded {result.name}</span>
+            <div className="validation-box flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span className="text-slate-300 truncate">
+                Downloaded <span className="font-mono text-slate-200">{result.name}</span>
+              </span>
             </div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 ['Pages', result.pages ?? '—'],
-                ['Fields baked in', result.fields ?? '—'],
-                ['Links removed', result.linksRemoved ?? '—'],
+                ['Fields Baked In', result.fields ?? '—'],
+                ['Links Removed', result.linksRemoved ?? '—'],
                 ['Size', sizeLabel(result.bytes)],
               ].map(([label, value]) => (
-                <div key={label} className="bg-[#0b0f19] border border-slate-800 rounded-lg px-3 py-2">
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
-                  <span className="block text-sm font-bold text-slate-200 mt-0.5">{value}</span>
+                <div key={label} className="stat-card">
+                  <span className="stat-label">{label}</span>
+                  <span className="stat-value font-mono">{value}</span>
                 </div>
               ))}
             </div>

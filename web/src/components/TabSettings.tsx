@@ -24,54 +24,63 @@ export const TabSettings: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="border-b border-[#1f2937] pb-5">
-        <h2 className="text-xl font-bold text-slate-100 tracking-tight">
-          Application Preferences & System Configuration
-        </h2>
-        <p className="text-xs text-slate-400 mt-1">
-          Configure default file output paths and operational preferences.
-        </p>
+    <div className="space-y-6" style={{ maxWidth: '48rem' }}>
+      <div className="section-header">
+        <div>
+          <h2 className="section-title">Settings</h2>
+          <p className="text-sm text-slate-400 mt-1">
+            Default output path and operational preferences for every screen.
+          </p>
+        </div>
+        {isSaved && (
+          <span className="section-badge badge-emerald flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Configuration saved</span>
+          </span>
+        )}
       </div>
 
-      {isSaved && (
-        <div className="p-4 rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs flex items-center space-x-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>Configuration updated successfully!</span>
+      {/* Output location */}
+      <div className="card space-y-4">
+        <div>
+          <h3 className="stat-label">Output Location</h3>
+          <p className="text-2xs text-slate-500 mt-1">
+            Where every bank's generated reports are written. Every screen shares this one folder.
+          </p>
         </div>
-      )}
 
-      <div className="app-card p-6 space-y-5">
-        <div className="space-y-2">
-          <label className="block text-xs font-semibold text-slate-200">Default Output Directory Path</label>
+        <div>
+          <label className="field-label" htmlFor="settingsOutputDir">
+            Default output directory path
+          </label>
           <input
+            id="settingsOutputDir"
             type="text"
-            placeholder="Auto (System temporary directory)"
+            placeholder="Auto (system temporary directory)"
             value={outputDir}
             onChange={(e) => setOutputDir(e.target.value)}
-            className="app-input font-mono"
+            className="input-field"
           />
-          <p className="text-[11px] text-slate-500">Leave empty to use temporary system folder.</p>
+          <p className="text-2xs text-slate-500 mt-2">Leave empty to use the temporary system folder.</p>
         </div>
 
-        <div className="flex items-center space-x-3 pt-2">
+        <label htmlFor="chkAutoOpen" className="flex items-center gap-3 cursor-pointer">
           <input
             type="checkbox"
             id="chkAutoOpen"
             checked={autoOpen}
             onChange={(e) => setAutoOpen(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-700 bg-[#090d16] text-blue-600 focus:ring-blue-500 cursor-pointer"
           />
-          <label htmlFor="chkAutoOpen" className="text-xs text-slate-300 cursor-pointer font-medium">
-            Automatically open output folder after PDF report generation completes
-          </label>
-        </div>
+          <span className="text-xs text-slate-300">
+            Open the output folder automatically once a run finishes
+          </span>
+        </label>
 
-        <div className="pt-4 border-t border-[#1f2937] flex justify-end">
-          <button
-            onClick={handleSave}
-            className="px-5 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm flex items-center space-x-2 transition cursor-pointer"
-          >
+        <div
+          className="flex justify-end"
+          style={{ paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)' }}
+        >
+          <button onClick={handleSave} className="btn btn-primary btn-sm">
             <Save className="w-4 h-4" />
             <span>Save Preferences</span>
           </button>

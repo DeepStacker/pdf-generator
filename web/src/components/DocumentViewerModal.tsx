@@ -95,45 +95,42 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ filePa
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+      className="modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby="document-modal-title"
     >
-      <div className="glass-panel w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden rounded-2xl border border-slate-700 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+      <div
+        className="modal-box flex flex-col"
+        style={{ maxWidth: '76rem', height: '90vh' }}
+      >
         {/* Modal Header */}
-        <div className="p-4 border-b border-slate-800 bg-[#0f172a] flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
-              {isPdf ? <FileText className="w-5 h-5" /> : <FileSpreadsheet className="w-5 h-5" />}
-            </div>
-            <div>
-              <h3 id="document-modal-title" className="text-sm font-bold text-slate-100 truncate max-w-lg">
-                {fileName}
-              </h3>
-              <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+        <div className="modal-header" style={{ flexShrink: 0 }}>
+          <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
+            {isPdf
+              ? <FileText className="w-5 h-5 text-blue-400" />
+              : <FileSpreadsheet className="w-5 h-5 text-blue-400" />}
+            <div style={{ minWidth: 0 }}>
+              <h3 id="document-modal-title" className="truncate">{fileName}</h3>
+              <p className="text-2xs font-mono text-slate-400 mt-1">
                 {isPdf
-                  ? 'Interactive PDF Document Viewer'
-                  : `Excel Sheet: ${activeSheet || 'Default'} • Total Rows: ${excelData?.total_rows?.toLocaleString() || 0}`}
+                  ? 'Interactive PDF document viewer'
+                  : `Sheet: ${activeSheet || 'Default'} • ${excelData?.total_rows?.toLocaleString() || 0} rows`}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <a
               href={downloadUrl}
               download={fileName}
-              className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+              className="btn btn-primary btn-sm"
               aria-label="Download Document"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Download</span>
             </a>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition cursor-pointer"
-              aria-label="Close modal"
-            >
+            <button onClick={onClose} className="btn btn-ghost btn-sm" aria-label="Close modal">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -141,18 +138,22 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ filePa
 
         {/* Excel Sub-Header: Sheet Selector & Search */}
         {isExcel && excelData && (
-          <div className="bg-[#0b0f17] border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
+          <div
+            className="flex flex-wrap items-center justify-between gap-3"
+            style={{
+              flexShrink: 0,
+              padding: '0.65rem 1.5rem',
+              borderBottom: '1px solid var(--border-subtle)',
+            }}
+          >
             {/* Sheet Tabs */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto custom-scrollbar max-w-xl">
+            <div className="flex items-center gap-2 overflow-x-auto" style={{ maxWidth: '36rem' }}>
               {excelData.sheet_names && excelData.sheet_names.map((name) => (
                 <button
                   key={name}
                   onClick={() => loadExcelSheet(name)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold font-mono transition cursor-pointer whitespace-nowrap ${
-                    activeSheet === name
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                  }`}
+                  className={`chip-btn font-mono ${activeSheet === name ? 'selected' : ''}`}
+                  style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}
                 >
                   {name}
                 </button>
@@ -161,7 +162,10 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ filePa
 
             {/* Live Search */}
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <Search
+                className="w-3.5 h-3.5 text-slate-500 pointer-events-none"
+                style={{ position: 'absolute', left: '0.7rem', top: '50%', transform: 'translateY(-50%)' }}
+              />
               <input
                 type="text"
                 id="docViewerSearchInput"
@@ -170,58 +174,62 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ filePa
                 placeholder="Search all rows in sheet..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-[#090d16] border border-slate-800 text-slate-200 text-xs rounded-lg pl-8 pr-3 py-1.5 focus:outline-none focus:border-blue-500 font-mono w-64"
+                className="input-field"
+                style={{ width: '17rem', paddingLeft: '2.1rem' }}
               />
             </div>
           </div>
         )}
 
         {/* Content Viewer Body */}
-        <div className="flex-1 bg-[#080c14] relative overflow-hidden flex flex-col">
+        <div
+          className="flex-1 relative flex flex-col"
+          style={{ minHeight: 0, overflow: 'hidden', background: 'var(--bg-deep)' }}
+        >
           {isPdf ? (
             <object
               data={previewUrl}
               type="application/pdf"
-              className="w-full h-full border-0"
+              className="w-full h-full"
+              style={{ border: 0 }}
             >
               <iframe
                 src={previewUrl}
-                className="w-full h-full border-0"
+                className="w-full h-full"
+                style={{ border: 0 }}
                 title={fileName}
               />
             </object>
           ) : isExcel ? (
             loading ? (
-              <div className="flex-1 flex flex-col items-center justify-center space-y-3">
-                <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
-                <span className="text-xs text-slate-400 font-mono">Parsing Entire Excel Workbook Sheet...</span>
+              <div className="flex-1 flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                <span className="text-xs text-slate-400 font-mono">Parsing workbook sheet...</span>
               </div>
             ) : error ? (
-              <div className="flex-1 flex items-center justify-center p-6 text-center text-xs text-red-400 font-mono">
+              <div className="flex-1 flex items-center justify-center text-xs text-rose-400 font-mono" style={{ padding: '1.5rem', textAlign: 'center' }}>
                 {error}
               </div>
             ) : excelData ? (
-              <div className="flex-1 overflow-auto custom-scrollbar p-4 bg-[#090d16]">
-                <table className="w-full text-left text-xs border-collapse font-mono">
-                  <thead className="bg-[#0f172a] text-slate-300 font-bold sticky top-0 border-b border-slate-800 z-10">
-                    <tr>
-                      <th className="py-2.5 px-3 border border-slate-800 bg-[#0f172a]">#</th>
+              <div className="flex-1 overflow-auto">
+                <table className="preview-table">
+                  <thead>
+                    <tr style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-surface)' }}>
+                      <th>#</th>
                       {excelData.headers.map((h, i) => (
-                        <th key={i} className="py-2.5 px-3 border border-slate-800 bg-[#0f172a] whitespace-nowrap text-blue-400">
+                        <th key={i}>
                           {h || `Col ${i + 1}`}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800">
+                  <tbody>
                     {paginatedRows.length > 0 ? (
                       paginatedRows.map((row, rIdx) => {
                         const globalRowIdx = (currentPage - 1) * pageSize + rIdx + 1;
                         return (
-                          <tr key={rIdx} className="hover:bg-slate-800/40 group transition">
-                            <td className="py-2 px-3 border border-slate-800 text-slate-500 font-mono text-[10px] bg-[#0b0f17]">
-                              {globalRowIdx}
-                            </td>
+                          <tr key={rIdx}>
+                            <td>{globalRowIdx}</td>
                             {row.map((cell, cIdx) => {
                               const cellId = `${rIdx}-${cIdx}`;
                               const isCopied = copiedCell === cellId;
@@ -230,12 +238,25 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ filePa
                                   key={cIdx}
                                   onClick={() => copyToClipboard(cell, cellId)}
                                   title="Click to copy cell value"
-                                  className="py-2 px-3 border border-slate-800 text-slate-300 whitespace-nowrap text-[11px] cursor-pointer hover:bg-blue-600/10 hover:text-white transition relative"
+                                  className="relative cursor-pointer"
                                 >
                                   <span>{cell}</span>
                                   {isCopied && (
-                                    <span className="absolute right-1 top-1 bg-emerald-500 text-black text-[9px] font-bold px-1.5 py-0.5 rounded shadow z-20">
-                                      Copied!
+                                    <span
+                                      style={{
+                                        position: 'absolute',
+                                        right: '0.25rem',
+                                        top: '0.15rem',
+                                        background: 'var(--accent-emerald-fill)',
+                                        color: '#fff',
+                                        fontSize: '0.6rem',
+                                        fontWeight: 700,
+                                        padding: '0.1rem 0.35rem',
+                                        borderRadius: 'var(--radius-sm)',
+                                        zIndex: 20,
+                                      }}
+                                    >
+                                      Copied
                                     </span>
                                   )}
                                 </td>
@@ -246,7 +267,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ filePa
                       })
                     ) : (
                       <tr>
-                        <td colSpan={excelData.headers.length + 1} className="py-8 text-center text-slate-500 text-xs">
+                        <td colSpan={excelData.headers.length + 1} style={{ textAlign: 'center', padding: '2rem 1rem' }}>
                           No matching records found.
                         </td>
                       </tr>
@@ -256,7 +277,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ filePa
               </div>
             ) : null
           ) : (
-            <div className="p-8 text-center text-slate-400 text-xs">
+            <div className="flex-1 flex items-center justify-center text-xs text-slate-400">
               Preview not available for this file type.
             </div>
           )}
@@ -264,23 +285,25 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ filePa
 
         {/* Excel Pagination Footer */}
         {isExcel && excelData && totalFilteredRows > 0 && (
-          <div className="bg-[#0f172a] border-t border-slate-800 px-4 py-2.5 flex items-center justify-between text-xs font-mono text-slate-400 flex-shrink-0">
-            <div>
-              Showing <span className="text-slate-200 font-bold">{(currentPage - 1) * pageSize + 1}</span> to{' '}
-              <span className="text-slate-200 font-bold">{Math.min(currentPage * pageSize, totalFilteredRows)}</span> of{' '}
-              <span className="text-slate-200 font-bold">{totalFilteredRows.toLocaleString()}</span> rows
-            </div>
+          <div className="modal-footer justify-between" style={{ flexShrink: 0 }}>
+            <span className="text-xs font-mono text-slate-400">
+              Showing {(currentPage - 1) * pageSize + 1} to{' '}
+              {Math.min(currentPage * pageSize, totalFilteredRows)} of{' '}
+              {totalFilteredRows.toLocaleString()} rows
+            </span>
 
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <span>Rows per page:</span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Rows per page</span>
                 <select
                   value={pageSize}
                   onChange={(e) => {
                     setPageSize(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                  className="bg-[#090d16] border border-slate-800 text-slate-200 text-xs rounded px-2 py-1 focus:outline-none"
+                  className="input-field"
+                  style={{ width: 'auto' }}
+                  aria-label="Rows per page"
                 >
                   <option value={25}>25</option>
                   <option value={50}>50</option>
@@ -289,22 +312,22 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ filePa
                 </select>
               </div>
 
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="p-1 rounded bg-slate-800 disabled:opacity-40 hover:bg-slate-700 transition cursor-pointer"
+                  className="btn btn-ghost btn-sm"
                   aria-label="Previous Page"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span className="px-2 text-slate-300 font-bold">
+                <span className="text-xs font-mono text-slate-300">
                   Page {currentPage} of {totalPages}
                 </span>
                 <button
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="p-1 rounded bg-slate-800 disabled:opacity-40 hover:bg-slate-700 transition cursor-pointer"
+                  className="btn btn-ghost btn-sm"
                   aria-label="Next Page"
                 >
                   <ChevronRight className="w-4 h-4" />
