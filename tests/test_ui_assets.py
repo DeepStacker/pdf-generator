@@ -187,6 +187,51 @@ def test_every_wh_size_class_used_is_defined(html):
     assert not missing, f"used but never defined -- would render unconstrained: {sorted(missing)}"
 
 
+def test_desktop_detection_does_not_race_the_pywebview_bridge(html):
+    """Desktop/web mode must be decided from the URL, not from window.pywebview.
+
+    pywebview injects window.pywebview asynchronously. Measured on macOS:
+    it is still undefined when DOMContentLoaded fires at t=11ms, and the
+    pywebviewready event does not arrive until t=110ms. isWebMode() used to
+    be `!window.pywebview`, so at startup the desktop app called itself a
+    browser and hid its own Browse button and auto-open checkbox -- leaving
+    no way at all to set the output folder, since that field is readonly.
+    The paired 100ms readiness timeout lost the same race by 10ms, sending
+    the first /api/dashboard call to file:///api/dashboard, which cannot
+    answer: the saved output path was never applied and every stat tile kept
+    its 'Loading...' placeholder for the life of the session.
+
+    The document is served over file:// by the desktop shell and over
+    http(s) by both web front ends, so the protocol answers this
+    synchronously, before any bridge exists.
+    """
+    body = html[html.index("function isWebMode("):]
+    impl = body[:body.index("}")]
+    assert "window.pywebview" not in impl, (
+        "isWebMode() is reading window.pywebview again -- it is undefined at "
+        f"startup and the desktop app will misdetect itself as a browser: {impl!r}"
+    )
+    assert "IS_DESKTOP_SHELL" in impl
+
+    assert "window.location.protocol === 'file:'" in html, (
+        "the file:// check that makes desktop detection race-free is gone"
+    )
+
+
+def test_ipc_readiness_timeout_outlasts_the_handshake(html):
+    """The desktop fallback timeout must not fire before pywebviewready.
+
+    The bridge announced itself at 110ms in the measurement above; a 100ms
+    give-up sent the app's first API call to a file:// URL. Browser mode
+    still resolves fast because it has no bridge coming.
+    """
+    m = re.search(r"IS_DESKTOP_SHELL \? (\d+) : (\d+)", html)
+    assert m, "the readiness timeout no longer distinguishes desktop from browser"
+    desktop_ms, browser_ms = int(m.group(1)), int(m.group(2))
+    assert desktop_ms >= 5000, f"desktop gives up after only {desktop_ms}ms"
+    assert browser_ms <= 500, f"browser stalls {browser_ms}ms before its first call"
+
+
 def test_every_static_ref_in_index_html_resolves():
     """Guards against a future tag pointing at an asset that isn't shipped."""
     import os

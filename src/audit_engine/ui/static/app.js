@@ -5,18 +5,28 @@
         const originalFetch = window.fetch;
         let _pywebviewReady = false;
 
+        // The desktop shell writes this document to a temp file and opens it over
+        // file://; both web front ends serve it over http(s). So the protocol is a
+        // synchronous, race-free answer to "is an IPC bridge coming?" —
+        // window.pywebview is injected asynchronously and is still undefined while
+        // this file first runs, which makes it useless for that question.
+        const IS_DESKTOP_SHELL = window.location.protocol === 'file:';
+
         // Create a readiness promise to block early fetch calls until IPC is initialized
         const pywebviewPromise = new Promise(resolve => {
             if (window.pywebview) {
                 _pywebviewReady = true;
                 resolve();
             } else {
-                window.addEventListener('pywebviewready', () => { 
-                    _pywebviewReady = true; 
-                    resolve(); 
+                window.addEventListener('pywebviewready', () => {
+                    _pywebviewReady = true;
+                    resolve();
                 });
-                // In web browser mode, resolve immediately — no IPC bridge needed
-                setTimeout(() => resolve(), 100);
+                // A browser has no bridge to wait for, so don't stall its first
+                // call. The desktop shell does, and giving up on it early sends
+                // that call to file:///api/... — which cannot answer, leaving
+                // whichever screen made it stuck on its loading placeholder.
+                setTimeout(resolve, IS_DESKTOP_SHELL ? 10000 : 100);
             }
         });
 
@@ -511,6 +521,15 @@
             });
         }
 
+        // A placeholder that never resolves reads as a hung app, so every load
+        // that can fail has to say so rather than leave 'Loading...' on screen.
+        function setFailedState(elements) {
+            elements.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = '—';
+            });
+        }
+
         // CONFIG SAVE HELPER
         async function saveConfig(key, value) {
             try {
@@ -626,6 +645,8 @@
                 switchTab(state.activeTab);
             } catch (err) {
                 console.error('Error loading dashboard:', err);
+                setFailedState(elementsToLoad);
+                showToast('Could not load your saved settings. Check the Settings screen before generating.', 'warning', 8000);
             }
         }
 
@@ -1235,7 +1256,7 @@
             const output = document.getElementById(`${prefix}OutputDir`).value;
             
             if (!output) {
-                showToast('Please select an output directory.', 'warning');
+                showToast('No output folder set yet — open Settings and choose one.', 'warning', 6000);
                 return;
             }
             
@@ -1720,6 +1741,8 @@
                 updateThemeBranding();
             } catch (err) {
                 console.error('Stats loading failed:', err);
+                setFailedState(['statBadge-totalBatches', 'statBadge-totalPDFs', 'statBadge-totalExcels']);
+                showToast('Could not load analytics.', 'warning');
             }
         }
 
@@ -1774,6 +1797,8 @@
                 updateThemeBranding();
             } catch (err) {
                 console.error('History retrieval request error:', err);
+                const failed = document.getElementById('historyTableBody');
+                if (failed) failed.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-500 italic">Could not load history.</td></tr>';
             }
         }
 
@@ -2034,7 +2059,7 @@
         }
 
         function isWebMode() {
-            return !window.pywebview;
+            return !IS_DESKTOP_SHELL;
         }
 
         function getDownloadUrl(path) {
