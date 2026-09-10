@@ -193,6 +193,16 @@ body {
   overflow-y: auto;
 }
 
+/* Hold the content to a readable column and centre it in whatever is left
+   over. Without this a browser window on a wide monitor stretched the two
+   columns to the far edges with a chasm down the middle. The desktop shell
+   is a 1200px window, so its content area never reaches this cap and it is
+   unaffected -- until someone drags that window wider, when it benefits too. */
+.main-content > *, .content-panel > * {
+  max-width: 1280px;
+  margin-inline: auto;
+}
+
 /* Missing utility classes */
 .text-2xs { font-size: 0.6rem; }
 
