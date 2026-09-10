@@ -1127,6 +1127,11 @@
             const files = state.selectedFiles[bank] || [];
             const totalFiles = files.length;
             countLabel.textContent = totalFiles;
+
+            // Every worker loops the batch one master at a time into its own
+            // output folder. Say so, so a bulk drop doesn't read as a merge.
+            const bulkHint = document.getElementById(`${prefix}BulkHint`);
+            if (bulkHint) bulkHint.classList.toggle('hidden', totalFiles < 2);
             
             if (totalFiles === 0) {
                 container.classList.add('hidden');
@@ -1462,7 +1467,7 @@
                     setUiGeneratingState(false);
                     
                     if (data.summary) {
-                        openSummaryModal(data.summary);
+                        openSummaryModal(data.summary, true);
                     }
                     
                     loadDashboardData();
@@ -1556,8 +1561,10 @@
         }
 
         // MODAL SUMMARY DIALOG POPUPS
-        function openSummaryModal(summaryData) {
+        function openSummaryModal(summaryData, allowNewRun = false) {
             const modal = document.getElementById('summaryModal');
+            const newRunBtn = document.getElementById('summaryNewRunBtn');
+            if (newRunBtn) newRunBtn.classList.toggle('hidden', !allowNewRun);
             const contentBox = document.getElementById('summaryTextContent');
             const title = document.getElementById('summaryTitle');
             
@@ -1585,6 +1592,30 @@
 
         function closeSummaryModal() {
             document.getElementById('summaryModal').classList.add('hidden');
+        }
+
+        // A finished run leaves its files, console and progress ring on screen.
+        // Pressing Generate again would just rebuild the same masters, so a
+        // second batch needs an explicit way back to an empty screen.
+        function startNewRun() {
+            closeSummaryModal();
+            clearAllSelectedFiles();
+
+            const prefix = getActivePrefix();
+            const consoleBox = document.getElementById(`${prefix}Console`);
+            if (consoleBox) {
+                consoleBox.innerHTML = '<div class="font-mono text-[11px]"><span class="text-slate-600">[00:00:00]</span> <span class="text-sky-400">[INFO]</span> <span class="text-slate-200">Ready for the next batch.</span></div>';
+            }
+
+            const pct = document.getElementById(`${prefix}ProgressPct`);
+            if (pct) pct.textContent = '0%';
+            const ring = document.getElementById(`${prefix}ProgressRing`);
+            if (ring) ring.style.strokeDashoffset = ring.getAttribute('stroke-dasharray') || '';
+            const container = document.getElementById(`${prefix}ProgressContainer`);
+            if (container) container.classList.add('hidden');
+
+            state.logsCount = 0;
+            showToast('Ready — drop in the next master file.', 'info');
         }
 
         // DYNAMIC SVG ANCHORS AND CHARTS RENDERING ENGINES

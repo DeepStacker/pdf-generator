@@ -204,8 +204,10 @@
         .font-extrabold { font-weight: 800; }
         .italic { font-style: italic; }
         .uppercase { text-transform: uppercase; }
+        .normal-case { text-transform: none; }
         .tracking-tight { letter-spacing: -0.025em; }
         .tracking-wider { letter-spacing: 0.05em; }
+        .tracking-normal { letter-spacing: 0; }
         .tracking-widest { letter-spacing: 0.1em; }
         .leading-none { line-height: 1; }
         .leading-tight { line-height: 1.25; }
@@ -736,7 +738,7 @@
                             <!-- Selected Files List -->
                             <div id="idfcSelectedFilesContainer" class="hidden space-y-1.5">
                                 <div class="flex justify-between items-center text-2xs font-bold text-slate-400 uppercase tracking-wider">
-                                    <span>Files (<span id="idfcSelectedCount">0</span>)</span>
+                                    <span>Files (<span id="idfcSelectedCount">0</span>)<span id="idfcBulkHint" class="hidden normal-case tracking-normal font-semibold text-slate-500"> — each processed separately</span></span>
                                     <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 text-2xs font-bold">Clear</button>
                                 </div>
                                 <div id="idfcSelectedFilesList" class="file-list-container space-y-1 p-1.5">
@@ -901,7 +903,7 @@
                             <!-- Selected Files List -->
                             <div id="arvogSelectedFilesContainer" class="hidden space-y-1.5">
                                 <div class="flex justify-between items-center text-2xs font-bold text-slate-400 uppercase tracking-wider">
-                                    <span>Files (<span id="arvogSelectedCount">0</span>)</span>
+                                    <span>Files (<span id="arvogSelectedCount">0</span>)<span id="arvogBulkHint" class="hidden normal-case tracking-normal font-semibold text-slate-500"> — each processed separately</span></span>
                                     <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 text-2xs font-bold">Clear</button>
                                 </div>
                                 <div id="arvogSelectedFilesList" class="file-list-container space-y-1 p-1.5">
@@ -1099,7 +1101,7 @@
                             <!-- Selected Files List -->
                             <div id="eqSelectedFilesContainer" class="hidden space-y-1.5">
                                 <div class="flex justify-between items-center text-2xs font-bold text-slate-400 uppercase tracking-wider">
-                                    <span>Files (<span id="eqSelectedCount">0</span>)</span>
+                                    <span>Files (<span id="eqSelectedCount">0</span>)<span id="eqBulkHint" class="hidden normal-case tracking-normal font-semibold text-slate-500"> — each processed separately</span></span>
                                     <button onclick="clearAllSelectedFiles()" class="text-rose-400 hover:text-rose-300 text-2xs font-bold">Clear</button>
                                 </div>
                                 <div id="eqSelectedFilesList" class="file-list-container space-y-1 p-1.5">
@@ -1701,8 +1703,9 @@
                     <!-- Dynamic summary items -->
                 </div>
             </div>
-            <div class="px-6 py-4 bg-slate-900 border-t border-brand-borderLine flex justify-end">
+            <div class="px-6 py-4 bg-slate-900 border-t border-brand-borderLine flex justify-end space-x-3">
                 <button onclick="closeSummaryModal()" class="bg-slate-800 text-slate-300 hover:bg-slate-700 border border-brand-borderLine text-xs font-bold px-6 py-2.5 rounded-lg transition">Close</button>
+                <button id="summaryNewRunBtn" onclick="startNewRun()" class="hidden bg-blue-600 text-white text-xs font-bold px-6 py-2.5 rounded-lg hover:bg-blue-500 transition dynamic-accent-bg dynamic-accent-hover-bg">Start Another Run</button>
             </div>
         </div>
     </div>

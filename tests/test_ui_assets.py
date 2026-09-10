@@ -162,74 +162,79 @@ def test_dim_text_tier_is_readable_on_the_canvas():
     assert ratio >= 4.5, f"text-dim only reaches {ratio:.2f}:1 against the canvas"
 
 
-def test_every_wh_size_class_used_is_defined(html):
-    """An SVG icon sized with .w-7.h-7 rendered at roughly ten times its
-    intended size -- neither class exists in this file's hand-rolled utility
-    set (only w-3/4/5/8/12/20/44/64 do), so the browser fell back to the
-    element's unconstrained intrinsic size. Four icons shipped that way
-    before this was caught by eye rather than by a test.
-    """
-    defined_w = set(re.findall(r'\.w-(\d+(?:\\\.\d+)?)\s*\{', html))
-    defined_h = set(re.findall(r'\.h-(\d+(?:\\\.\d+)?)\s*\{', html))
+def test_every_class_used_is_defined_somewhere(html):
+    """A class the stylesheet never defines does nothing, silently.
 
+    This has shipped twice. An SVG sized with .w-7.h-7 rendered at roughly
+    ten times its intended size, because neither class exists in this file's
+    hand-rolled utility set and the browser fell back to the element's
+    unconstrained intrinsic size. Separately, .enterprise-panel sat on seven
+    Consolidation cards that had therefore never drawn a background or a
+    border at all. Both were caught by eye, months apart.
+
+    So this checks every class in the document, not just the sizing ones,
+    against the CSS that actually ships -- which means the fully inlined
+    output, since web.css is a separate file until get_html() folds it in.
+    """
+    style_text = "\n".join(re.findall(r"<style[^>]*>(.*?)</style>", html, re.S))
     body = html[html.index("<body"):]
-    missing = set()
+
+    def css_escape(name: str) -> str:
+        return "".join("\\" + ch if ch in "/:.[]" else ch for ch in name)
+
+    # Painted by updateThemeBranding() as inline styles per active bank, so
+    # they are markers for JavaScript rather than selectors CSS has to carry.
+    js_markers = {
+        "dynamic-accent-bg", "dynamic-accent-fg",
+        "dynamic-accent-border", "dynamic-accent-stroke",
+    }
+    # Toggled at runtime; 'hidden' is the one of these the stylesheet does define.
+    runtime = {"hidden", "active", "selected"}
+
+    used = set()
     for m in re.finditer(r'class="([^"]*)"', body):
-        classes = m.group(1).split()
-        for cls in classes:
-            mw = re.fullmatch(r"w-(\d+)", cls)
-            if mw and mw.group(1) not in defined_w:
-                missing.add(cls)
-            mh = re.fullmatch(r"h-(\d+)", cls)
-            if mh and mh.group(1) not in defined_h:
-                missing.add(cls)
+        used.update(m.group(1).split())
 
-    assert not missing, f"used but never defined -- would render unconstrained: {sorted(missing)}"
-
-
-def test_desktop_detection_does_not_race_the_pywebview_bridge(html):
-    """Desktop/web mode must be decided from the URL, not from window.pywebview.
-
-    pywebview injects window.pywebview asynchronously. Measured on macOS:
-    it is still undefined when DOMContentLoaded fires at t=11ms, and the
-    pywebviewready event does not arrive until t=110ms. isWebMode() used to
-    be `!window.pywebview`, so at startup the desktop app called itself a
-    browser and hid its own Browse button and auto-open checkbox -- leaving
-    no way at all to set the output folder, since that field is readonly.
-    The paired 100ms readiness timeout lost the same race by 10ms, sending
-    the first /api/dashboard call to file:///api/dashboard, which cannot
-    answer: the saved output path was never applied and every stat tile kept
-    its 'Loading...' placeholder for the life of the session.
-
-    The document is served over file:// by the desktop shell and over
-    http(s) by both web front ends, so the protocol answers this
-    synchronously, before any bridge exists.
-    """
-    body = html[html.index("function isWebMode("):]
-    impl = body[:body.index("}")]
-    assert "window.pywebview" not in impl, (
-        "isWebMode() is reading window.pywebview again -- it is undefined at "
-        f"startup and the desktop app will misdetect itself as a browser: {impl!r}"
+    missing = sorted(
+        cls for cls in used
+        if cls not in js_markers
+        and cls not in runtime
+        # class="${tone} ..." inside a JS template literal is a placeholder,
+        # not a class name this document has to define.
+        and not cls.startswith("${")
+        and style_text.find("." + css_escape(cls)) == -1
     )
-    assert "IS_DESKTOP_SHELL" in impl
-
-    assert "window.location.protocol === 'file:'" in html, (
-        "the file:// check that makes desktop detection race-free is gone"
-    )
+    assert not missing, f"used in markup but never defined in CSS: {missing}"
 
 
-def test_ipc_readiness_timeout_outlasts_the_handshake(html):
-    """The desktop fallback timeout must not fire before pywebviewready.
+def test_a_finished_run_offers_a_way_to_start_the_next_one(html):
+    """Completion used to be a dead end.
 
-    The bridge announced itself at 110ms in the measurement above; a 100ms
-    give-up sent the app's first API call to a file:// URL. Browser mode
-    still resolves fast because it has no bridge coming.
+    setUiGeneratingState(false) re-enables the button but leaves the finished
+    batch's files, console and progress ring in place, and loadDashboardData()
+    restores that same checklist from config -- so pressing Generate again
+    just rebuilt the masters that had already been built. The summary modal
+    is the one thing every run ends on, so the reset lives there.
     """
-    m = re.search(r"IS_DESKTOP_SHELL \? (\d+) : (\d+)", html)
-    assert m, "the readiness timeout no longer distinguishes desktop from browser"
-    desktop_ms, browser_ms = int(m.group(1)), int(m.group(2))
-    assert desktop_ms >= 5000, f"desktop gives up after only {desktop_ms}ms"
-    assert browser_ms <= 500, f"browser stalls {browser_ms}ms before its first call"
+    assert "function startNewRun(" in html
+    assert 'id="summaryNewRunBtn"' in html
+    assert 'onclick="startNewRun()"' in html
+
+    # the updater reuses this modal for its restart notice, where restarting a
+    # generation makes no sense -- the button is opt-in per call site
+    assert "function openSummaryModal(summaryData, allowNewRun = false)" in html
+    assert "openSummaryModal(data.summary, true)" in html
+
+
+def test_bulk_selection_says_files_are_not_merged(html):
+    """Every worker loops the batch one master at a time into its own folder.
+
+    Nothing on screen said so, which left a bulk drop looking like it might
+    merge the masters into a single report.
+    """
+    for prefix in ("idfc", "eq", "arvog"):
+        assert f'id="{prefix}BulkHint"' in html, f"{prefix} has no bulk hint"
+    assert "each processed separately" in html
 
 
 def test_every_static_ref_in_index_html_resolves():

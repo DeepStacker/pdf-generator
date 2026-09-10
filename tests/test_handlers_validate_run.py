@@ -263,6 +263,36 @@ class TestHandleRunWithFiles:
         global_tracker.is_running = False
         cancel_event.set()
 
+    def test_bulk_upload_processes_each_master_separately(self, tmp_path):
+        """A batch of masters must stay a batch: one output folder each.
+
+        Uploading several masters at once means "do these for me", not "merge
+        these into one report" -- each file is a different branch's book and
+        combining them would silently produce a report nobody asked for. The
+        worker is called directly here rather than through handle_run so the
+        assertion lands on finished output instead of on a thread that has
+        only just started.
+        """
+        from audit_engine.tasks.workers import worker_idfc_thread
+
+        p1 = _make_idfc_xlsx(os.path.join(str(tmp_path), "AlphaMaster.xlsx"))
+        p2 = _make_idfc_xlsx(os.path.join(str(tmp_path), "BetaMaster.xlsx"))
+        out = os.path.join(str(tmp_path), "out")
+        os.makedirs(out, exist_ok=True)
+
+        cancel_event.clear()
+        worker_idfc_thread([p1, p2], out, "POA", "FOLDER", False, "{branch}_{type}")
+
+        bank_dir = os.path.join(out, "IDFC_First_Bank")
+        runs = sorted(os.listdir(bank_dir))
+        assert len(runs) == 2, f"expected one output folder per master, got {runs}"
+        assert any(r.startswith("AlphaMaster_") for r in runs), runs
+        assert any(r.startswith("BetaMaster_") for r in runs), runs
+
+        for run_dir in runs:
+            pdfs = [f for f in os.listdir(os.path.join(bank_dir, run_dir)) if f.endswith(".pdf")]
+            assert pdfs, f"{run_dir} produced no report"
+
     def test_run_list_missing_file(self, tmp_path):
         """One missing file in a list returns an error."""
         p = _make_idfc_xlsx(os.path.join(str(tmp_path), "exists.xlsx"))
