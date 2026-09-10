@@ -47,8 +47,8 @@ def _make_summary(title: str, items: list[dict], output_dir: str | None = None) 
 
 
 def worker_idfc_thread(inp: str | list[str], out_base: str, typ: str, output_mode: str, auto_open: bool, naming_pattern: str) -> None:
+    inp_list = inp if isinstance(inp, list) else [inp]
     try:
-        inp_list = inp if isinstance(inp, list) else [inp]
         total_files = len(inp_list)
 
         global_tracker.log("INFO", f"Initializing IDFC Build: Found {total_files} master file(s).")
@@ -130,8 +130,6 @@ def worker_idfc_thread(inp: str | list[str], out_base: str, typ: str, output_mod
             if auto_open and total_files == 1 and os.path.exists(out):
                 open_path(out)
 
-        _cleanup_temp_mapped(inp_list)
-
         _elapsed = time.time() - _start_time
         log_generation(", ".join([os.path.basename(f) for f in inp_list]), pdf_count, out_base, f"IDFC Bulk {typ}", full_path="; ".join(inp_list))
         global_tracker.log("OK", f"SUCCESS: Completed {total_files} files, {pdf_count} Reports Created in {_elapsed:.1f}s.")
@@ -156,12 +154,18 @@ def worker_idfc_thread(inp: str | list[str], out_base: str, typ: str, output_mod
         global_tracker.summary = {"title": "IDFC Bulk Generation Failed", "message": str(e)}
         trigger_notification("IDFC Generation Failed", f"✗ Batch compilation failed: {e}")
     finally:
+        # However the run ended. preprocess_mapped_excel copies the whole
+        # workbook into ~/.temp_audit_engine, which no sweeper covers -- not
+        # the web GC, which only walks /tmp, and not the workspace purge.
+        # This used to sit on the success path, so a run that raised left the
+        # copy behind, and Arvog never called it at all.
+        _cleanup_temp_mapped(inp_list)
         global_tracker.is_running = False
 
 
 def worker_equitas_thread(inp: str | list[str], out_base: str, stage: str, equitas_format: str, equitas_pack: str) -> None:
+    inp_list = inp if isinstance(inp, list) else [inp]
     try:
-        inp_list = inp if isinstance(inp, list) else [inp]
         total_files = len(inp_list)
 
         global_tracker.log("INFO", f"Initializing Equitas {stage} Build: Found {total_files} master file(s).")
@@ -217,8 +221,6 @@ def worker_equitas_thread(inp: str | list[str], out_base: str, stage: str, equit
             if get_config("auto_open", "True") == "True" and total_files == 1 and os.path.exists(out):
                 open_path(out)
 
-        _cleanup_temp_mapped(inp_list)
-
         _elapsed = time.time() - _start_time
         log_generation(", ".join([os.path.basename(f) for f in inp_list]), item_count, out_base, f"Equitas Bulk {stage}", full_path="; ".join(inp_list))
         global_tracker.log("OK", f"SUCCESS: Completed {total_files} files, {item_count} outputs created in {_elapsed:.1f}s.")
@@ -243,12 +245,18 @@ def worker_equitas_thread(inp: str | list[str], out_base: str, stage: str, equit
         global_tracker.summary = {"title": f"Equitas Bulk {stage} Failed", "message": str(e)}
         trigger_notification("Equitas Generation Failed", f"✗ Batch compilation failed: {e}")
     finally:
+        # However the run ended. preprocess_mapped_excel copies the whole
+        # workbook into ~/.temp_audit_engine, which no sweeper covers -- not
+        # the web GC, which only walks /tmp, and not the workspace purge.
+        # This used to sit on the success path, so a run that raised left the
+        # copy behind, and Arvog never called it at all.
+        _cleanup_temp_mapped(inp_list)
         global_tracker.is_running = False
 
 
 def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool, output_format: str = "BOTH", output_mode: str = "FOLDER") -> None:
+    inp_list = inp if isinstance(inp, list) else [inp]
     try:
-        inp_list = inp if isinstance(inp, list) else [inp]
         total_files = len(inp_list)
 
         global_tracker.log("INFO", f"Initializing Arvog Build: Found {total_files} master file(s).")
@@ -342,4 +350,10 @@ def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool, ou
         global_tracker.summary = {"title": "Arvog Bulk Generation Failed", "message": str(e)}
         trigger_notification("Arvog Generation Failed", f"✗ Batch compilation failed: {e}")
     finally:
+        # However the run ended. preprocess_mapped_excel copies the whole
+        # workbook into ~/.temp_audit_engine, which no sweeper covers -- not
+        # the web GC, which only walks /tmp, and not the workspace purge.
+        # This used to sit on the success path, so a run that raised left the
+        # copy behind, and Arvog never called it at all.
+        _cleanup_temp_mapped(inp_list)
         global_tracker.is_running = False
