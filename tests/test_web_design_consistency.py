@@ -152,3 +152,34 @@ def test_no_component_uses_a_style_class_nothing_defines():
             if re.search(rf'\b{re.escape(name)}\b', text):
                 offenders.setdefault(name, []).append(path)
     assert not offenders, f"used but no longer defined by any stylesheet: {offenders}"
+
+
+def test_the_browser_app_is_usable_on_a_phone(web_index_css):
+    """The shared sheet is desktop-first below 768px, and that is wrong here.
+
+    It narrows the sidebar to a 64px icon rail and hides
+    .sidebar-item-label -- which leaves the four banks as four unlabelled
+    coloured dots, with no way to tell IDFC from Arvog. It also *shrinks*
+    buttons and chips to 0.65rem on the smallest screens, where targets need
+    to grow: ten of twenty-five buttons measured under the 44px touch floor.
+
+    So the browser app replaces that behaviour outright with a drawer, and
+    these are the pieces it cannot lose.
+    """
+    assert "@media (max-width: 860px)" in web_index_css, "the mobile layer is gone"
+
+    mobile = web_index_css[web_index_css.index("@media (max-width: 860px)"):]
+
+    # the rail is replaced by a drawer, not merely narrowed
+    assert ".sidebar.is-open" in mobile, "no drawer open state"
+    assert ".sidebar-backdrop" in mobile, "a drawer with no backdrop traps the user"
+    assert ".mobile-topbar" in mobile, "nothing opens the drawer"
+
+    # the labels must come back -- an unnamed dot is not navigation
+    assert ".sidebar-item-label" in mobile and "revert" in mobile, (
+        "the shared sheet hides .sidebar-item-label below 768px; the mobile "
+        "layer has to put it back or the banks are unlabelled dots again"
+    )
+
+    # and targets grow rather than shrink
+    assert "min-height: 44px" in mobile, "no 44px touch floor declared"

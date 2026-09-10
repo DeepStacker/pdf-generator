@@ -31,3 +31,155 @@
   border-color: var(--border-active);
   background: var(--bg-card-hover);
 }
+
+/* ============================================================
+   Mobile
+   ============================================================
+   The shared sheet is desktop-first: below 768px it narrows the
+   sidebar to a 64px icon rail and *shrinks* buttons and chips to
+   0.65rem. That is the wrong instinct for a phone. It also hides
+   .sidebar-item-label, which leaves the four banks as four
+   unlabelled coloured dots -- there is no way to tell IDFC from
+   Arvog.
+
+   So on a small screen the rail is replaced outright by a top bar
+   and a drawer that carries the full labels, and touch targets grow
+   rather than shrink. 44px is the floor; ten of the twenty-five
+   buttons on this screen were under it.
+
+   The desktop app is untouched: it runs in a fixed 1200x800 window
+   and never reaches this width.
+   ============================================================ */
+/* Drawer chrome exists only on small screens. Declared before the media
+   query below, so that query's display values win rather than lose to this
+   on equal specificity. */
+.mobile-topbar, .sidebar-backdrop { display: none; }
+
+@media (max-width: 860px) {
+  .app-shell {
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  /* The bar the drawer opens from. */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.9rem;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    flex-shrink: 0;
+  }
+  .mobile-topbar-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mobile-navbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .mobile-navbtn svg { width: 20px; height: 20px; }
+
+  /* The sidebar becomes a drawer: off-canvas, full width-ish, labelled. */
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(82vw, 300px);
+    z-index: 80;
+    transform: translateX(-100%);
+    transition: transform var(--transition-smooth);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  }
+  .sidebar.is-open { transform: translateX(0); }
+
+  /* Everything the rail hid comes back -- a dot with no name is not navigation. */
+  .sidebar-brand { padding: 1rem; justify-content: flex-start; }
+  .sidebar-brand .flex.flex-col,
+  .sidebar-group-label,
+  .sidebar-item-label,
+  .sidebar-status { display: revert; }
+  .sidebar-item {
+    justify-content: flex-start;
+    padding: 0.7rem 0.75rem;
+    min-height: 44px;
+    font-size: 0.9rem;
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background: rgba(0, 0, 0, 0.55);
+    border: 0;
+  }
+
+  .app-main { min-height: 0; }
+  .main-content, .content-panel { padding: 1rem 0.9rem 2rem; }
+
+  /* Targets grow on a touch screen. The shared sheet shrinks them. */
+  .btn {
+    min-height: 44px;
+    padding: 0.7rem 1.1rem;
+    font-size: 0.85rem;
+    width: 100%;
+  }
+  .btn-sm { min-height: 38px; width: auto; font-size: 0.78rem; }
+  .chip-group { flex-wrap: wrap; gap: 0.4rem; }
+  .chip-btn {
+    flex: 1 1 auto;
+    min-width: 33%;
+    min-height: 42px;
+    font-size: 0.8rem;
+    padding: 0.6rem 0.7rem;
+  }
+  .input-field { min-height: 44px; font-size: 0.9rem; }
+
+  .section-title { font-size: 1.25rem; }
+  .section-header { flex-direction: column; align-items: flex-start; gap: 0.6rem; }
+
+  /* One column, and cards keep room to breathe. */
+  .tab-content.process-layout .process-grid { grid-template-columns: 1fr; }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .stats-row, .tab-content.process-layout .stats-row { flex-direction: column; }
+  .tab-content.process-layout .stats-row > div { flex: 1 1 auto; }
+  .card { padding: 1rem; }
+
+  /* A table narrower than its columns clips them; let it scroll instead. */
+  .history-table, .preview-table { display: block; overflow-x: auto; white-space: nowrap; }
+  /* "No records found" is not a column -- it should read at the width it has,
+     not sit off the edge behind a scrollbar. */
+  .history-table td[colspan], .preview-table td[colspan] {
+    white-space: normal;
+    text-align: center;
+  }
+
+  /* A dialog on a phone is the screen, not a box floating in it. */
+  .modal-box {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-body { flex: 1; overflow-y: auto; }
+  .modal-footer { flex-direction: column; gap: 0.5rem; }
+}

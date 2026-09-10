@@ -1,10 +1,21 @@
 import { useState, useEffect } from 'react';
+import { Menu } from 'lucide-react';
 import { Sidebar, ActiveTab } from './components/Sidebar';
 
 // Served by audit_engine_web, which substitutes the real number into the meta
 // tag. In `vite dev` the placeholder is still there, so show nothing rather
 // than the literal "{{VERSION}}".
 const rawVersion = document.querySelector('meta[name="app-version"]')?.getAttribute('content') ?? '';
+const SCREEN_TITLES: Record<ActiveTab, string> = {
+  audit: 'Generate Reports',
+  consolidation: 'Consolidation',
+  report: 'Report Validator',
+  flatten: 'Flatten PDF',
+  stats: 'Analytics',
+  history: 'History',
+  settings: 'Settings',
+};
+
 const APP_VERSION = rawVersion.startsWith('{{') ? '' : rawVersion;
 import { TabBankAudit } from './components/TabBankAudit';
 import { TabConsolidation } from './components/TabConsolidation';
@@ -39,6 +50,10 @@ export default function App() {
   const [selectedBank, setSelectedBankState] = useState<string>(
     () => localStorage.getItem('bank_audit_selectedBank') || 'IDFC First Bank'
   );
+  // Drawer state. Only reachable below the mobile breakpoint, where the
+  // sidebar is off-canvas; at desktop widths the CSS shows it regardless.
+  const [navOpen, setNavOpen] = useState(false);
+
   const setSelectedBank = (bank: string) => {
     setSelectedBankState(bank);
     localStorage.setItem('bank_audit_selectedBank', bank);
@@ -47,6 +62,7 @@ export default function App() {
   // Sync tab changes with URL hash & localStorage
   const setActiveTab = (tab: ActiveTab) => {
     setActiveTabState(tab);
+    setNavOpen(false);
     window.location.hash = tab;
     localStorage.setItem('audit_engine_active_tab', tab);
   };
@@ -124,12 +140,34 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <header className="mobile-topbar">
+        <button
+          className="mobile-navbtn"
+          onClick={() => setNavOpen(true)}
+          aria-label="Open navigation"
+          aria-expanded={navOpen}
+        >
+          <Menu />
+        </button>
+        <span className="mobile-topbar-title">{SCREEN_TITLES[activeTab]}</span>
+      </header>
+
+      {navOpen && (
+        <button
+          className="sidebar-backdrop"
+          aria-label="Close navigation"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         selectedBank={selectedBank}
         setSelectedBank={setSelectedBank}
         version={APP_VERSION}
+        isOpen={navOpen}
+        onNavigate={() => setNavOpen(false)}
       />
 
       <div className="app-main">

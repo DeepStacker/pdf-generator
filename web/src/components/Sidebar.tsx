@@ -12,6 +12,9 @@ interface SidebarProps {
   setSelectedBank: (bank: string) => void;
   version: string;
   status?: string;
+  /** On a phone this is a drawer; on a desktop width it is always shown. */
+  isOpen?: boolean;
+  onNavigate?: () => void;
 }
 
 /**
@@ -19,7 +22,11 @@ interface SidebarProps {
  * Every class here is defined in the shared web.css, so the two apps are not
  * "designed to match" -- they are drawing from one set of rules.
  */
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selectedBank, setSelectedBank, version, status }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selectedBank, setSelectedBank, version, status, isOpen, onNavigate }) => {
+  const go = (fn: () => void) => () => {
+    fn();
+    onNavigate?.();  // a drawer that stays open after you pick something is in the way
+  };
   const tools: { id: ActiveTab; label: string; Icon: React.FC<{ className?: string }> }[] = [
     { id: 'report', label: 'Report Validator', Icon: ShieldCheck },
     { id: 'flatten', label: 'Flatten PDF', Icon: FileStack },
@@ -32,7 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selec
   const item = (id: ActiveTab, label: string, Icon: React.FC<{ className?: string }>) => (
     <button
       key={id}
-      onClick={() => setActiveTab(id)}
+      onClick={go(() => setActiveTab(id))}
       className={`sidebar-item nav-btn${activeTab === id ? ' active' : ''}`}
     >
       <Icon />
@@ -41,7 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selec
   );
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${isOpen ? ' is-open' : ''}`}>
       <div className="sidebar-brand">
         <div className="logo-mark">
           <svg viewBox="0 0 32 32" fill="none">
@@ -67,10 +74,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selec
           {BANKS.map((b) => (
             <button
               key={b.name}
-              onClick={() => {
+              onClick={go(() => {
                 setSelectedBank(b.name);
                 setActiveTab('audit');
-              }}
+              })}
               className={`sidebar-item bank-pill${activeTab === 'audit' && selectedBank === b.name ? ' active' : ''}`}
             >
               <span className="bank-dot" style={{ background: b.dot }} />
@@ -78,7 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selec
             </button>
           ))}
           <button
-            onClick={() => setActiveTab('consolidation')}
+            onClick={go(() => setActiveTab('consolidation'))}
             className={`sidebar-item bank-pill${activeTab === 'consolidation' ? ' active' : ''}`}
           >
             <span className="bank-dot" style={{ background: '#8b7fe8' }} />
