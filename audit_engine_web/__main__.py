@@ -304,6 +304,30 @@ def serve_static(filename):
         return {"error": "File not found"}
     return static_file(str(file_path.name), root=str(file_path.parent))
 
+# The PWA files have to answer from the site root: a service worker only
+# controls the scope it is served from, and the manifest's icon paths are
+# resolved against it. There is no catch-all for root paths here, so they are
+# listed explicitly rather than opening one -- a catch-all rooted at the
+# static directory is how directory traversal gets in.
+_ROOT_PWA_FILES = {
+    "manifest.webmanifest": "application/manifest+json",
+    "sw.js": "application/javascript",
+    "icon-192.png": "image/png",
+    "icon-512.png": "image/png",
+    "icon-maskable-192.png": "image/png",
+    "icon-maskable-512.png": "image/png",
+}
+
+
+@route("/<filename>")
+def serve_root_pwa_file(filename):
+    mimetype = _ROOT_PWA_FILES.get(filename)
+    if mimetype is None:
+        response.status = 404
+        return {"error": "Not found"}
+    return static_file(filename, root=str(STATIC_DIR), mimetype=mimetype)
+
+
 @route("/logo.png")
 @route("/assets/logo.png")
 def serve_logo():

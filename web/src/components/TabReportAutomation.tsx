@@ -258,7 +258,7 @@ export const TabReportAutomation: React.FC = () => {
 
       {/* Validator: upload */}
       {view === 'validator' && !data && (
-        <div className="max-w-3xl space-y-4">
+        <div className="max-w-3xl mx-auto space-y-4">
           {/* Step 1 — inputs */}
           <div className="card space-y-4">
             <span className="stat-label">Step 1 · Select Report</span>

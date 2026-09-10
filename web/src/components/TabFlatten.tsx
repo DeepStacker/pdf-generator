@@ -107,7 +107,7 @@ export const TabFlatten: React.FC = () => {
         <span className="section-badge badge-emerald">Nothing Stored</span>
       </div>
 
-      <div className="card space-y-4 max-w-3xl">
+      <div className="card space-y-4 max-w-3xl mx-auto">
         <p className="text-xs text-slate-400 leading-relaxed">
           Bakes form fields and annotations into the page so the values can no longer be edited
           or cleared, and drops link annotations. Filled values are preserved. Your upload and the
