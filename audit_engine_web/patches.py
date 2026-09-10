@@ -5,6 +5,7 @@ logger = logging.getLogger(__name__)
 
 def apply_patches():
     import audit_engine.tasks.workers as workers_mod
+    import audit_engine.database.legacy as legacy_mod
     import audit_engine.utils.dialogs as dialogs_mod
     import audit_engine.utils.platform as platform_mod
     import audit_engine.web.handlers as handlers_mod
@@ -63,3 +64,18 @@ def apply_patches():
     arvog_rebuild_mod.handle_arvog_rebuild_browse = lambda: {"success": True, "path": ""}
     arvog_rebuild_mod.handle_arvog_rebuild_run = lambda _data: dict(_desktop_only)
     arvog_rebuild_mod.handle_arvog_rebuild_open = lambda _data: dict(_desktop_only)
+
+    # The run history is a single-user feature on a single-user machine. Served
+    # from a shared box it records one visitor's workbook name, and its full
+    # path, for the next visitor to read back out of /api/history -- long after
+    # the file itself has been deleted. A workbook name is customer data: it
+    # routinely carries the branch and the date, sometimes the customer.
+    #
+    # So nothing is written here. The desktop app is unaffected and keeps its
+    # history; the browser's History screen simply stays empty.
+    legacy_mod.log_generation = lambda *a, **k: logger.debug("history write skipped (web mode)")
+
+    # The service logs still name the workbook on the way in, and audit_engine.log
+    # outlives the file. That log is on the server's own disk and no route can
+    # read it -- the download and preview routes refuse anything outside the
+    # managed directories -- so it is left alone rather than patched globally.
