@@ -15,8 +15,6 @@ Both front ends drive these same workers, so this applies to the desktop app
 and the browser server alike.
 """
 
-import os
-
 import pytest
 
 from audit_engine.tasks import workers
