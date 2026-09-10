@@ -141,30 +141,68 @@
     width: 100%;
   }
   .btn-sm { min-height: 38px; width: auto; font-size: 0.78rem; }
-  .chip-group { flex-wrap: wrap; gap: 0.4rem; }
+  /* Equal columns. As flex items with a 33% floor, three chips broke 2 + 1,
+     leaving the third stretched across its own row. */
+  .chip-group {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 0.4rem;
+  }
   .chip-btn {
-    flex: 1 1 auto;
-    min-width: 33%;
     min-height: 42px;
-    font-size: 0.8rem;
-    padding: 0.6rem 0.7rem;
+    font-size: 0.78rem;
+    padding: 0.6rem 0.4rem;
+    min-width: 0;
   }
   .input-field { min-height: 44px; font-size: 0.9rem; }
 
-  .section-title { font-size: 1.25rem; }
-  .section-header { flex-direction: column; align-items: flex-start; gap: 0.6rem; }
+  /* The sticky bar names the screen, so the page header underneath it was
+     saying the same thing again -- and then a sentence describing the screen,
+     and then a badge restating something already visible. On a phone that is
+     most of the first screenful spent before any content. The bar keeps the
+     name; the blurb and the badges go; the actions stay, because those are
+     the part the bar cannot carry.
+
+     Where the selected bank was the badge's job, the bar carries it instead,
+     so nothing is actually lost -- see SCREEN_TITLES in App.tsx. */
+  .section-header .section-title,
+  .section-header p,
+  .section-badge { display: none; }
+  .section-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  /* A header with nothing left to show should not leave a gap behind. The
+     space-y rules key off [hidden], not display, so the element after it
+     keeps its top margin unless that is cleared too. */
+  .section-header:not(:has(button)):not(:has(a)) { display: none; }
+  .section-header:not(:has(button)):not(:has(a)) + * { margin-top: 0 !important; }
 
   /* One column, and cards keep room to breathe. */
   .tab-content.process-layout .process-grid { grid-template-columns: 1fr; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
-  .stats-row, .tab-content.process-layout .stats-row { flex-direction: column; }
-  .tab-content.process-layout .stats-row > div { flex: 1 1 auto; }
+  /* Three tiles holding one number each do not need a screen apiece. */
+  .stats-row, .tab-content.process-layout .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+  .tab-content.process-layout .stats-row > div,
+  .stats-row > div { flex: 1 1 auto; padding: 0.6rem 0.5rem; min-width: 0; }
+  .stat-value { font-size: 1.15rem; }
+  .stat-label { font-size: 0.55rem; letter-spacing: 0.04em; }
   .card { padding: 1rem; }
 
-  /* A table narrower than its columns clips them; let it scroll instead. */
-  .history-table, .preview-table { display: block; overflow-x: auto; white-space: nowrap; }
-  /* "No records found" is not a column -- it should read at the width it has,
-     not sit off the edge behind a scrollbar. */
+  /* These tables already sit in an .overflow-x-auto wrapper, so the scrolling
+     is handled. Making the table itself display:block as well took its cells
+     out of table layout, which is what left "No history records found"
+     hanging off the right edge. Give the columns a floor instead and let the
+     wrapper do its job. */
+  .history-table, .preview-table { min-width: 34rem; }
   .history-table td[colspan], .preview-table td[colspan] {
     white-space: normal;
     text-align: center;

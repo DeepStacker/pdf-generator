@@ -149,7 +149,9 @@ export default function App() {
         >
           <Menu />
         </button>
-        <span className="mobile-topbar-title">{SCREEN_TITLES[activeTab]}</span>
+        <span className="mobile-topbar-title">
+          {activeTab === 'audit' ? selectedBank : SCREEN_TITLES[activeTab]}
+        </span>
       </header>
 
       {navOpen && (

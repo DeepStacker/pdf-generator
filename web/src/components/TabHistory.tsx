@@ -57,7 +57,15 @@ export const TabHistory: React.FC = () => {
         />
       </div>
 
-      {/* Log table */}
+      {/* Log table. The empty state is deliberately not a row inside the table:
+          five columns force the table wider than a phone, so a centred cell
+          spanning them all sat off the right edge, unreadable until you
+          scrolled sideways to find out there was nothing there. */}
+      {filteredHistory.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '2.5rem 1rem' }}>
+          <p className="text-slate-500 italic">No history records found.</p>
+        </div>
+      ) : (
       <div className="card card-flush">
         <div className="overflow-x-auto">
           <table className="history-table">
@@ -71,14 +79,7 @@ export const TabHistory: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredHistory.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-slate-500 italic" style={{ textAlign: 'center', padding: '2rem 1rem' }}>
-                    No history records found.
-                  </td>
-                </tr>
-              ) : (
-                filteredHistory.map((item, idx) => (
+              {filteredHistory.map((item, idx) => (
                   <tr key={idx}>
                     <td className="font-mono text-slate-400">{item.timestamp || 'Just now'}</td>
                     <td className="font-semibold">{item.bank_name || 'Consolidation'}</td>
@@ -99,12 +100,12 @@ export const TabHistory: React.FC = () => {
                       )}
                     </td>
                   </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 };
