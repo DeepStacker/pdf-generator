@@ -13,6 +13,7 @@ status code alone would have passed. Only the body gave it away.
 """
 
 import json
+import re
 
 import pytest
 
@@ -28,7 +29,7 @@ def configured(monkeypatch):
 def test_a_hash_never_contains_the_password():
     encoded = auth.hash_password("hunter2-hunter2")
     assert "hunter2" not in encoded
-    assert encoded.startswith("pbkdf2_sha256$")
+    assert encoded.startswith("pbkdf2_sha256:")
 
 
 def test_only_the_right_password_verifies():
@@ -38,10 +39,28 @@ def test_only_the_right_password_verifies():
     assert not auth.verify_password("", encoded)
 
 
-@pytest.mark.parametrize("junk", ["", "nonsense", "a$b$c$d", "pbkdf2_sha256$x$y$z"])
+@pytest.mark.parametrize("junk", ["", "nonsense", "a:b:c:d", "pbkdf2_sha256:x:y:z",
+                                  "pbkdf2_sha256$240000$abc$def"])
 def test_a_malformed_hash_rejects_rather_than_raises(junk):
     """A broken config value must not take the process down, or worse, pass."""
     assert auth.verify_password("anything", junk) is False
+
+
+def test_the_hash_survives_a_compose_env_file():
+    """It must contain no "$", or compose eats it.
+
+    The first format was PBKDF2's conventional
+    pbkdf2_sha256$rounds$salt$hash. Compose interpolates $NAME inside env
+    file values, so on the real deployment the salt and hash segments were
+    read as undefined variables and substituted away. The container received
+    a truncated string, and every password -- including the right one --
+    failed against it.
+    """
+    encoded = auth.hash_password("a-long-enough-password")
+    assert "$" not in encoded, "compose will substitute this away"
+    assert re.fullmatch(r"[A-Za-z0-9_:-]+", encoded), (
+        f"contains characters that need escaping in config files: {encoded}"
+    )
 
 
 def test_a_session_cannot_be_forged_or_edited(configured):

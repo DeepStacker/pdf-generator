@@ -12,6 +12,13 @@ Design notes worth knowing before changing anything here:
 
 * The password is never stored, only a PBKDF2-SHA256 hash of it, and it is
   read from the environment rather than a file in the repo.
+* The encoding avoids "$", "+" and "/" entirely. The obvious format --
+  PBKDF2's usual "pbkdf2_sha256$rounds$salt$hash" -- cannot survive a
+  compose env file: compose interpolates $NAME in values, so the salt and
+  the hash were read as undefined variables and substituted away, leaving a
+  mangled value the server then rejected every password against. Segments
+  are colon-separated and base64url without padding, so the whole value is
+  [A-Za-z0-9_:-] and pastes into any config system unescaped.
 * Comparisons are constant-time. A timing difference on a password check is
   small but free to avoid.
 * It fails closed. With no password configured the server refuses every
@@ -44,21 +51,29 @@ SESSION_MAX_AGE = 12 * 60 * 60  # a working day; re-login the next morning
 _PBKDF2_ROUNDS = 240_000
 
 
+def _b64(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _unb64(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
 def hash_password(password: str, *, rounds: int = _PBKDF2_ROUNDS) -> str:
     """Produce the value GSS_AUTH_PASSWORD_HASH expects."""
     salt = secrets.token_bytes(16)
     dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, rounds)
-    return f"pbkdf2_sha256${rounds}${base64.b64encode(salt).decode()}${base64.b64encode(dk).decode()}"
+    return f"pbkdf2_sha256:{rounds}:{_b64(salt)}:{_b64(dk)}"
 
 
 def verify_password(password: str, encoded: str) -> bool:
     try:
-        algorithm, rounds, salt_b64, hash_b64 = encoded.split("$")
+        algorithm, rounds, salt_b64, hash_b64 = encoded.split(":")
         if algorithm != "pbkdf2_sha256":
             return False
-        dk = hashlib.pbkdf2_hmac("sha256", password.encode(), base64.b64decode(salt_b64), int(rounds))
-        return hmac.compare_digest(dk, base64.b64decode(hash_b64))
-    except (ValueError, TypeError):
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode(), _unb64(salt_b64), int(rounds))
+        return hmac.compare_digest(dk, _unb64(hash_b64))
+    except (ValueError, TypeError, base64.binascii.Error):
         return False
 
 
