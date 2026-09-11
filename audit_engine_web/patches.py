@@ -56,6 +56,7 @@ def apply_patches():
     import audit_engine.web.handlers as handlers_mod
     import audit_engine.web.arvog_rebuild_handlers as arvog_rebuild_mod
     import audit_engine.web.flatten_handlers as flatten_handlers_mod
+    import audit_engine.web.merge_handlers as merge_handlers_mod
     import audit_engine.web.report_handlers as report_handlers_mod
 
     _patch(dialogs_mod, 'ask_file_dialog', lambda: "")
@@ -100,6 +101,15 @@ def apply_patches():
     _patch(flatten_handlers_mod, 'handle_flatten_browse', lambda: {"success": True, "path": ""})
     _patch(flatten_handlers_mod, 'handle_flatten_run', lambda _data: dict(_desktop_only))
     _patch(flatten_handlers_mod, 'handle_flatten_open', lambda _data: dict(_desktop_only))
+
+    # Merge PDF is the same story: the desktop picks a folder with a native
+    # dialog and merges it where it sits. Over HTTP that would read whatever
+    # directory the server names, so the browser uses the upload endpoint.
+    _patch(merge_handlers_mod, 'ask_directory_dialog', lambda: "")
+    _patch(merge_handlers_mod, 'open_path', lambda _path: logger.info("open_path skipped (web mode): %s", _path))
+    _patch(merge_handlers_mod, 'handle_merge_browse', lambda: {"success": True, "path": ""})
+    _patch(merge_handlers_mod, 'handle_merge_run', lambda _data: dict(_desktop_only))
+    _patch(merge_handlers_mod, 'handle_merge_open', lambda _data: dict(_desktop_only))
 
     # Likewise the Arvog rebuild: a native dialog and a path on the local disk.
     # Over HTTP that would be a dialog on the server and server-side file

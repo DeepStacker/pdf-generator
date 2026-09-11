@@ -94,6 +94,11 @@ def _mock_dialogs(monkeypatch):
     monkeypatch.setattr(audit_engine.web.handlers, "ask_files_dialog", lambda: [])
     monkeypatch.setattr(audit_engine.web.handlers, "ask_directory_dialog", lambda: "")
 
+    # merge_handlers holds its own binding; without this a test that calls
+    # handle_merge_browse() would open a real folder dialog and hang CI.
+    import audit_engine.web.merge_handlers
+    monkeypatch.setattr(audit_engine.web.merge_handlers, "ask_directory_dialog", lambda: "")
+
 
 
 

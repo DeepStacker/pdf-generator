@@ -618,6 +618,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 15h6"/></svg>
                     <span class="sidebar-item-label">Flatten PDF</span>
                 </button>
+                <button onclick="selectScreen('MERGE')" id="tabBtn-MERGE" class="sidebar-item nav-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z"/><path d="M12 10v6"/><path d="m9 13 3 3 3-3"/></svg>
+                    <span class="sidebar-item-label">Merge PDF</span>
+                </button>
             </div>
 
             <div class="sidebar-group">
@@ -1619,6 +1623,111 @@
                                     <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Size</span>
                                     <span id="flattenStat-size" class="text-xs font-bold mt-0.5 block text-slate-400">--</span>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============ MERGE PDF ============ -->
+                <section id="tab-MERGE" class="space-y-6 hidden tab-content">
+                    <div class="border-b border-brand-borderLine pb-4 flex items-center justify-between">
+                        <div>
+                            <h2 class="text-3xl font-bold tracking-tight text-white font-sans">Merge PDF</h2>
+                            <p class="text-xs text-slate-500 mt-1">Point at a folder of branch folders. Every PDF inside a branch becomes one PDF named after that branch, and all of them arrive together in a single zip.</p>
+                        </div>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">OFFLINE / NO UPLOAD</span>
+                    </div>
+
+                    <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Step 1: Select Folder</span>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">Root Folder <span class="text-rose-400">*</span></label>
+                            <div class="flex gap-2">
+                                <input type="text" id="mergeFolderPath" readonly placeholder="No folder selected"
+                                       class="flex-1 bg-brand-termBg border border-brand-borderLine rounded-lg px-3 py-2 text-xs text-slate-200 font-mono truncate">
+                                <button onclick="browseMergeFolder()" id="mergeBtnBrowse"
+                                        class="bg-slate-800 text-slate-300 text-xs font-semibold px-4 py-2 rounded-lg border border-brand-borderLine hover:bg-slate-700 transition">Browse</button>
+                            </div>
+                            <span class="text-2xs text-slate-500 mt-1 block">One subfolder per branch, PDFs inside. Files sitting loose in the root belong to no branch and are left out. The source PDFs are never modified.</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl p-6 space-y-4 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider">Step 2: Merge</span>
+                            <button onclick="resetMerge()" class="text-2xs text-slate-500 hover:text-white transition">Reset</button>
+                        </div>
+                        <button onclick="runMerge()" id="mergeBtnRun"
+                                class="w-full bg-blue-600 text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-blue-500 transition disabled:opacity-40 disabled:pointer-events-none dynamic-accent-bg dynamic-accent-hover-bg">
+                            Merge Branch Folders
+                        </button>
+
+                        <div id="mergeProgressContainer" class="hidden bg-slate-950/30 border border-brand-borderLine rounded-lg p-3">
+                            <div class="flex items-center gap-3">
+                                <div class="relative w-12 h-12 flex-shrink-0">
+                                    <svg class="w-full h-full -rotate-90">
+                                        <circle cx="24" cy="24" r="20" stroke-width="4" stroke="#232a36" fill="transparent"/>
+                                        <circle id="mergeProgressRing" cx="24" cy="24" r="20" stroke-width="4" stroke="#4c6fff" fill="transparent" stroke-dasharray="125.6" stroke-dashoffset="125.6" stroke-linecap="round" class="transition-all duration-300 dynamic-accent-stroke"/>
+                                    </svg>
+                                    <span id="mergeProgressPct" class="absolute inset-0 flex items-center justify-center text-2xs font-bold text-white">0%</span>
+                                </div>
+                                <div class="space-y-0.5">
+                                    <span id="mergeProgressText" class="block text-2xs font-bold text-slate-200">Working...</span>
+                                    <span id="mergeProgressFile" class="block text-2xs text-slate-500">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="mergeResults" class="hidden bg-brand-panelBg border border-brand-borderLine rounded-xl overflow-hidden shadow-md">
+                        <div class="p-6 space-y-4">
+                            <div class="flex items-center justify-between flex-wrap gap-3">
+                                <div>
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Merged Zip</span>
+                                    <span id="mergeResultFile" class="text-sm font-bold text-white block mt-0.5 truncate max-w-[420px]">--</span>
+                                </div>
+                                <button onclick="openMergeOutput()" id="mergeBtnOpen"
+                                        class="bg-blue-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-blue-500 transition dynamic-accent-bg dynamic-accent-hover-bg">Open Zip Location</button>
+                            </div>
+                            <div class="flex gap-2 flex-wrap">
+                                <div class="flex-1 min-w-[120px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Branches</span>
+                                    <span id="mergeStat-branches" class="text-sm font-bold mt-0.5 block text-blue-500 dynamic-accent-fg">0</span>
+                                </div>
+                                <div class="flex-1 min-w-[120px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Source Files</span>
+                                    <span id="mergeStat-sources" class="text-sm font-bold mt-0.5 block text-slate-200">0</span>
+                                </div>
+                                <div class="flex-1 min-w-[120px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Pages</span>
+                                    <span id="mergeStat-pages" class="text-sm font-bold mt-0.5 block text-slate-200">0</span>
+                                </div>
+                                <div class="flex-1 min-w-[120px] bg-brand-panelBg border border-brand-borderLine rounded-lg px-3 py-2">
+                                    <span class="text-2xs font-bold text-slate-500 uppercase tracking-wider block">Size</span>
+                                    <span id="mergeStat-size" class="text-xs font-bold mt-0.5 block text-slate-400">--</span>
+                                </div>
+                            </div>
+
+                            <div class="bg-brand-panelBg border border-brand-borderLine rounded-xl overflow-hidden">
+                                <div class="overflow-x-auto max-h-80 overflow-y-auto">
+                                    <table class="w-full text-left border-collapse text-sm sticky-header">
+                                        <thead>
+                                            <tr class="bg-slate-950/60 text-2xs uppercase tracking-wider text-slate-500">
+                                                <th class="py-2.5 px-4 font-bold">Branch</th>
+                                                <th class="py-2.5 px-4 font-bold text-center w-20">Files</th>
+                                                <th class="py-2.5 px-4 font-bold text-center w-20">Pages</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="mergeBranchBody" class="divide-y divide-slate-800/60"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div id="mergeNotes" class="hidden bg-slate-950/30 border border-brand-borderLine rounded-lg p-3 space-y-1">
+                                <span class="text-2xs font-bold text-amber-500 uppercase tracking-wider block">Left Out</span>
+                                <div id="mergeNotesBody" class="space-y-1"></div>
                             </div>
                         </div>
                     </div>

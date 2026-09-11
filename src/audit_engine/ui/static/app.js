@@ -61,10 +61,13 @@
         function showToast(message, type = 'info', duration = 4000) {
             const container = document.getElementById('toastContainer');
             if (!container) { return; }
+            // The oldest toast has to leave the DOM *now*. This loop re-reads
+            // children.length every pass, so removing on a 200ms timer never
+            // ends it: the fourth toast in a batch spun here forever and took
+            // the whole window with it. A merge that reports three skipped
+            // branches and then succeeds is exactly four.
             while (container.children.length >= TOAST_MAX_VISIBLE) {
-                const oldest = container.children[0];
-                oldest.style.animation = 'toastOut 0.2s ease-in forwards';
-                setTimeout(() => oldest.remove(), 200);
+                container.children[0].remove();
             }
             const el = document.createElement('div');
             el.className = 'toast toast-' + type;
@@ -141,7 +144,7 @@
         // INITIALIZATION
         function handleHashRouting() {
             let hash = window.location.hash.replace('#', '').toUpperCase();
-            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS', 'CONSOLIDATE', 'VALIDATOR', 'FLATTEN'];
+            const validTabs = ['PROCESS', 'STATS', 'HISTORY', 'SETTINGS', 'CONSOLIDATE', 'VALIDATOR', 'FLATTEN', 'MERGE'];
             if (!validTabs.includes(hash)) hash = 'PROCESS';
             
             if (state.activeTab !== hash) {
@@ -191,6 +194,7 @@
             CONSOLIDATION: 'bankPill-CONSOLIDATION',
             VALIDATOR: 'tabBtn-VALIDATOR',
             FLATTEN: 'tabBtn-FLATTEN',
+            MERGE: 'tabBtn-MERGE',
             STATS: 'tabBtn-STATS',
             HISTORY: 'tabBtn-HISTORY',
             SETTINGS: 'tabBtn-SETTINGS',
@@ -230,7 +234,7 @@
             if (bankName === 'CONSOLIDATION') {
                 // Show consolidation section, hide bank sections
                 document.getElementById('tab-CONSOLIDATE').classList.remove('hidden');
-                ['tab-PROCESS-IDFC','tab-PROCESS-EQUITAS','tab-PROCESS-ARVOG','tab-VALIDATOR','tab-FLATTEN'].forEach(id => {
+                ['tab-PROCESS-IDFC','tab-PROCESS-EQUITAS','tab-PROCESS-ARVOG','tab-VALIDATOR','tab-FLATTEN','tab-MERGE'].forEach(id => {
                     const s = document.getElementById(id);
                     if (s) s.classList.add('hidden');
                 });
@@ -412,6 +416,7 @@
             document.getElementById('tab-CONSOLIDATE').classList.add('hidden');
             document.getElementById('tab-VALIDATOR').classList.add('hidden');
             document.getElementById('tab-FLATTEN').classList.add('hidden');
+            document.getElementById('tab-MERGE').classList.add('hidden');
 
             // Show active section
             if (tabId === 'PROCESS') {
@@ -2608,6 +2613,192 @@
             document.getElementById('flattenResults').classList.add('hidden');
             document.getElementById('flattenProgressContainer').classList.add('hidden');
             finishFlattenRun();
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // MERGE PDF
+        //
+        // The desktop already has the folder on disk, so it merges in place
+        // and reveals the zip -- no upload, no download, nothing copied. The
+        // browser build of this screen posts the files instead, which is why
+        // the two look alike and share no code path.
+        // ═══════════════════════════════════════════════════════════════
+        let mergePollInterval = null;
+        let mergeOutputPath = '';
+        let mergeLoggedCount = 0;
+
+        function mergeLog(level, message) {
+            reportRunProblem(level, message);
+        }
+
+        async function browseMergeFolder() {
+            try {
+                const resp = await fetch('/api/merge/browse');
+                const data = await resp.json();
+                if (data.path) {
+                    document.getElementById('mergeFolderPath').value = data.path;
+                    mergeLog('INFO', `Selected ${data.path.split(/[\\/]/).filter(Boolean).pop()}`);
+                }
+            } catch (e) {
+                console.error('browseMergeFolder failed', e);
+                showToast('Could not open the folder dialog', 'error');
+            }
+        }
+
+        async function runMerge() {
+            const folder = document.getElementById('mergeFolderPath').value.trim();
+            if (!folder) {
+                showToast('Select a folder first', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('mergeBtnRun');
+            btn.disabled = true;
+            btn.textContent = 'Merging...';
+            document.getElementById('mergeResults').classList.add('hidden');
+            document.getElementById('mergeProgressContainer').classList.remove('hidden');
+            document.getElementById('mergeProgressFile').textContent = folder.split(/[\\/]/).filter(Boolean).pop();
+            mergeOutputPath = '';
+            mergeLoggedCount = 0;
+
+            try {
+                const resp = await fetch('/api/merge/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder: folder })
+                });
+                const data = await resp.json();
+                if (!data.success) {
+                    mergeLog('ERROR', data.error || 'Could not start');
+                    showToast(data.error || 'Could not start', 'error');
+                    finishMergeRun();
+                    return;
+                }
+                if (mergePollInterval) clearInterval(mergePollInterval);
+                mergePollInterval = setInterval(pollMergeProgress, 500);
+            } catch (e) {
+                console.error('runMerge failed', e);
+                mergeLog('ERROR', String(e));
+                finishMergeRun();
+            }
+        }
+
+        async function pollMergeProgress() {
+            try {
+                const resp = await fetch('/api/merge/progress');
+                const data = await resp.json();
+
+                const pct = data.pct || 0;
+                const circ = 125.6;
+                const ring = document.getElementById('mergeProgressRing');
+                if (ring) ring.style.strokeDashoffset = circ - (circ * pct / 100);
+                document.getElementById('mergeProgressPct').textContent = `${pct}%`;
+                document.getElementById('mergeProgressText').textContent = data.progress_text || 'Working...';
+
+                const logs = data.logs || [];
+                for (let i = mergeLoggedCount; i < logs.length; i++) {
+                    mergeLog(logs[i].level, logs[i].message);
+                }
+                mergeLoggedCount = logs.length;
+
+                if (!data.is_running) {
+                    clearInterval(mergePollInterval);
+                    mergePollInterval = null;
+                    if (data.error) {
+                        showToast(data.error, 'error');
+                    } else if (data.summary) {
+                        renderMergeSummary(data.summary);
+                        showToast('Branches merged', 'success');
+                    }
+                    finishMergeRun();
+                }
+            } catch (e) {
+                console.error('pollMergeProgress failed', e);
+                clearInterval(mergePollInterval);
+                mergePollInterval = null;
+                finishMergeRun();
+            }
+        }
+
+        function finishMergeRun() {
+            const btn = document.getElementById('mergeBtnRun');
+            btn.disabled = false;
+            btn.textContent = 'Merge Branch Folders';
+        }
+
+        function renderMergeSummary(summary) {
+            mergeOutputPath = summary.zip_path || '';
+            document.getElementById('mergeResultFile').textContent = summary.zip_name || '--';
+            document.getElementById('mergeStat-branches').textContent = summary.branch_count || 0;
+            document.getElementById('mergeStat-sources').textContent = summary.total_sources || 0;
+            document.getElementById('mergeStat-pages').textContent = summary.total_pages || 0;
+            document.getElementById('mergeStat-size').textContent = formatFileSize(summary.zip_bytes);
+
+            const body = document.getElementById('mergeBranchBody');
+            let html = '';
+            (summary.branches || []).forEach(b => {
+                html += `
+                    <tr class="hover:bg-slate-900/30 transition text-xs border-b border-brand-borderLine">
+                        <td class="py-2.5 px-4 font-semibold text-slate-200 truncate max-w-[420px]" title="${escapeHtml(b.branch)}">${escapeHtml(b.branch)}.pdf</td>
+                        <td class="py-2.5 px-4 text-center font-bold text-slate-200">${b.sources}</td>
+                        <td class="py-2.5 px-4 text-center font-bold text-slate-200">${b.pages}</td>
+                    </tr>`;
+            });
+            body.innerHTML = html;
+
+            // Anything skipped is the whole reason this screen shows more than
+            // a download button: a branch that quietly did not make it into
+            // the zip is the one thing the operator has to be told.
+            const notes = summary.notes || [];
+            const notesWrap = document.getElementById('mergeNotes');
+            const notesBody = document.getElementById('mergeNotesBody');
+            if (notes.length) {
+                notesBody.innerHTML = notes
+                    .map(n => `<span class="block text-2xs text-slate-400">${escapeHtml(n)}</span>`)
+                    .join('');
+                notesWrap.classList.remove('hidden');
+            } else {
+                notesBody.innerHTML = '';
+                notesWrap.classList.add('hidden');
+            }
+
+            document.getElementById('mergeResults').classList.remove('hidden');
+            updateThemeBranding();
+        }
+
+        async function openMergeOutput() {
+            if (!mergeOutputPath) {
+                showToast('Nothing to open yet', 'error');
+                return;
+            }
+            try {
+                const resp = await fetch('/api/merge/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: mergeOutputPath })
+                });
+                const data = await resp.json();
+                if (!data.success) showToast(data.error || 'Could not open the zip', 'error');
+            } catch (e) {
+                console.error('openMergeOutput failed', e);
+                showToast('Could not open the zip', 'error');
+            }
+        }
+
+        function resetMerge() {
+            if (mergePollInterval) {
+                clearInterval(mergePollInterval);
+                mergePollInterval = null;
+            }
+            mergeOutputPath = '';
+            mergeLoggedCount = 0;
+            document.getElementById('mergeFolderPath').value = '';
+            document.getElementById('mergeBranchBody').innerHTML = '';
+            document.getElementById('mergeNotesBody').innerHTML = '';
+            document.getElementById('mergeNotes').classList.add('hidden');
+            document.getElementById('mergeResults').classList.add('hidden');
+            document.getElementById('mergeProgressContainer').classList.add('hidden');
+            finishMergeRun();
         }
 
         // =====================================================

@@ -1,8 +1,8 @@
 import React from 'react';
-import { ShieldCheck, FileStack, BarChart3, History, Settings, Users, LogOut } from 'lucide-react';
+import { ShieldCheck, FileStack, Combine, BarChart3, History, Settings, Users, LogOut } from 'lucide-react';
 import { BANKS } from '../banks';
 
-export type ActiveTab = 'audit' | 'consolidation' | 'flatten' | 'stats' | 'report' | 'history' | 'users' | 'settings';
+export type ActiveTab = 'audit' | 'consolidation' | 'flatten' | 'merge' | 'stats' | 'report' | 'history' | 'users' | 'settings';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -34,6 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selec
   const tools: { id: ActiveTab; label: string; Icon: React.FC<{ className?: string }> }[] = [
     { id: 'report', label: 'Report Validator', Icon: ShieldCheck },
     { id: 'flatten', label: 'Flatten PDF', Icon: FileStack },
+    { id: 'merge', label: 'Merge PDF', Icon: Combine },
   ];
   const insights: { id: ActiveTab; label: string; Icon: React.FC<{ className?: string }> }[] = [
     { id: 'stats', label: 'Analytics', Icon: BarChart3 },

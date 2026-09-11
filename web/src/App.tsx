@@ -11,6 +11,7 @@ const SCREEN_TITLES: Record<ActiveTab, string> = {
   consolidation: 'Consolidation',
   report: 'Report Validator',
   flatten: 'Flatten PDF',
+  merge: 'Merge PDF',
   stats: 'Analytics',
   history: 'History',
   users: 'Users',
@@ -23,6 +24,7 @@ import { TabConsolidation } from './components/TabConsolidation';
 import { TabStats } from './components/TabStats';
 import { TabReportAutomation } from './components/TabReportAutomation';
 import { TabFlatten } from './components/TabFlatten';
+import { TabMerge } from './components/TabMerge';
 import { TabHistory } from './components/TabHistory';
 import { TabSettings } from './components/TabSettings';
 import { TabUsers } from './components/TabUsers';
@@ -31,7 +33,7 @@ export default function App() {
   // Every valid tab, in one place. TabHistory and TabSettings were written but
   // never reachable because this list and the nav were maintained separately.
   const TABS: ActiveTab[] = [
-    'audit', 'consolidation', 'report', 'flatten', 'stats', 'history', 'users', 'settings',
+    'audit', 'consolidation', 'report', 'flatten', 'merge', 'stats', 'history', 'users', 'settings',
   ];
   const isTab = (value: string | null): value is ActiveTab =>
     !!value && (TABS as string[]).includes(value);
@@ -217,6 +219,9 @@ export default function App() {
           </div>
           <div className={activeTab === 'flatten' ? 'block' : 'hidden'}>
             <TabFlatten />
+          </div>
+          <div className={activeTab === 'merge' ? 'block' : 'hidden'}>
+            <TabMerge />
           </div>
           <div className={activeTab === 'history' ? 'block' : 'hidden'}>
             <TabHistory />

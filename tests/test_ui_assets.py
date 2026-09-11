@@ -248,3 +248,24 @@ def test_every_static_ref_in_index_html_resolves():
     assert refs, "expected index.html to reference its assets"
     for name in refs:
         assert os.path.isfile(os.path.join(ui._ASSETS_DIR, name)), f"index.html references missing {name}"
+
+
+def test_the_toast_overflow_loop_removes_synchronously(html):
+    """A deferred removal inside this loop never ends it.
+
+    showToast trims the queue with `while (container.children.length >=
+    TOAST_MAX_VISIBLE)`. That condition is re-read every pass, so removing
+    the oldest toast on a 200ms timer leaves the count unchanged and the
+    loop spins forever -- it froze the whole window on the fourth toast of a
+    batch. A merge that reports three skipped branches and then succeeds is
+    exactly four, and that is how it was found.
+    """
+    start = html.index("while (container.children.length")
+    body = html[html.index("{", start) + 1:]
+    body = body[:body.index("}")]
+
+    assert "setTimeout" not in body, (
+        "the toast overflow loop defers its removal, so its own condition "
+        "never changes and the window hangs"
+    )
+    assert ".remove()" in body

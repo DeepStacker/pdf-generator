@@ -97,6 +97,7 @@ a = Analysis(
         'audit_engine.web.routes',
         'audit_engine.web.report_handlers',
         'audit_engine.web.flatten_handlers',
+        'audit_engine.web.merge_handlers',
         'audit_engine.web.arvog_rebuild_handlers',
         # --- Services ---
         'audit_engine.services',
@@ -105,6 +106,7 @@ a = Analysis(
         'audit_engine.services.arvog',
         'audit_engine.services.report_validator',
         'audit_engine.services.pdf_flattener',
+        'audit_engine.services.pdf_merger',
         # Imported lazily inside the rebuild worker, so PyInstaller cannot
         # see them statically.
         'audit_engine.services.arvog_rebuild',

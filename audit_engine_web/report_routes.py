@@ -534,6 +534,19 @@ def _rebuild_upload_tree(uploads, relative_paths, root: Path) -> int:
     return written
 
 
+def _notes_that_fit(notes, limit=3800):
+    """As many whole notes as a response header can carry."""
+    kept = []
+    for index, note in enumerate(notes):
+        remaining = len(notes) - index
+        candidate = [*kept, str(note)]
+        if len(json.dumps([*candidate, f"...and {remaining} more"])) > limit:
+            kept.append(f"...and {remaining} more")
+            return kept
+        kept = candidate
+    return kept
+
+
 @route("/api/merge/upload", method=["OPTIONS", "POST"])
 def merge_upload():
     """Merge each branch folder's PDFs into one PDF per branch, returned as a zip.
@@ -575,8 +588,11 @@ def merge_upload():
         response.headers["X-Merge-Sources"] = str(result["total_sources"])
         response.headers["X-Merge-Pages"] = str(result["total_pages"])
         # Skipped files and empty branches travel back so the operator is told
-        # rather than left to notice a missing branch later.
-        response.headers["X-Merge-Notes"] = json.dumps(result["notes"])[:3800]
+        # rather than left to notice a missing branch later. A header has a
+        # size limit, so drop whole notes and say how many went -- truncating
+        # the JSON itself would hand back something unparseable and the
+        # operator would learn nothing at all.
+        response.headers["X-Merge-Notes"] = json.dumps(_notes_that_fit(result["notes"]))
         return payload
     except MergeError as e:
         response.status = 400

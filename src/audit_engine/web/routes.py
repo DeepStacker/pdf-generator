@@ -45,6 +45,12 @@ from audit_engine.web.handlers import (
     handle_update_progress,
     handle_validate,
 )
+from audit_engine.web.merge_handlers import (
+    handle_merge_browse,
+    handle_merge_open,
+    handle_merge_progress,
+    handle_merge_run,
+)
 from audit_engine.web.report_handlers import (
     handle_report_browse,
     handle_report_browse_pdf,
@@ -229,6 +235,26 @@ def api_flatten_progress() -> dict:
 @route("/api/flatten/open", method="POST")
 def api_flatten_open() -> dict:
     return handle_flatten_open(request.json)
+
+
+@route("/api/merge/browse")
+def api_merge_browse() -> dict:
+    return handle_merge_browse()
+
+
+@route("/api/merge/run", method="POST")
+def api_merge_run() -> dict:
+    return handle_merge_run(request.json)
+
+
+@route("/api/merge/progress")
+def api_merge_progress() -> dict:
+    return handle_merge_progress()
+
+
+@route("/api/merge/open", method="POST")
+def api_merge_open() -> dict:
+    return handle_merge_open(request.json)
 
 
 # ---- Arvog master rebuild (desktop, path-based / zero-socket) ----
