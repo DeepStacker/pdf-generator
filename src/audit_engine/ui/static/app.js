@@ -809,6 +809,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         filepath,
+                        expected_bank: state.activeBank,
                         expected_stage: isIDFC ? null : state.equitas.stage
                     })
                 });
@@ -1019,6 +1020,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         filepath: fileObj.path,
+                        expected_bank: bank,
                         expected_stage: isEq ? state.equitas.stage : null
                     })
                 });

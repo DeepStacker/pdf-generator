@@ -81,6 +81,28 @@ cd deploy && podman compose -f compose.prod.yml --env-file .env.production up -d
 Return to the tip with `git checkout main` and rebuild. The `/data` volume is
 untouched by either, so no data migration is involved.
 
+## Locked out / forgot the password
+
+There is no email reset and no recovery question, deliberately: this server
+holds customers' audit workbooks and has no mail configured, so the only
+people who can reset it are the people who can already reach the host.
+
+```bash
+ssh <host>
+cd ~/apps/pdf-generator/deploy
+./reset-password.sh
+```
+
+It prompts twice, writes the new hash into `.env.production` (keeping a
+timestamped backup), leaves `GSS_SECRET_KEY` alone so other sessions are not
+disturbed, restarts the stack and checks the gate came back up.
+
+Nothing is lost by resetting — the password protects access, not data. The
+volume, the history and the configuration are untouched.
+
+If the host itself is unreachable, there is no other way in, and that is the
+intended property: possession of the server is the credential of last resort.
+
 ## Set or rotate the password
 
 ```bash

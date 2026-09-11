@@ -53,7 +53,17 @@ def handle_validate(data: dict) -> dict:
     if not filepath or not os.path.exists(filepath):
         return {"success": False, "error": "Spreadsheet file path does not exist."}
 
-    detected_bank = detect_bank_from_file(filepath)
+    # Sniffing headers recognises a *master* workbook. It does not recognise a
+    # file this app produced -- an Equitas Stage 1 output, which is Stage 2's
+    # input, carries none of the master's fingerprint columns -- so detection
+    # returned nothing and the caller was told "Invalid bank format". On the
+    # desktop that marks the file errored, and startGeneration only runs files
+    # marked success, so Stage 2 could not be started from the UI at all.
+    #
+    # The caller has already chosen a bank in the sidebar, so fall back to
+    # what it says. Nothing is waved through: the per-bank validators below
+    # still decide whether the file is usable.
+    detected_bank = detect_bank_from_file(filepath) or data.get("expected_bank")
     headers, preview_rows = peek_excel_data(filepath)
 
     if detected_bank == BankType.IDFC.value:

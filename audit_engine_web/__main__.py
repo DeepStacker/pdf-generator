@@ -233,13 +233,19 @@ def _purge_workspace(keep_paths=()) -> int:
     return removed
 
 
-def _reap_inputs_when_job_ends(paths) -> None:
+def _reap_inputs_when_job_ends(paths, still_running=None) -> None:
     """Delete the uploaded workbooks as soon as the run stops needing them.
 
     They used to sit in the workspace until the idle sweeper noticed them,
     so a customer's source file outlived the job that consumed it by up to
     the TTL. Waiting on the tracker rather than a timer means the file goes
     the moment the run is over, however long the run took.
+
+    `still_running` says which run to wait on. Bank jobs report through
+    global_tracker and consolidation through consolidation_tracker, so
+    defaulting to the former and passing the latter is the difference
+    between deleting a file when its job ends and deleting it while another
+    job is still reading it.
     """
     targets = [Path(p) for p in paths if p]
     if not targets:
@@ -247,11 +253,15 @@ def _reap_inputs_when_job_ends(paths) -> None:
 
     def _wait_then_remove():
         try:
-            from audit_engine.tasks.workers import global_tracker
+            check = still_running
+            if check is None:
+                from audit_engine.tasks.workers import global_tracker
+                def check():
+                    return global_tracker.is_running
             deadline = time.time() + 6 * 60 * 60
             # Give the worker thread a moment to raise the flag before watching it fall.
             time.sleep(2)
-            while global_tracker.is_running and time.time() < deadline:
+            while check() and time.time() < deadline:
                 time.sleep(2)
         except Exception:
             pass
@@ -829,6 +839,34 @@ def web_run():
     result = handle_run(data)
     if isinstance(result, dict) and result.get("success"):
         _reap_inputs_when_job_ends(inputs)
+    return result
+
+
+@route("/api/consolidate/run", method="POST")
+def web_consolidate_run():
+    """Consolidation, with the cleanup a bank run already had.
+
+    /api/run is overridden here so its inputs are purged before and reaped
+    after; consolidation went straight to the shared handler and got
+    neither, so a customer's workbooks sat in the workspace until the idle
+    sweeper happened to notice them.
+    """
+    from audit_engine.web.handlers import handle_consolidate_run
+
+    data = dict(request.json or {})
+    inputs = [f for f in (data.get("files") or []) if f]
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    data["output_dir"] = str(OUTPUT_DIR)
+
+    cleared = _purge_workspace(keep_paths=inputs)
+    if cleared:
+        logger.info("Zero-trace: cleared %d item(s) left by the previous job", cleared)
+
+    result = handle_consolidate_run(data)
+    if isinstance(result, dict) and result.get("success"):
+        from audit_engine.web.handlers import consolidation_tracker
+        _reap_inputs_when_job_ends(inputs, still_running=lambda: consolidation_tracker.is_running)
     return result
 
 

@@ -73,6 +73,9 @@ See **[deploy/RUNBOOK.md](deploy/RUNBOOK.md)**.
 
 Read this before exposing the browser app anywhere new.
 
+- **Forgotten password?** `deploy/reset-password.sh` on the host. There is no
+  email reset by design; whoever can reach the server can reset it, and
+  nothing is lost by doing so. See the runbook.
 - **It requires a password.** Every route except the login page and the icons
   needs a session. With `GSS_AUTH_PASSWORD_HASH` unset the server refuses
   every request rather than serving openly, so a deploy that forgets it fails
