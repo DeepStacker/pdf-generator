@@ -160,11 +160,6 @@ def _drop_acroform(pdf):
         del pdf.Root["/AcroForm"]
 
 
-def flatten_to_temp(src_path, temp_dir):
-    """Flatten into temp_dir, returning the result. Used by the web upload."""
-    src_path = Path(src_path)
-    destination = Path(temp_dir) / f"{src_path.stem}_flattened.pdf"
-    return flatten_pdf(src_path, output_path=destination)
 
 
 def secure_delete(path):

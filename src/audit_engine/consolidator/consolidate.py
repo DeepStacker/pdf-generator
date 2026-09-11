@@ -1194,22 +1194,6 @@ def normalize_md_sheet(df, client_name, filename, verbose=False, mapping_mgr=Non
     return rows
 
 
-def process_payment_tracker_mar26(fname, fpath):
-    """Special handling: Payment Tracker Mar26.xlsx has all clients in one file, no PAN/Bank."""
-    rows = []
-    df = pd.read_excel(fpath, sheet_name="Sheet2")
-    # Drop all-NaN rows and Grand Total rows
-    df = df.dropna(how='all').reset_index(drop=True)
-    df = df[df['Type of Audit'].notna() & (df['Type of Audit'].astype(str).str.strip() != '')]
-    for audit_type, group in df.groupby('Type of Audit'):
-        client_name = AUDIT_TO_CLIENT.get(str(audit_type).strip(), str(audit_type).strip())
-        r = normalize_pt_sheet(group, client_name, f"{fname}[{audit_type}]")
-        for row in r:
-            row['_missing_flag'] = 'MANUAL_ENTRY_NEEDED'
-        rows.extend(r)
-    return rows
-
-
 PREPARSED_CACHE = {}
 
 

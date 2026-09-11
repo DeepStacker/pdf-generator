@@ -116,7 +116,6 @@ a = Analysis(
         'audit_engine.consolidator.mappings',
         'audit_engine.consolidator.extractor',
         'audit_engine.consolidator.mapper',
-        'audit_engine.consolidator.writer',
         'audit_engine.consolidator.consolidate',
         'audit_engine.consolidator.geography',
         'audit_engine.consolidator.audit',
