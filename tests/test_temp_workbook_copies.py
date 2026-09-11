@@ -78,3 +78,22 @@ def test_only_the_engine_s_own_copies_are_deleted(tmp_path):
     workers._cleanup_temp_mapped([str(real)])
 
     assert real.exists(), "cleanup deleted a file the engine did not create"
+
+
+def test_the_output_folder_is_named_after_the_users_file(tmp_path):
+    """Not after the rewritten copy the engine made of it.
+
+    A run carrying column mappings is handed
+    ~/.temp_audit_engine/mapped_<original>, and the output folder was named
+    from whatever file was actually read -- so every desktop run produced
+    "mapped_Q3_audit_<timestamp>" while the browser, which sends no
+    mappings, produced "Q3_audit_<timestamp>" for the same workbook.
+    """
+    engine_copy = "/Users/someone/.temp_audit_engine/mapped_Q3_audit.xlsx"
+    assert workers._output_name_for(engine_copy) == "Q3_audit"
+
+    # a file the user named themselves keeps its name, prefix and all
+    theirs = str(tmp_path / "mapped_totals.xlsx")
+    assert workers._output_name_for(theirs) == "mapped_totals"
+
+    assert workers._output_name_for(str(tmp_path / "Q3_audit.xlsx")) == "Q3_audit"

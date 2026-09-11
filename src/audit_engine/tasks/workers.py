@@ -21,6 +21,26 @@ global_tracker: ProgressTracker = ProgressTracker()
 cancel_event: threading.Event = threading.Event()
 
 
+def _output_name_for(path: str) -> str:
+    """The name to label this run's output folder with.
+
+    A run that carries column mappings is handed a rewritten copy of the
+    workbook, which preprocess_mapped_excel writes to ~/.temp_audit_engine as
+    "mapped_<original>". Naming the output after the file actually read meant
+    every desktop run produced folders like "mapped_Q3_audit_20260101_120000"
+    -- an internal step's prefix on a folder the auditor opens. The browser
+    never sends mappings, so its folders had no prefix and the two apps
+    disagreed about what a run is called.
+
+    The prefix is only stripped for a file this code wrote itself, so a
+    workbook a user genuinely named "mapped_something.xlsx" keeps its name.
+    """
+    name = os.path.splitext(os.path.basename(path))[0]
+    if ".temp_audit_engine" in path and name.startswith("mapped_"):
+        return name[len("mapped_"):]
+    return name
+
+
 def _cleanup_temp_mapped(inp_list: list[str]) -> None:
     for f in inp_list if isinstance(inp_list, list) else [inp_list]:
         if "mapped_" in os.path.basename(f) and ".temp_audit_engine" in f:
@@ -71,7 +91,7 @@ def worker_idfc_thread(inp: str | list[str], out_base: str, typ: str, output_mod
             curr_out_base = os.path.join(curr_out_base, "IDFC_First_Bank")
             os.makedirs(curr_out_base, exist_ok=True)
 
-            excel_name = os.path.splitext(os.path.basename(curr_inp))[0]
+            excel_name = _output_name_for(curr_inp)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
             out = os.path.join(curr_out_base, f"{excel_name}_{timestamp}")
@@ -188,7 +208,7 @@ def worker_equitas_thread(inp: str | list[str], out_base: str, stage: str, equit
             curr_out_base = os.path.join(curr_out_base, "Equitas")
             os.makedirs(curr_out_base, exist_ok=True)
 
-            excel_name = os.path.splitext(os.path.basename(curr_inp))[0]
+            excel_name = _output_name_for(curr_inp)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
             out = os.path.join(curr_out_base, f"{excel_name}_EQ_{stage.replace(' ', '')}_{timestamp}")
@@ -279,7 +299,7 @@ def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool, ou
             curr_out_base = os.path.join(curr_out_base, "Arvog_Bank")
             os.makedirs(curr_out_base, exist_ok=True)
 
-            excel_name = os.path.splitext(os.path.basename(curr_inp))[0]
+            excel_name = _output_name_for(curr_inp)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
             out = os.path.join(curr_out_base, f"{excel_name}_ARVOG_{timestamp}")
