@@ -25,6 +25,11 @@ services:
       REPORT_STORAGE_DIR: /data/reports
       AUDIT_ENGINE_DB_PATH: /data/audit_engine.db
       AUDIT_ENGINE_LOG_PATH: /data/audit_engine.log
+      # Authentication. The app refuses every request without the hash, which
+      # is what keeps an unconfigured deploy from serving customer data openly.
+      GSS_AUTH_PASSWORD_HASH: ${GSS_AUTH_PASSWORD_HASH:-}
+      GSS_SECRET_KEY: ${GSS_SECRET_KEY:-}
+      GSS_AUTH_USER: ${GSS_AUTH_USER:-admin}
     volumes:
       - pdfgen_data:/data
     healthcheck:
@@ -40,13 +45,10 @@ services:
   # tailnet and proxies inward, which is why the stack needs no host port.
   #
   # PUBLIC. ts-serve.json sets AllowFunnel, so this hostname answers the whole
-  # internet, not just the tailnet. The app has no authentication of any kind:
-  # every /api route, including the history listing and the per-report
-  # download, is open to anyone who learns the URL. That was an accepted
-  # trade at the time it was turned on, when the volume held no reports and
-  # the history table was empty. It stops being an acceptable trade the first
-  # time a real audit runs here. Put a login in front of it before that, or
-  # set AllowFunnel back to false.
+  # internet, not just the tailnet. Everything behind it now requires a
+  # password -- see GSS_AUTH_PASSWORD_HASH in .env.production. The server
+  # refuses every request while that is unset, so a deploy that forgets it
+  # fails closed rather than publishing customer data.
   #
   # Userspace networking (the image default) keeps it working under rootless
   # podman with no TUN device and no added capabilities.

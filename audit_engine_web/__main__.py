@@ -14,11 +14,14 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from audit_engine_web import auth
 from audit_engine_web.patches import apply_patches
 apply_patches()
 
 from audit_engine.app import create_app, shutdown_requested
-from audit_engine.lib.bottle import route, request, response, static_file, run, hook, BaseRequest
+from audit_engine.lib.bottle import (
+    route, request, response, static_file, run, hook, BaseRequest, HTTPResponse,
+)
 BaseRequest.MEMFILE_MAX = 500 * 1024 * 1024  # 500 MB limit for file uploads
 from audit_engine.utils.config import paths
 from audit_engine._version import VERSION
@@ -278,6 +281,181 @@ def _add_cors():
     response.headers["Expires"] = "0"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
+
+# ---------------------------------------------------------------------------
+# The password gate.
+#
+# Everything this server exposes acts on customers' audit workbooks, and it
+# answers the public internet, so the default is "no". Only the login form
+# itself, and the handful of files a browser needs to render it, are open.
+#
+# The desktop app never reaches any of this: it talks to the same handlers
+# over an in-process bridge and opens no socket.
+# ---------------------------------------------------------------------------
+
+# The login page must be able to render, and a browser should not have to be
+# signed in to know the site's icon or to install it.
+_OPEN_PATHS = frozenset({"/login", "/logout", "/favicon.ico", "/manifest.webmanifest", "/sw.js"})
+
+
+def _is_open_path(path: str) -> bool:
+    if path in _OPEN_PATHS:
+        return True
+    # The login page is server-rendered and pulls in no bundle, but the icons
+    # are referenced by the manifest an unauthenticated browser may fetch.
+    return path.startswith("/icon-")
+
+
+def _client_id() -> str:
+    return request.environ.get("REMOTE_ADDR", "unknown")
+
+
+@hook("before_request")
+def _require_login():
+    """Refuse anything that is not signed in.
+
+    This RAISES rather than returns. bottle collects the return values of
+    before_request hooks and throws them away -- trigger_hook builds a list
+    and discards it -- so a hook that returns a 401 sets a status code and
+    then lets the handler run anyway. An earlier version of this did exactly
+    that: an unauthenticated GET / answered 401 and served the whole
+    application, and /api/history answered 401 with the history in the body.
+    Raising an HTTPResponse is what actually stops the request.
+    """
+    path = request.path
+
+    # Fails closed. An operator who has not set a password gets an error, not
+    # an open server -- the whole point of this file is that the alternative
+    # silently publishes customer data.
+    if not auth.is_configured():
+        if _is_open_path(path):
+            return
+        raise HTTPResponse(
+            body=_render_page(
+                "Not configured",
+                "<p>This server has no password set, so it is refusing every request.</p>"
+                f"<p class='hint'>Set <code>{auth.PASSWORD_ENV}</code> in the environment and restart. "
+                "Generate a value with <code>python -m audit_engine_web.setpassword</code>.</p>",
+            ),
+            status=503,
+            headers={"Content-Type": "text/html; charset=utf-8"},
+        )
+
+    if _is_open_path(path):
+        return
+    if auth.session_is_valid(request.get_cookie(auth.COOKIE_NAME)):
+        return
+
+    # An API call gets a status its caller can act on; a browser gets the form.
+    if path.startswith("/api/"):
+        raise HTTPResponse(
+            body=json.dumps({"success": False, "error": "Not signed in."}),
+            status=401,
+            headers={"Content-Type": "application/json"},
+        )
+    raise HTTPResponse(status=303, headers={"Location": "/login"})
+
+
+def _render_page(title: str, body_html: str, *, status_note: str = "") -> str:
+    """The login and error pages, rendered server-side.
+
+    Deliberately standalone rather than part of the React app: this has to
+    work before a visitor is allowed to fetch the bundle at all, and it should
+    still render if that bundle is missing. The colours are the ones from
+    tokens.css, copied rather than imported for the same reason.
+    """
+    return f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GSS-MIS</title><link rel="icon" type="image/svg+xml" href="/favicon.ico">
+<style>
+  :root {{ color-scheme: dark; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; min-height:100dvh; display:flex; align-items:center; justify-content:center;
+         background:#0a0d12; color:#e9ecf1; padding:1.25rem;
+         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }}
+  .box {{ width:100%; max-width:23rem; background:rgba(20,25,34,.65);
+          border:1px solid rgba(58,68,82,.25); border-radius:14px; padding:1.75rem;
+          box-shadow:0 1px 2px rgba(0,0,0,.24),0 8px 20px -6px rgba(0,0,0,.32); }}
+  .brand {{ display:flex; align-items:center; gap:.6rem; margin-bottom:1.5rem; }}
+  .mark {{ width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,#4c6fff,#5c7cfa);
+           display:grid; place-items:center; font-weight:800; font-size:.8rem; }}
+  h1 {{ font-size:1rem; margin:0; letter-spacing:-.01em; }}
+  .sub {{ font-size:.7rem; color:#7c8695; margin-top:.15rem; }}
+  label {{ display:block; font-size:.78rem; font-weight:600; color:#a6afbd; margin-bottom:.4rem; }}
+  input {{ width:100%; min-height:44px; padding:.65rem .85rem; margin-bottom:1rem; font-size:.9rem;
+           color:#e9ecf1; background:rgba(10,12,16,.8);
+           border:1px solid rgba(58,68,82,.25); border-radius:6px; }}
+  input:focus {{ outline:none; border-color:rgba(92,124,250,.4);
+                 box-shadow:0 0 0 3px rgba(92,124,250,.15); }}
+  button {{ width:100%; min-height:44px; border:0; border-radius:6px; background:#506cdb;
+            color:#fff; font-weight:700; font-size:.85rem; cursor:pointer; }}
+  button:hover {{ filter:brightness(1.1); }}
+  .note {{ margin-bottom:1rem; padding:.7rem .8rem; border-radius:6px; font-size:.8rem;
+           background:rgba(242,85,90,.1); border:1px solid rgba(242,85,90,.25); color:#f5828a; }}
+  p {{ font-size:.85rem; color:#a6afbd; line-height:1.55; margin:0 0 .75rem; }}
+  .hint {{ font-size:.78rem; color:#7c8695; }}
+  code {{ font-family:ui-monospace,Menlo,monospace; font-size:.76rem; color:#a6afbd; }}
+</style></head>
+<body><div class="box">
+  <div class="brand"><div class="mark">GM</div>
+    <div><h1>GSS-MIS</h1><div class="sub">{title}</div></div></div>
+  {f'<div class="note">{status_note}</div>' if status_note else ''}
+  {body_html}
+</div></body></html>"""
+
+
+@route("/login", method=["GET", "POST"])
+def login():
+    response.content_type = "text/html; charset=utf-8"
+    form = ("<form method=\"post\" action=\"/login\">"
+            "<label for=\"u\">User</label>"
+            f"<input id=\"u\" name=\"user\" autocomplete=\"username\" value=\"{auth.expected_user()}\">"
+            "<label for=\"p\">Password</label>"
+            "<input id=\"p\" name=\"password\" type=\"password\" autocomplete=\"current-password\" autofocus>"
+            "<button type=\"submit\">Sign in</button></form>")
+
+    if request.method == "GET":
+        if auth.session_is_valid(request.get_cookie(auth.COOKIE_NAME)):
+            response.status = 303
+            response.set_header("Location", "/")
+            return ""
+        return _render_page("Sign in", form)
+
+    client = _client_id()
+    if auth.is_throttled(client):
+        response.status = 429
+        logger.warning("Login throttled for %s", client)
+        return _render_page("Sign in", form, status_note="Too many attempts. Try again later.")
+
+    user = (request.forms.get("user") or "").strip()
+    password = request.forms.get("password") or ""
+    if user == auth.expected_user() and auth.verify_password(password, os.environ.get(auth.PASSWORD_ENV, "")):
+        auth.clear_failures(client)
+        response.set_cookie(
+            auth.COOKIE_NAME, auth.issue_session(),
+            httponly=True,           # not readable from JavaScript, so XSS cannot lift it
+            secure=True,             # only ever sent over TLS
+            samesite="lax",          # not attached to cross-site form posts
+            max_age=auth.SESSION_MAX_AGE, path="/",
+        )
+        response.status = 303
+        response.set_header("Location", "/")
+        return ""
+
+    auth.note_failure(client)
+    logger.warning("Failed login from %s", client)
+    response.status = 401
+    return _render_page("Sign in", form, status_note="Wrong user or password.")
+
+
+@route("/logout", method=["GET", "POST"])
+def logout():
+    response.delete_cookie(auth.COOKIE_NAME, path="/")
+    response.status = 303
+    response.set_header("Location", "/login")
+    return ""
+
 
 @route("/", method=["GET", "HEAD"])
 def serve_index():

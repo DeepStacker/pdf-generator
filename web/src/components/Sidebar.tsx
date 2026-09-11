@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, FileStack, BarChart3, History, Settings } from 'lucide-react';
+import { ShieldCheck, FileStack, BarChart3, History, Settings, LogOut } from 'lucide-react';
 import { BANKS } from '../banks';
 
 export type ActiveTab = 'audit' | 'consolidation' | 'flatten' | 'stats' | 'report' | 'history' | 'settings';
@@ -106,6 +106,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selec
 
       <div className="sidebar-footer">
         {item('settings', 'Settings', Settings)}
+        <a href="/logout" className="sidebar-item nav-btn">
+          <LogOut />
+          <span className="sidebar-item-label">Sign out</span>
+        </a>
         <div className="sidebar-status">
           <span className="sidebar-status-text">
             <span className="status-dot" />

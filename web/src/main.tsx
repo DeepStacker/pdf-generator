@@ -3,6 +3,18 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
+// A session lasts a working day, so one will expire while a tab is open.
+// Without this every call after that point just fails, and the screen shows
+// errors it cannot explain. The server answers 401 for exactly one reason.
+const originalFetch = window.fetch;
+window.fetch = async (...args) => {
+  const res = await originalFetch(...args);
+  if (res.status === 401 && !window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login';
+  }
+  return res;
+};
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

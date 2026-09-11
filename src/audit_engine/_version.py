@@ -1,5 +1,5 @@
 """Single source of truth for application version."""
 
-__version__ = "5.2.362"
+__version__ = "5.2.363"
 VERSION = __version__
 APP_TITLE = "Audit Engine v5.0"
