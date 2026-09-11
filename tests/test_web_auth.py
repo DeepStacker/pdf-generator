@@ -136,3 +136,66 @@ def test_the_login_page_and_the_icons_stay_reachable():
 
     for path in ("/", "/api/history", "/api/run", "/assets/index-abc.js"):
         assert not web_main._is_open_path(path), f"{path} is reachable without signing in"
+
+
+def test_every_route_taking_a_path_confines_it():
+    """A signed-in session must not be able to read the whole filesystem.
+
+    /api/download and /api/preview checked this; /api/preview/excel and
+    /api/consolidate/preparse did not, so a valid session could read any
+    workbook on the container -- another tenant's upload included. Found by
+    probing a running server, not by reading.
+    """
+    import ast
+
+    import audit_engine_web.__main__ as web_main
+
+    with open(web_main.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    tree = ast.parse(src)
+    lines = src.splitlines()
+
+    # handlers that take a filesystem path from the caller
+    takes_a_path = {
+        "handle_download", "handle_preview", "handle_preview_excel",
+        "handle_preparse", "handle_list_output",
+    }
+    unconfined = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in takes_a_path:
+            body = "\n".join(lines[node.lineno - 1:node.end_lineno])
+            if "_reject_outside_workspace" not in body and "_within_workspace" not in body:
+                unconfined.append(node.name)
+
+    assert not unconfined, f"these take a caller-supplied path and never confine it: {unconfined}"
+
+
+def test_the_login_throttle_counts_the_client_not_the_proxy():
+    """Every visitor shared one counter, so anyone could lock everyone out.
+
+    The app sits behind the Tailscale sidecar, so REMOTE_ADDR is the proxy --
+    10.89.4.3 on the real deployment, confirmed from the server's own log.
+    Eight bad guesses from a stranger denied the whole team access for
+    fifteen minutes.
+    """
+    import audit_engine_web.__main__ as web_main
+
+    with open(web_main.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    start = src.index("def _client_id(")
+    body = src[start:src.index("\n\n\n", start)]
+    assert "HTTP_X_FORWARDED_FOR" in body, (
+        "_client_id is back to REMOTE_ADDR alone, which is the proxy for every "
+        "visitor -- one attacker can lock out all real users"
+    )
+
+
+def test_responses_do_not_advertise_themselves_cross_origin():
+    """The browser app is same-origin; the blanket CORS header bought nothing."""
+    import audit_engine_web.__main__ as web_main
+
+    with open(web_main.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    assert 'Access-Control-Allow-Origin"] = "*"' not in src
+    for header in ("Strict-Transport-Security", "Content-Security-Policy", "Referrer-Policy"):
+        assert header in src, f"{header} is no longer set"

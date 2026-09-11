@@ -272,15 +272,25 @@ _set_cfg("auto_open", "False")
 INDEX_CACHE = None
 
 @hook("after_request")
-def _add_cors():
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+def _security_headers():
+    # No Access-Control-Allow-Origin. The browser app is served from this same
+    # origin and never makes a cross-origin call, so the previous blanket "*"
+    # bought nothing and advertised every endpoint to any page on the web.
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    # Served over TLS by the Tailscale proxy; this stops a downgrade on a
+    # hostname a browser has already seen once.
+    response.headers["Strict-Transport-Security"] = "max-age=31536000"
+    # The app loads only its own bundle and an inline style block; nothing is
+    # fetched from anywhere else, so everything but self can be refused.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+    )
 
 # ---------------------------------------------------------------------------
 # The password gate.
@@ -307,6 +317,23 @@ def _is_open_path(path: str) -> bool:
 
 
 def _client_id() -> str:
+    """Who a failed login is counted against.
+
+    REMOTE_ADDR is the Tailscale sidecar -- 10.89.4.3 on this deployment,
+    confirmed from the server's own "Failed login from" line -- so every
+    visitor on the internet shared a single counter. Eight bad guesses from
+    anyone locked every real user out of the tool for fifteen minutes, which
+    is a denial of service available to a stranger with curl.
+
+    The proxy sets X-Forwarded-For; its first entry is the originating
+    client. That header is attacker-controlled, so rotating it evades the
+    throttle. Taking that trade deliberately: an attacker who evades it still
+    has to guess a random password against PBKDF2 at 240,000 rounds a try,
+    while the shared counter handed anyone a one-command outage.
+    """
+    forwarded = request.environ.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
     return request.environ.get("REMOTE_ADDR", "unknown")
 
 
@@ -626,6 +653,12 @@ def handle_preview_excel():
     if not filepath:
         return {"success": False, "error": "No path provided"}
     abs_path = Path(filepath)
+    # Same confinement /api/download and /api/preview already had. Without it
+    # this read any workbook on the filesystem, not just the ones this server
+    # is managing -- another tenant's upload included.
+    denied = _reject_outside_workspace(abs_path)
+    if denied:
+        return denied
     if not abs_path.exists():
         return {"success": False, "error": "File not found"}
     try:
@@ -660,6 +693,9 @@ def handle_preparse():
     filepath = data.get("filepath")
     if not filepath:
         return {"success": False, "error": "No filepath provided"}
+    denied = _reject_outside_workspace(Path(filepath))
+    if denied:
+        return denied
     from audit_engine.web.handlers import handle_preparse_file
     return handle_preparse_file(filepath)
 
@@ -703,33 +739,6 @@ def handle_list_output():
                     "rel_path": str(item.relative_to(p))
                 })
     return {"success": True, "files": files}
-
-@route("/api/history/<entry_id>/download/<filename:path>")
-def handle_history_download(entry_id, filename):
-    from audit_engine.database.legacy import get_connection
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT output_path, full_path FROM history WHERE id = ?", (entry_id,))
-    row = cursor.fetchone()
-    if not row:
-        response.status = 404
-        return {"error": "History entry not found"}
-    output_path = row[0]
-    file_path = Path(output_path) / filename
-    if not file_path.exists():
-        file_path = Path(output_path)
-        if not file_path.exists():
-            response.status = 404
-            return {"error": "File not found"}
-    if file_path.is_dir():
-        zip_name = f"history_{entry_id}_{uuid.uuid4()}.zip"
-        zip_dest = OUTPUT_DIR / zip_name
-        with zipfile.ZipFile(str(zip_dest), "w", zipfile.ZIP_DEFLATED) as zf:
-            for f in file_path.rglob("*"):
-                zf.write(str(f), str(f.relative_to(file_path)))
-        return static_file(zip_name, root=str(OUTPUT_DIR), download=zip_name)
-    return static_file(file_path.name, root=str(file_path.parent), download=file_path.name)
-
 @route("/api/run", method="POST")
 def web_run():
     """Start a job, after clearing out whatever the last one left behind."""

@@ -1794,10 +1794,11 @@
                     const escExcelName = escapeHtml(row.excel_name);
                     const escAuditType = escapeHtml(row.audit_type);
                     const rawPath = row.full_path || row.output_path || '';
-                    const dlLink = isWebMode() ? `/api/history/${row.id}/download/` : '#';
-                    const dlBtn = isWebMode()
-                        ? `<a href="${dlLink}" class="inline-block text-blue-500 hover:text-white bg-blue-500/10 hover:bg-blue-500 border border-blue-500/20 px-3 py-1.5 rounded transition font-semibold dynamic-accent-fg" download>Download</a>`
-                        : `<button onclick="openSystemPath('${encodeURIComponent(rawPath)}')" class="text-blue-500 hover:text-white bg-blue-500/10 hover:bg-blue-500 border border-blue-500/20 px-3 py-1.5 rounded transition font-semibold dynamic-accent-fg">Open Files</button>`;
+                    // This file only ever runs in the desktop shell -- the browser app
+                    // is a separate React bundle -- so the web-mode arm of this was
+                    // unreachable, and it linked at /api/history/<id>/download/, a
+                    // route that no longer exists.
+                    const dlBtn = `<button onclick="openSystemPath('${encodeURIComponent(rawPath)}')" class="text-blue-500 hover:text-white bg-blue-500/10 hover:bg-blue-500 border border-blue-500/20 px-3 py-1.5 rounded transition font-semibold dynamic-accent-fg">Open Files</button>`;
                     html += `
                         <tr class="hover:bg-slate-900/30 transition text-xs border-b border-brand-borderLine">
                             <td class="py-3.5 px-6 font-mono text-slate-400">${escTimestamp}</td>
