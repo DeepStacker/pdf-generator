@@ -15,7 +15,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from audit_engine_web import auth
+from audit_engine.tasks import session as job_session
+from audit_engine_web import auth, users
 from audit_engine_web.patches import apply_patches
 apply_patches()
 
@@ -174,37 +175,67 @@ _start_temp_garbage_collector()
 DOWNLOAD_DELETE_DELAY = 5.0
 
 
-def _workspace_roots() -> tuple[Path, ...]:
+def _user_dirs(user: str | None) -> tuple[Path, Path]:
+    """Where this user's uploads and outputs live.
+
+    Everyone shared one upload and one output directory, which was fine for
+    one person and is not for several: the purge at the start of a run clears
+    the workspace, so one person pressing Generate deleted another's reports
+    mid-download, and the download route would happily serve any path inside
+    it -- including somebody else's audit. A subdirectory each makes both
+    impossible rather than unlikely.
+
+    The name is already constrained to letters, digits, dot, dash and
+    underscore by users.is_valid_username, and is taken from a signed session
+    rather than a header, so it cannot climb out of the workspace.
+    """
+    if not user:
+        return UPLOAD_DIR, OUTPUT_DIR
+    safe = users.normalise(user)
+    if not users.is_valid_username(safe):
+        raise ValueError(f"refusing to build a path from {user!r}")
+    return UPLOAD_DIR / safe, OUTPUT_DIR / safe
+
+
+def _workspace_roots(user: str | None = None) -> tuple[Path, ...]:
+    """The directories a request may touch.
+
+    Scoped to the caller when there is one. An admin gets no wider view here
+    either: managing accounts is not a reason to read someone's audit.
+    """
+    if user:
+        uploads, outputs = _user_dirs(user)
+        return (uploads.resolve(), outputs.resolve())
     return (UPLOAD_DIR.resolve(), OUTPUT_DIR.resolve())
 
 
-def _within_workspace(path: Path) -> bool:
-    """True if path is inside a directory this server manages.
-
-    Without this, "path" on the download and preview routes is any absolute
-    path on the box — the history database and every other tenant's file
-    included.
-    """
+def _within_workspace(path: Path, user: str | None = None) -> bool:
+    """True if path is inside a directory this caller is allowed to reach."""
     try:
         resolved = path.resolve()
     except OSError:
         return False
-    return any(resolved == root or root in resolved.parents for root in _workspace_roots())
+    roots = _workspace_roots(user)
+    return any(resolved == root or root in resolved.parents for root in roots)
 
 
 def _reject_outside_workspace(path: Path) -> dict | None:
-    if _within_workspace(path):
+    if _within_workspace(path, current_user()):
         return None
     logger.warning("Refused access to %s: outside the managed directories", path)
     response.status = 403
     return {"error": "Access denied"}
 
 
-def _purge_workspace(keep_paths=()) -> int:
-    """Delete everything under the managed directories except keep_paths.
+def _purge_workspace(keep_paths=(), user: str | None = None) -> int:
+    """Clear this user's workspace except keep_paths, before their next job.
 
-    Used at the start of a job, so one customer's report is never sitting on
-    disk while the next customer's is being produced.
+    So one customer's report is never sitting on disk while the next
+    customer's is produced. Scoped to one user: it used to clear the whole
+    workspace, so pressing Generate deleted everyone else's reports -- and
+    since the route purged before handle_run checked whether a job was
+    already running, even a *rejected* attempt destroyed the running user's
+    work.
     """
     keep = set()
     for raw in keep_paths:
@@ -213,7 +244,7 @@ def _purge_workspace(keep_paths=()) -> int:
                 keep.add(Path(raw).resolve())
 
     removed = 0
-    for root in (UPLOAD_DIR, OUTPUT_DIR):
+    for root in _user_dirs(user):
         if not root.exists():
             continue
         for child in root.iterdir():
@@ -362,6 +393,21 @@ def _is_open_path(path: str) -> bool:
     return path.startswith("/icon-")
 
 
+def _login_possible() -> bool:
+    """Someone must be able to sign in, or the server has no business serving.
+
+    Either an account exists or the bootstrap environment variable does; the
+    first request adopts the latter into the former.
+    """
+    users.ensure_bootstrapped()
+    return bool(users.list_users()) or auth.is_configured()
+
+
+def current_user() -> str | None:
+    """Who is making this request. None outside a signed-in request."""
+    return auth.session_user(request.get_cookie(auth.COOKIE_NAME))
+
+
 def _client_id() -> str:
     """Who a failed login is counted against.
 
@@ -395,12 +441,21 @@ def _require_login():
     application, and /api/history answered 401 with the history in the body.
     Raising an HTTPResponse is what actually stops the request.
     """
+    # The desktop drives these same handlers over an in-process bridge, which
+    # opens no socket and has nobody to authenticate. Only the desktop entry
+    # point sets this flag, so the HTTP server is never exempt -- but if this
+    # module is ever imported into the desktop process, its gate must not
+    # start demanding a login the desktop has no way to supply.
+    from audit_engine.app import _ipc_mode
+    if _ipc_mode.enabled:
+        return
+
     path = request.path
 
     # Fails closed. An operator who has not set a password gets an error, not
     # an open server -- the whole point of this file is that the alternative
     # silently publishes customer data.
-    if not auth.is_configured():
+    if not _login_possible():
         if _is_open_path(path):
             return
         raise HTTPResponse(
@@ -415,9 +470,18 @@ def _require_login():
         )
 
     if _is_open_path(path):
+        job_session.bind(None)
         return
-    if auth.session_is_valid(request.get_cookie(auth.COOKIE_NAME)):
+
+    signed_in_as = auth.session_user(request.get_cookie(auth.COOKIE_NAME))
+    if signed_in_as:
+        # Bind before the handler runs: everything downstream -- settings,
+        # progress, the workspace -- reads the current user from here rather
+        # than taking it as an argument. WSGI reuses threads, so this must be
+        # set on every request, not only the first.
+        job_session.bind(signed_in_as)
         return
+    job_session.bind(None)
 
     # An API call gets a status its caller can act on; a browser gets the form.
     if path.startswith("/api/"):
@@ -483,9 +547,9 @@ def login():
     response.content_type = "text/html; charset=utf-8"
     form = ("<form method=\"post\" action=\"/login\">"
             "<label for=\"u\">User</label>"
-            f"<input id=\"u\" name=\"user\" autocomplete=\"username\" value=\"{auth.expected_user()}\">"
+            "<input id=\"u\" name=\"user\" autocomplete=\"username\" autofocus>"
             "<label for=\"p\">Password</label>"
-            "<input id=\"p\" name=\"password\" type=\"password\" autocomplete=\"current-password\" autofocus>"
+            "<input id=\"p\" name=\"password\" type=\"password\" autocomplete=\"current-password\">"
             "<button type=\"submit\">Sign in</button></form>")
 
     if request.method == "GET":
@@ -503,10 +567,12 @@ def login():
 
     user = (request.forms.get("user") or "").strip()
     password = request.forms.get("password") or ""
-    if user == auth.expected_user() and auth.verify_password(password, os.environ.get(auth.PASSWORD_ENV, "")):
+    users.ensure_bootstrapped()
+    account = users.verify(user, password)
+    if account:
         auth.clear_failures(client)
         response.set_cookie(
-            auth.COOKIE_NAME, auth.issue_session(),
+            auth.COOKIE_NAME, auth.issue_session(account["username"]),
             httponly=True,           # not readable from JavaScript, so XSS cannot lift it
             secure=True,             # only ever sent over TLS
             samesite="lax",          # not attached to cross-site form posts
@@ -632,7 +698,8 @@ def handle_upload():
     if not upload:
         return {"success": False, "error": "No file provided"}
     safe_name = _safe_upload_name(upload)
-    subdir = UPLOAD_DIR / str(uuid.uuid4())[:8]
+    user_uploads, _ = _user_dirs(current_user())
+    subdir = user_uploads / str(uuid.uuid4())[:8]
     subdir.mkdir(parents=True, exist_ok=True)
     dest = subdir / safe_name
     upload.save(str(dest))
@@ -650,7 +717,8 @@ def handle_upload_multiple():
     paths_list = []
     for upload in uploaded:
         safe_name = _safe_upload_name(upload)
-        subdir = UPLOAD_DIR / str(uuid.uuid4())[:8]
+        user_uploads, _ = _user_dirs(current_user())
+        subdir = user_uploads / str(uuid.uuid4())[:8]
         subdir.mkdir(parents=True, exist_ok=True)
         dest = subdir / safe_name
         upload.save(str(dest))
@@ -778,13 +846,18 @@ def handle_download_zip():
     if not paths_to_zip:
         return {"success": False, "error": "No paths provided"}
 
+    who = current_user()
+    _, out_dir = _user_dirs(who)
+    out_dir.mkdir(parents=True, exist_ok=True)
     zip_name = f"audit_engine_output_{uuid.uuid4()}.zip"
-    zip_path = OUTPUT_DIR / zip_name
+    zip_path = out_dir / zip_name
 
     with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
         for item in paths_to_zip:
             p = Path(item)
-            if p.exists() and p.is_file() and _within_workspace(p):
+            # Scoped to the caller: without it a crafted list of paths would
+            # zip up somebody else's reports and hand them over.
+            if p.exists() and p.is_file() and _within_workspace(p, who):
                 zf.write(str(p), p.name)
 
     return {"success": True, "zip_path": str(zip_path)}
@@ -795,7 +868,7 @@ def handle_list_output():
     if not dirpath:
         return {"success": False, "files": []}
     p = Path(dirpath)
-    if not _within_workspace(p) or not p.exists():
+    if not _within_workspace(p, current_user()) or not p.exists():
         return {"success": False, "files": []}
 
     files = []
@@ -829,17 +902,38 @@ def web_run():
     # minutes pass with nothing written to it, and handle_run rejects an
     # out_path that does not exist. Without this, the first job after a quiet
     # spell failed with "Output directory invalid."
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    data["out_path"] = str(OUTPUT_DIR)
+    who = current_user()
+    _, out_dir = _user_dirs(who)
+    # Recreated first: the idle sweeper deletes this once a couple of minutes
+    # pass with nothing written to it, and handle_run rejects an out_path that
+    # does not exist. Without this, the first job after a quiet spell failed
+    # with "Output directory invalid."
+    out_dir.mkdir(parents=True, exist_ok=True)
+    data["out_path"] = str(out_dir)
+    data["_user"] = who
 
-    cleared = _purge_workspace(keep_paths=inputs)
+    cleared = _purge_workspace(keep_paths=inputs, user=who)
     if cleared:
         logger.info("Zero-trace: cleared %d item(s) left by the previous job", cleared)
 
     result = handle_run(data)
     if isinstance(result, dict) and result.get("success"):
-        _reap_inputs_when_job_ends(inputs)
+        from audit_engine.tasks import session as job_session
+        tracker, _cancel = job_session.session_for(who)
+        _reap_inputs_when_job_ends(inputs, still_running=lambda: tracker.is_running)
     return result
+
+
+@route("/api/progress")
+def web_progress():
+    from audit_engine.web.handlers import handle_progress
+    return handle_progress(current_user())
+
+
+@route("/api/cancel", method="POST")
+def web_cancel():
+    from audit_engine.web.handlers import handle_cancel
+    return handle_cancel(current_user())
 
 
 @route("/api/consolidate/run", method="POST")
@@ -856,10 +950,12 @@ def web_consolidate_run():
     data = dict(request.json or {})
     inputs = [f for f in (data.get("files") or []) if f]
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    data["output_dir"] = str(OUTPUT_DIR)
+    who = current_user()
+    _, out_dir = _user_dirs(who)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    data["output_dir"] = str(out_dir)
 
-    cleared = _purge_workspace(keep_paths=inputs)
+    cleared = _purge_workspace(keep_paths=inputs, user=who)
     if cleared:
         logger.info("Zero-trace: cleared %d item(s) left by the previous job", cleared)
 
@@ -868,6 +964,91 @@ def web_consolidate_run():
         from audit_engine.web.handlers import consolidation_tracker
         _reap_inputs_when_job_ends(inputs, still_running=lambda: consolidation_tracker.is_running)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Accounts. Admin only, and the caller is taken from the signed session --
+# never from the request body, or anyone could manage anyone.
+# ---------------------------------------------------------------------------
+
+def _require_admin() -> dict | None:
+    who = current_user()
+    account = users.get_user(who) if who else None
+    if not account or not account["is_admin"]:
+        response.status = 403
+        return {"success": False, "error": "Admins only."}
+    return None
+
+
+@route("/api/me")
+def api_me():
+    """Who am I, and may I manage accounts? Drives the UI."""
+    who = current_user()
+    account = users.get_user(who) if who else None
+    return {
+        "success": True,
+        "username": who,
+        "is_admin": bool(account and account["is_admin"]),
+    }
+
+
+@route("/api/users")
+def api_users_list():
+    denied = _require_admin()
+    if denied:
+        return denied
+    return {"success": True, "users": users.list_users()}
+
+
+@route("/api/users", method="POST")
+def api_users_add():
+    denied = _require_admin()
+    if denied:
+        return denied
+    data = request.json or {}
+    ok, message = users.add_user(
+        data.get("username", ""), data.get("password", ""),
+        is_admin=bool(data.get("is_admin")),
+    )
+    if not ok:
+        response.status = 400
+    return {"success": ok, "error": None if ok else message, "message": message}
+
+
+@route("/api/users/<username>/password", method="POST")
+def api_users_password(username):
+    denied = _require_admin()
+    if denied:
+        return denied
+    ok, message = users.set_password(username, (request.json or {}).get("password", ""))
+    if not ok:
+        response.status = 400
+    return {"success": ok, "error": None if ok else message, "message": message}
+
+
+@route("/api/users/<username>/admin", method="POST")
+def api_users_admin(username):
+    denied = _require_admin()
+    if denied:
+        return denied
+    ok, message = users.set_admin(username, bool((request.json or {}).get("is_admin")))
+    if not ok:
+        response.status = 400
+    return {"success": ok, "error": None if ok else message, "message": message}
+
+
+@route("/api/users/<username>", method="DELETE")
+def api_users_delete(username):
+    denied = _require_admin()
+    if denied:
+        return denied
+    if users.normalise(username) == users.normalise(current_user() or ""):
+        response.status = 400
+        return {"success": False, "error": "You cannot remove your own account."}
+    ok, message = users.delete_user(username)
+    if not ok:
+        response.status = 400
+    return {"success": ok, "error": None if ok else message, "message": message}
 
 
 @route("/api/update/check")

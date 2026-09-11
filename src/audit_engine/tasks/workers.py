@@ -3,22 +3,26 @@
 import logging
 import os
 import shutil
-import threading
 import time
 import zipfile
 from datetime import datetime
 
+import audit_engine.tasks.session as _session
 from audit_engine.database import get_config, log_generation
 from audit_engine.services import arvog as arvog_bank
 from audit_engine.services import equitas as equitas_logic
 from audit_engine.services import idfc as pdf_logic
-from audit_engine.tasks.tracker import ProgressTracker
+from audit_engine.tasks.tracker import ProgressTracker  # noqa: F401 -- re-exported
 from audit_engine.utils.platform import open_path, trigger_notification
 
 logger = logging.getLogger(__name__)
 
-global_tracker: ProgressTracker = ProgressTracker()
-cancel_event: threading.Event = threading.Event()
+# Both resolve per thread, so a worker started for one user never writes into
+# another's progress or reads another's cancel. Every call site below is
+# unchanged -- see tasks/session.py for why the indirection is here rather
+# than an argument threaded through forty-odd calls.
+global_tracker = _session._TrackerProxy()
+cancel_event = _session._CancelProxy()
 
 
 def _distinct_run_dir(parent: str, label: str) -> str:

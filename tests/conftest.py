@@ -48,6 +48,40 @@ import pytest  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
+def _unbound_user():
+    """Leave every test with no user bound to this thread.
+
+    Job state and settings are keyed on a thread-local current user, so a
+    test that binds one and then fails -- or simply forgets -- leaves the
+    binding in place for everything that runs after it in the same thread.
+    That is not hypothetical: binding a user in the multi-user tests made six
+    desktop tests fail purely by running after them, because the config keys
+    they read were suddenly prefixed.
+    """
+    from audit_engine.app import _ipc_mode
+    from audit_engine.tasks import session
+
+    session.unbind()
+    _ipc_mode.enabled = False
+    yield
+    session.unbind()
+    # Constructing a WebViewBridge switches the process into IPC mode, where
+    # the HTTP password gate does not apply. Left set, it would make a later
+    # test think the gate had been disabled.
+    _ipc_mode.enabled = False
+
+    # Importing the web server calls apply_patches(), which rewires
+    # desktop-only handlers for the whole process. Left in place it makes the
+    # order of test files matter: anything importing the server before the
+    # desktop tests made them fail with "Not available in web mode".
+    try:
+        from audit_engine_web.patches import revert_patches
+    except Exception:
+        return
+    revert_patches()
+
+
+@pytest.fixture(autouse=True)
 def _mock_dialogs(monkeypatch):
     import audit_engine.utils.dialogs
     import audit_engine.web.handlers

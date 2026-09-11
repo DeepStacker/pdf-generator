@@ -105,30 +105,43 @@ def _secret() -> bytes:
 _EPHEMERAL_SECRET: bytes | None = None
 
 
-def issue_session() -> str:
-    """A signed `issued_at.signature` token. No server-side state to keep."""
-    issued = str(int(time.time()))
-    signature = hmac.new(_secret(), issued.encode(), hashlib.sha256).hexdigest()
-    return f"{issued}.{signature}"
+def issue_session(username: str) -> str:
+    """A signed `username.issued_at.signature` token.
+
+    The name is inside the signature, not merely alongside it, so it cannot be
+    edited into someone else's -- which matters now that the name decides
+    whose files and whose settings a request reaches.
+    """
+    payload = f"{username}.{int(time.time())}"
+    signature = hmac.new(_secret(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{signature}"
 
 
-def session_is_valid(token: str | None) -> bool:
+def session_user(token: str | None) -> str | None:
+    """The user this token belongs to, or None if it is not a valid session."""
     if not token:
-        return False
+        return None
     try:
-        issued, signature = token.rsplit(".", 1)
+        payload, signature = token.rsplit(".", 1)
+        username, issued = payload.rsplit(".", 1)
     except ValueError:
-        return False
+        return None
 
-    expected = hmac.new(_secret(), issued.encode(), hashlib.sha256).hexdigest()
+    expected = hmac.new(_secret(), payload.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):
-        return False
+        return None
 
     try:
         age = time.time() - int(issued)
     except ValueError:
-        return False
-    return 0 <= age <= SESSION_MAX_AGE
+        return None
+    if not (0 <= age <= SESSION_MAX_AGE):
+        return None
+    return username or None
+
+
+def session_is_valid(token: str | None) -> bool:
+    return session_user(token) is not None
 
 
 # --- Login throttling -------------------------------------------------------

@@ -13,7 +13,18 @@ _FULL_PATH_IDX = 6
 
 
 class ConfigRepository:
-    """Key-value configuration store with in-memory cache."""
+    """Key-value configuration store with in-memory cache.
+
+    Settings belong to whoever is signed in. The browser app serves several
+    people from one process, so an unscoped store would have them sharing an
+    output folder, a bank selection and a naming pattern -- and the cache
+    below would have handed one person's value straight to the next.
+
+    Scoping happens here rather than at forty call sites: the current user is
+    bound per thread (see tasks/session.py) and the key is prefixed with it.
+    The desktop binds nobody, so its keys stay exactly as they were and its
+    existing settings keep working.
+    """
 
     _NOT_FOUND = object()
 
@@ -23,19 +34,27 @@ class ConfigRepository:
     def _clear_cache(self) -> None:
         self._cache.clear()
 
+    @staticmethod
+    def _scoped(key: str) -> str:
+        from audit_engine.tasks import session as _session
+        user = _session.current_user()
+        return f"u:{user}:{key}" if user else key
+
     def get(self, key: str, default: str | None = None) -> str | None:
-        if key not in self._cache:
-            db_val = _db.get_config(key)
-            self._cache[key] = db_val if db_val is not None else self._NOT_FOUND
-        cached_val = self._cache[key]
+        scoped = self._scoped(key)
+        if scoped not in self._cache:
+            db_val = _db.get_config(scoped)
+            self._cache[scoped] = db_val if db_val is not None else self._NOT_FOUND
+        cached_val = self._cache[scoped]
         if cached_val is self._NOT_FOUND:
             return default
         assert isinstance(cached_val, str)
         return cached_val
 
     def set(self, key: str, value: str) -> None:
-        self._cache[key] = value
-        _db.set_config(key, value)
+        scoped = self._scoped(key)
+        self._cache[scoped] = value
+        _db.set_config(scoped, value)
 
     def get_bool(self, key: str, default: bool = True) -> bool:
         val = self.get(key, str(default))

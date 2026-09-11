@@ -64,25 +64,28 @@ def test_the_hash_survives_a_compose_env_file():
 
 
 def test_a_session_cannot_be_forged_or_edited(configured):
-    token = auth.issue_session()
+    token = auth.issue_session("ravi")
     assert auth.session_is_valid(token)
 
-    issued, signature = token.rsplit(".", 1)
-    assert not auth.session_is_valid(f"{issued}.{'0' * len(signature)}")
-    assert not auth.session_is_valid(f"{int(issued) - 1}.{signature}")  # re-dated
+    payload, signature = token.rsplit(".", 1)
+    username, issued = payload.rsplit(".", 1)
+    assert not auth.session_is_valid(f"{payload}.{'0' * len(signature)}")
+    assert not auth.session_is_valid(f"{username}.{int(issued) - 1}.{signature}")  # re-dated
+    # the name is inside the signature, so it cannot be swapped for another
+    assert auth.session_user(f"admin.{issued}.{signature}") is None
     assert not auth.session_is_valid("nonsense")
     assert not auth.session_is_valid(None)
 
 
 def test_a_session_expires(configured, monkeypatch):
-    token = auth.issue_session()
+    token = auth.issue_session("ravi")
     real_time = auth.time.time
     monkeypatch.setattr(auth.time, "time", lambda: real_time() + auth.SESSION_MAX_AGE + 60)
     assert not auth.session_is_valid(token), "an expired session still opened the door"
 
 
 def test_a_session_signed_with_another_key_is_refused(configured, monkeypatch):
-    token = auth.issue_session()
+    token = auth.issue_session("ravi")
     monkeypatch.setenv(auth.SECRET_ENV, "a-different-key")
     assert not auth.session_is_valid(token)
 

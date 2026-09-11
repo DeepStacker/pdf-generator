@@ -28,6 +28,13 @@ class WebViewBridge:
 
     def __init__(self) -> None:
         self._app = default_app()
+        # Constructing this bridge *is* entering IPC mode: requests arrive
+        # in-process from the app's own window, never over a socket. Saying so
+        # here rather than only in the desktop entry point keeps the flag true
+        # for anything that builds a bridge -- and the browser server, which
+        # never builds one, is unaffected.
+        from audit_engine.app import _ipc_mode
+        _ipc_mode.enabled = True
 
     @property
     def app(self) -> object:

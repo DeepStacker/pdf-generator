@@ -11,7 +11,8 @@ from pathlib import Path
 
 from audit_engine.database.repos import config_repo, history_repo
 from audit_engine.domain.enums import ArvogFormat, AuditType, BankType, EquitasFormat, EquitasStage, OutputMode
-from audit_engine.tasks.workers import cancel_event, global_tracker, worker_arvog_thread, worker_equitas_thread, worker_idfc_thread
+from audit_engine.tasks import session as job_session
+from audit_engine.tasks.workers import worker_arvog_thread, worker_equitas_thread, worker_idfc_thread
 from audit_engine.updater.client import check_latest_release, download_update_worker, update_state
 from audit_engine.utils.config import paths
 from audit_engine.utils.dialogs import ask_directory_dialog, ask_file_dialog, ask_files_dialog
@@ -161,7 +162,14 @@ def _validate_enum(value: str, valid_set: set[str], name: str) -> str | None:
 
 
 def handle_run(data: dict) -> dict:
-    if global_tracker.is_running:
+    # Whose run this is. The desktop passes nothing and keeps the single
+    # shared job it has always had; the browser passes the signed-in user, so
+    # two people generate at once without sharing a progress bar, a cancel
+    # button, or an output directory.
+    job_user = data.get("_user")
+    job_tracker, job_cancel = job_session.session_for(job_user)
+
+    if job_tracker.is_running:
         return {"success": False, "error": "A generation thread is already active."}
 
     bank: str = str(data.get("bank") or "")
@@ -224,8 +232,8 @@ def handle_run(data: dict) -> dict:
     config_repo.set("bank", bank)
     config_repo.set("out_path", out_path)
 
-    cancel_event.clear()
-    global_tracker.reset()
+    job_cancel.clear()
+    job_tracker.reset()
 
     column_mappings = data.get("column_mappings")
     if column_mappings:
@@ -234,46 +242,42 @@ def handle_run(data: dict) -> dict:
         else:
             actual_filepath = preprocess_mapped_excel(actual_filepath, column_mappings, bank)
 
-    import threading
 
     if bank == BankType.IDFC.value:
         config_repo.set("audit_type", str(data.get("audit_type", "POA")))
         config_repo.set("pkg_mode", str(data.get("output_mode", "BOTH")))
-        t = threading.Thread(
-            target=worker_idfc_thread,
-            args=(actual_filepath, out_path, str(data.get("audit_type", "POA")),
-                  str(data.get("output_mode", "BOTH")), auto_open, naming_pattern),
-            daemon=True,
+        target, args = worker_idfc_thread, (
+            actual_filepath, out_path, str(data.get("audit_type", "POA")),
+            str(data.get("output_mode", "BOTH")), auto_open, naming_pattern,
         )
     elif bank == BankType.ARVOG.value:
         config_repo.set("arvog_format", str(data.get("arvog_format", "BOTH")))
         config_repo.set("arvog_mode", str(data.get("arvog_mode", "BOTH")))
-        t = threading.Thread(
-            target=worker_arvog_thread,
-            args=(actual_filepath, out_path, auto_open,
-                  str(data.get("arvog_format", "BOTH")), str(data.get("arvog_mode", "BOTH"))),
-            daemon=True,
+        target, args = worker_arvog_thread, (
+            actual_filepath, out_path, auto_open,
+            str(data.get("arvog_format", "BOTH")), str(data.get("arvog_mode", "BOTH")),
         )
     else:
         config_repo.set("equitas_format", str(data.get("equitas_format", "BOTH")))
         config_repo.set("equitas_pack", str(data.get("equitas_pack", "FOLDER")))
-        t = threading.Thread(
-            target=worker_equitas_thread,
-            args=(actual_filepath, out_path, str(data.get("equitas_stage", "STAGE 1")),
-                  str(data.get("equitas_format", "BOTH")), str(data.get("equitas_pack", "FOLDER"))),
-            daemon=True,
+        target, args = worker_equitas_thread, (
+            actual_filepath, out_path, str(data.get("equitas_stage", "STAGE 1")),
+            str(data.get("equitas_format", "BOTH")), str(data.get("equitas_pack", "FOLDER")),
         )
-    t.start()
+
+    job_session.run_bound(job_user, target, args)
     return {"success": True}
 
 
-def handle_progress() -> dict:
-    return global_tracker.snapshot()
+def handle_progress(user: str | None = None) -> dict:
+    tracker, _cancel = job_session.session_for(user)
+    return tracker.snapshot()
 
 
-def handle_cancel() -> dict:
-    cancel_event.set()
-    global_tracker.cancel_requested = True
+def handle_cancel(user: str | None = None) -> dict:
+    tracker, cancel = job_session.session_for(user)
+    cancel.set()
+    tracker.cancel_requested = True
     return {"success": True}
 
 
