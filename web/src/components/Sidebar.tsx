@@ -1,8 +1,8 @@
 import React from 'react';
-import { ShieldCheck, FileStack, BarChart3, History, Settings, LogOut } from 'lucide-react';
+import { ShieldCheck, FileStack, BarChart3, History, Settings, Users, LogOut } from 'lucide-react';
 import { BANKS } from '../banks';
 
-export type ActiveTab = 'audit' | 'consolidation' | 'flatten' | 'stats' | 'report' | 'history' | 'settings';
+export type ActiveTab = 'audit' | 'consolidation' | 'flatten' | 'stats' | 'report' | 'history' | 'users' | 'settings';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -11,6 +11,10 @@ interface SidebarProps {
   selectedBank: string;
   setSelectedBank: (bank: string) => void;
   version: string;
+  /** Account management is an admin's screen; everyone else is not shown the
+   *  door at all. The server refuses the endpoints regardless -- this only
+   *  keeps the nav honest about what this account can do. */
+  isAdmin?: boolean;
   status?: string;
   /** On a phone this is a drawer; on a desktop width it is always shown. */
   isOpen?: boolean;
@@ -22,7 +26,7 @@ interface SidebarProps {
  * Every class here is defined in the shared web.css, so the two apps are not
  * "designed to match" -- they are drawing from one set of rules.
  */
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selectedBank, setSelectedBank, version, status, isOpen, onNavigate }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selectedBank, setSelectedBank, version, isAdmin, status, isOpen, onNavigate }) => {
   const go = (fn: () => void) => () => {
     fn();
     onNavigate?.();  // a drawer that stays open after you pick something is in the way
@@ -105,6 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selec
       </nav>
 
       <div className="sidebar-footer">
+        {isAdmin && item('users', 'Users', Users)}
         {item('settings', 'Settings', Settings)}
         <a href="/logout" className="sidebar-item nav-btn">
           <LogOut />

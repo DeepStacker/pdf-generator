@@ -28,6 +28,21 @@ if ! podman ps --format '{{.Names}}' | grep -q '^pdfgen-app-1$'; then
   exit 1
 fi
 
+# This rewrites the credential of the RUNNING deployment and restarts it.
+# Nothing about running it from a checkout says so, and it has already been
+# run by accident once -- by someone setting up a local test server who
+# reached for the nearest script that makes a password hash. If you only want
+# a hash, use:  podman exec -it pdfgen-app-1 python -m audit_engine_web.setpassword
+if [ "${GSS_RESET_CONFIRM:-}" != "yes" ]; then
+  echo
+  echo "About to change the live password for $(grep -o '^TS_HOSTNAME=.*' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo 'this deployment')"
+  echo "and restart the stack. Everyone signed in stays signed in; the old"
+  echo "password stops working immediately."
+  echo
+  read -rp "Type 'change it' to continue: " CONFIRM
+  [ "$CONFIRM" = "change it" ] || { echo "Cancelled."; exit 1; }
+fi
+
 echo "Setting a new password for the GSS-MIS browser app."
 read -rsp "New password (at least 12 characters): " PW1; echo
 read -rsp "Repeat: " PW2; echo

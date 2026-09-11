@@ -13,6 +13,7 @@ const SCREEN_TITLES: Record<ActiveTab, string> = {
   flatten: 'Flatten PDF',
   stats: 'Analytics',
   history: 'History',
+  users: 'Users',
   settings: 'Settings',
 };
 
@@ -24,12 +25,13 @@ import { TabReportAutomation } from './components/TabReportAutomation';
 import { TabFlatten } from './components/TabFlatten';
 import { TabHistory } from './components/TabHistory';
 import { TabSettings } from './components/TabSettings';
+import { TabUsers } from './components/TabUsers';
 
 export default function App() {
   // Every valid tab, in one place. TabHistory and TabSettings were written but
   // never reachable because this list and the nav were maintained separately.
   const TABS: ActiveTab[] = [
-    'audit', 'consolidation', 'report', 'flatten', 'stats', 'history', 'settings',
+    'audit', 'consolidation', 'report', 'flatten', 'stats', 'history', 'users', 'settings',
   ];
   const isTab = (value: string | null): value is ActiveTab =>
     !!value && (TABS as string[]).includes(value);
@@ -54,6 +56,11 @@ export default function App() {
   // sidebar is off-canvas; at desktop widths the CSS shows it regardless.
   const [navOpen, setNavOpen] = useState(false);
 
+  // Who is signed in. Until this answers we know neither the name nor whether
+  // the Users screen exists for this account, so the nav entry stays absent
+  // rather than appearing and then being taken away again.
+  const [me, setMe] = useState<{ username: string | null; is_admin: boolean } | null>(null);
+
   const setSelectedBank = (bank: string) => {
     setSelectedBankState(bank);
     localStorage.setItem('bank_audit_selectedBank', bank);
@@ -66,6 +73,27 @@ export default function App() {
     window.location.hash = tab;
     localStorage.setItem('audit_engine_active_tab', tab);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/me')
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setMe({ username: data?.username ?? null, is_admin: !!data?.is_admin });
+      })
+      .catch(() => {
+        if (!cancelled) setMe({ username: null, is_admin: false });
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // A saved tab or a #users link can outlive the account that could use it --
+  // the screen is admin-only, so send everyone else back to the default rather
+  // than leaving them on a page of permission errors.
+  useEffect(() => {
+    if (me && !me.is_admin && activeTab === 'users') setActiveTab('audit');
+  }, [me, activeTab]);
 
   // Listen for browser Back / Forward / Refresh navigation
   useEffect(() => {
@@ -168,6 +196,7 @@ export default function App() {
         selectedBank={selectedBank}
         setSelectedBank={setSelectedBank}
         version={APP_VERSION}
+        isAdmin={!!me?.is_admin}
         isOpen={navOpen}
         onNavigate={() => setNavOpen(false)}
       />
@@ -192,6 +221,11 @@ export default function App() {
           <div className={activeTab === 'history' ? 'block' : 'hidden'}>
             <TabHistory />
           </div>
+          {me?.is_admin && (
+            <div className={activeTab === 'users' ? 'block' : 'hidden'}>
+              <TabUsers currentUser={me.username} />
+            </div>
+          )}
           <div className={activeTab === 'settings' ? 'block' : 'hidden'}>
             <TabSettings />
           </div>

@@ -90,8 +90,19 @@ people who can reset it are the people who can already reach the host.
 ```bash
 ssh <host>
 cd ~/apps/pdf-generator/deploy
-./reset-password.sh
+./reset-password.sh          # asks you to type "change it" first
 ```
+
+**This script changes the credential of the running deployment.** Nothing
+about running it from a checkout says so, and it has already been run by
+accident once. If you only want to generate a hash — to add a user, or to
+set up a test instance — use this instead, which touches nothing:
+
+```bash
+podman exec -it pdfgen-app-1 python -m audit_engine_web.setpassword
+```
+
+Scripted use needs `GSS_RESET_CONFIRM=yes` to skip the prompt.
 
 It prompts twice, writes the new hash into `.env.production` (keeping a
 timestamped backup), leaves `GSS_SECRET_KEY` alone so other sessions are not
