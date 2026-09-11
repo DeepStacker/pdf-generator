@@ -1,0 +1,31 @@
+# The build context is copied wholesale by `COPY . .`. Without this it was
+# 426MB locally -- a 269MB PyInstaller dist/ and a 70MB virtualenv that have
+# no business in a server image, plus node_modules and the git history.
+.git
+.gitignore
+.github
+.claude
+
+# Desktop build outputs and local environments
+dist/
+build/
+.venv*
+*.egg-info
+__pycache__/
+*.pyc
+
+# Built by the web stage inside the image, never copied from the host -- a
+# stale local bundle must not be able to win over a fresh build.
+web/node_modules
+audit_engine_web/static
+
+# Not part of a running server
+tests/
+hooks/
+pdf_generator.spec
+Makefile
+report_uploads/
+consolidation_audit.json
+.DS_Store
+.pytest_cache
+.ruff_cache

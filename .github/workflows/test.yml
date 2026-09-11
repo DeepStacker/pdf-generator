@@ -39,3 +39,40 @@ jobs:
 
       - name: Test with pytest
         run: python -m pytest tests/ -v --tb=short
+
+  # The browser front end is built from source into the image, so a change to
+  # web/src that does not compile has to fail here rather than at deploy time.
+  # Nothing checked it before: CI ran only the Python suite, and the bundle
+  # was a committed artifact that could sit stale indefinitely.
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        working-directory: web
+        run: npm run lint
+
+      - name: Build
+        working-directory: web
+        run: npm run build
+
+      - name: Check the build produced what the server serves
+        run: |
+          set -e
+          for f in index.html sw.js manifest.webmanifest favicon.svg; do
+            test -f "audit_engine_web/static/$f" || { echo "build did not produce $f"; exit 1; }
+          done
+          ls audit_engine_web/static/assets/*.js >/dev/null
+          ls audit_engine_web/static/assets/*.css >/dev/null
+          echo "front end built and complete"

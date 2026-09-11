@@ -7,6 +7,27 @@
 # would be missing and the app would serve a blank page. Editable keeps the
 # source tree as the install, exactly as the previous host ran it.
 
+# ---------------------------------------------------------------------------
+# The browser front end, built from source.
+#
+# Its output used to be committed and copied in from the host, so a change to
+# web/src only reached production if someone also remembered to run the build
+# and commit the bundle. Building it here means the image can only ever
+# contain what the source says, and a clean clone deploys correctly.
+#
+# web/src/index.css imports the desktop's tokens.css and web.css by relative
+# path -- one palette, both front ends -- so those have to be present here in
+# the same shape the repo has them, not just the web/ directory.
+# ---------------------------------------------------------------------------
+FROM node:22-slim AS webbuild
+WORKDIR /build
+COPY web/package.json web/package-lock.json ./web/
+RUN cd web && npm ci --no-audit --no-fund
+COPY src/audit_engine/ui/static/tokens.css src/audit_engine/ui/static/web.css ./src/audit_engine/ui/static/
+COPY web/ ./web/
+RUN cd web && npm run build
+
+
 FROM python:3.12-slim
 
 # Faster, quieter, and no .pyc litter in the image.
@@ -28,6 +49,11 @@ PY
 RUN pip install -r /tmp/reqs.txt
 
 COPY . .
+
+# The front end from the stage above. Comes after COPY . . so it cannot be
+# shadowed by anything that slipped through .dockerignore.
+COPY --from=webbuild /build/audit_engine_web/static/ audit_engine_web/static/
+
 RUN pip install --no-deps -e .
 
 # Runs unprivileged. /data is the only writable path it needs; everything the

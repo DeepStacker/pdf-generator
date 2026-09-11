@@ -12,6 +12,7 @@ __pycache__/
 build/
 dist/
 *.spec
+!pdf_generator.spec
 
 # Output data
 *.xlsx
@@ -86,3 +87,16 @@ report_uploads/
 !settings/mapping_rules.xlsx
 !templates/Feb'26 consolidated.xlsx
 
+
+# macOS
+.DS_Store
+
+# The browser front end is built from web/ -- the Dockerfile and CI both run
+# that build. Committing the output meant a change to web/src only reached
+# production if someone remembered to rebuild and commit the bundle too.
+audit_engine_web/static/*
+!audit_engine_web/static/.gitkeep
+
+# Local run artifacts
+report_uploads/
+consolidation_audit.json
