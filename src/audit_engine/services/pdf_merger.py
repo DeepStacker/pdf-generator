@@ -83,6 +83,21 @@ def find_branches(root: Path) -> tuple[dict[str, list[Path]], list[str]]:
         if not pdfs:
             notes.append(f"{child.name}: no PDFs, skipped.")
             continue
+
+        # Picking one level too high is the mistake this tool cannot catch by
+        # failing: root/Region/Branch/file.pdf merges every branch in a region
+        # into one Region.pdf and reports success. The signature is a folder
+        # whose PDFs all live further down, which is also what a branch that
+        # keeps its scans in a subfolder looks like -- so this says what
+        # happened and leaves the judgement to the person who picked it.
+        if not any(pdf.parent == child for pdf in pdfs):
+            inner = sorted({pdf.relative_to(child).parts[0] for pdf in pdfs}, key=natural_key)
+            shown = ", ".join(inner[:3]) + (f" and {len(inner) - 3} more" if len(inner) > 3 else "")
+            notes.append(
+                f"{child.name}: every PDF came from inside subfolders ({shown}), and they were all "
+                f"merged into one {safe_branch_name(child.name)}.pdf. If those subfolders are the "
+                f"branches, pick the folder one level down."
+            )
         branches[child.name] = pdfs
 
     if not branches:

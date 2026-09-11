@@ -397,3 +397,73 @@ class TestNotesHeader:
     def test_no_notes_is_an_empty_list_not_a_marker(self):
         from audit_engine_web.report_routes import _notes_that_fit
         assert _notes_that_fit([]) == []
+
+
+class TestTheFolderIsTheWrongShape:
+    """The shapes people actually arrive with.
+
+    Two of these are the dangerous kind: they merge cleanly and report
+    success while merging at the wrong level, so the only defence is saying
+    what happened.
+    """
+
+    def test_a_flat_folder_of_pdfs_stops_rather_than_guessing(self, tmp_path):
+        root = tmp_path / "flat"
+        for i in (1, 2, 3):
+            _pdf(root / f"file{i}.pdf")
+        with pytest.raises(MergeError, match="No branch folder"):
+            merge_folder_to_zip(root, tmp_path / "out.zip")
+
+    def test_one_level_too_high_merges_but_says_so(self, tmp_path):
+        """root/Region/Branch/file.pdf gives one PDF per *region*.
+
+        Nothing here is an error -- the tool cannot know a region is not a
+        branch -- so the note has to carry it.
+        """
+        root = tmp_path / "too_high"
+        _pdf(root / "North" / "Branch A" / "a1.pdf")
+        _pdf(root / "North" / "Branch B" / "b1.pdf")
+        _pdf(root / "South" / "Branch C" / "c1.pdf")
+
+        out = tmp_path / "out.zip"
+        result = merge_folder_to_zip(root, out)
+
+        with zipfile.ZipFile(out) as zf:
+            assert sorted(zf.namelist()) == ["North.pdf", "South.pdf"]
+        north = [n for n in result["notes"] if n.startswith("North:")]
+        assert north, f"nothing warned about the level: {result['notes']}"
+        assert "one level down" in north[0]
+        assert "Branch A" in north[0] and "Branch B" in north[0]
+
+    def test_a_branch_that_keeps_its_scans_in_a_subfolder_still_merges(self, tmp_path):
+        """Same signature, legitimate folder -- it must merge, note or not."""
+        root = tmp_path / "nested"
+        _pdf(root / "Branch A" / "scans" / "a1.pdf", pages=2)
+        _pdf(root / "Branch B" / "b1.pdf")
+
+        out = tmp_path / "out.zip"
+        result = merge_folder_to_zip(root, out)
+        assert result["branch_count"] == 2
+        assert _pages_of(out, "Branch A.pdf") == 2
+
+    def test_a_branch_with_files_at_both_depths_is_not_flagged(self, tmp_path):
+        root = tmp_path / "mixed"
+        _pdf(root / "Branch A" / "a1.pdf")
+        _pdf(root / "Branch A" / "scans" / "a2.pdf")
+
+        result = merge_folder_to_zip(root, tmp_path / "out.zip")
+        assert not [n for n in result["notes"] if "one level down" in n]
+
+    def test_picking_a_single_branch_folder_stops(self, tmp_path):
+        """Its PDFs are loose in the root, so there is no branch to name."""
+        root = tmp_path / "Branch A"
+        _pdf(root / "file1.pdf")
+        with pytest.raises(MergeError):
+            merge_folder_to_zip(root, tmp_path / "out.zip")
+
+    def test_a_folder_of_non_pdfs_stops(self, tmp_path):
+        root = tmp_path / "junk"
+        (root / "Branch A").mkdir(parents=True)
+        (root / "Branch A" / "report.docx").write_text("x")
+        with pytest.raises(MergeError):
+            merge_folder_to_zip(root, tmp_path / "out.zip")

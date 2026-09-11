@@ -30,6 +30,8 @@ interface PickedFile {
 interface BranchRow {
   name: string;
   count: number;
+  /** True when none of its PDFs sit directly in it, only further down. */
+  deep: boolean;
 }
 
 interface MergeResult {
@@ -122,6 +124,11 @@ export const TabMerge: React.FC = () => {
   /** What the server will make of this folder, worked out before it is sent. */
   const reading = useMemo(() => {
     const counts = new Map<string, number>();
+    // A branch whose PDFs all sit further down is the signature of picking
+    // one level too high: root/Region/Branch/file.pdf merges a whole region
+    // into one PDF and reports success. Worth saying before the upload, not
+    // after it.
+    const direct = new Set<string>();
     let loose = 0;
     for (const p of picked) {
       const segs = p.path.split('/').filter(Boolean);
@@ -132,9 +139,10 @@ export const TabMerge: React.FC = () => {
         continue;
       }
       counts.set(segs[1], (counts.get(segs[1]) ?? 0) + 1);
+      if (segs.length === 3) direct.add(segs[1]);
     }
     const rows: BranchRow[] = [...counts.entries()]
-      .map(([name, count]) => ({ name, count }))
+      .map(([name, count]) => ({ name, count, deep: !direct.has(name) }))
       .sort((a, b) => naturally(a.name, b.name));
     return { rows, loose, root: picked[0]?.path.split('/')[0] ?? '' };
   }, [picked]);
@@ -401,7 +409,10 @@ export const TabMerge: React.FC = () => {
                     {reading.rows.map((row) => (
                       <tr key={row.name}>
                         <td className="truncate" title={row.name}>{row.name}</td>
-                        <td className="font-mono">{row.count}</td>
+                        <td className="font-mono">
+                          {row.count}
+                          {row.deep && <span className="text-amber-400"> ↓</span>}
+                        </td>
                         <td className="font-mono text-slate-400 truncate">{row.name}.pdf</td>
                       </tr>
                     ))}
@@ -416,6 +427,18 @@ export const TabMerge: React.FC = () => {
                 <span className="text-slate-300">
                   Every PDF sits directly in that folder, with no branch subfolders — there is
                   nothing to group. Pick the folder one level up.
+                </span>
+              </div>
+            )}
+
+            {reading.rows.length > 0 && reading.rows.every((row) => row.deep) && (
+              <div className="validation-box flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+                <span className="text-slate-300">
+                  Every PDF sits one level further down than expected, so each folder above would be
+                  merged into a single PDF. If{' '}
+                  <span className="font-mono text-slate-200">{reading.rows[0].name}</span> holds your
+                  branches rather than being one, pick the folder one level down.
                 </span>
               </div>
             )}
