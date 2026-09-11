@@ -13,6 +13,7 @@ so that a download works even if the in-memory map was cleared by a restart.
 """
 
 import datetime
+import json
 import os
 import re
 import shutil
@@ -40,6 +41,16 @@ logger = logging.getLogger(__name__)
 
 # REPORT_STORAGE_DIR is meant to live on a persistent disk in production so
 # output files survive redeploys. Falls back to a project-local dir.
+# Anything that could make a path segment mean something other than a name.
+# Reuse the merger's own sanitiser rather than keeping a second copy of this
+# character class in sync -- an earlier duplicate here had its escapes
+# mangled into the range "0-\\", which quietly replaced every capital
+# letter in a branch name. Imported lazily inside the handler for the same
+# reason the other services are: it keeps module import cheap.
+def _safe_segment(text: str) -> str:
+    from audit_engine.services.pdf_merger import _UNSAFE_IN_NAME
+    return _UNSAFE_IN_NAME.sub("_", text)
+
 _STORAGE_ENV = os.environ.get("REPORT_STORAGE_DIR")
 if _STORAGE_ENV:
     REPORT_UPLOAD_DIR = Path(_STORAGE_ENV)
@@ -489,6 +500,98 @@ def report_download():
 # streamed straight back, then both files are shredded. Nothing a user sends
 # is left on the server's disk after the response — there is no id to poll
 # and no stored copy to leak.
+
+def _rebuild_upload_tree(uploads, relative_paths, root: Path) -> int:
+    """Recreate the uploaded folder under `root`, keeping only its shape.
+
+    A directory upload sends each file with the path the browser saw --
+    "Uploaded Folder/Branch A/file1.pdf". That path decides which branch a
+    file merges into, so it cannot simply be dropped; it also comes from the
+    client, so it cannot simply be trusted. Each segment is taken as a bare
+    name with separators and traversal removed, the leading folder is
+    discarded, and anything that is not a .pdf is ignored.
+    """
+    written = 0
+    for upload, raw_path in zip(uploads, relative_paths):
+        parts = [seg for seg in str(raw_path or "").replace("\\", "/").split("/") if seg not in ("", ".", "..")]
+        if not parts:
+            continue
+        # Drop the root folder the browser prefixes, keeping branch/.../file.
+        if len(parts) > 1:
+            parts = parts[1:]
+        safe = [_safe_segment(seg).strip(". ") or "_" for seg in parts]
+        if not safe[-1].lower().endswith(".pdf"):
+            continue
+
+        destination = root.joinpath(*safe)
+        # Belt and braces: after sanitising, it must still be under root.
+        if not str(destination.resolve()).startswith(str(root.resolve())):
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with open(destination, "wb") as out:
+            shutil.copyfileobj(upload.file, out)
+        written += 1
+    return written
+
+
+@route("/api/merge/upload", method=["OPTIONS", "POST"])
+def merge_upload():
+    """Merge each branch folder's PDFs into one PDF per branch, returned as a zip.
+
+    One request, nothing kept: the uploaded branch folders are somebody's
+    audit reports, so they are shredded with the zip the moment the response
+    is built -- the same terms as flatten and the Arvog rebuild.
+    """
+    if request.method == "OPTIONS":
+        return {}
+
+    uploads = request.files.getall("file")
+    if not uploads:
+        response.status = 400
+        return {"detail": "No files provided"}
+
+    # The browser sends each file's path in the picked folder alongside it.
+    relative_paths = request.forms.getall("path") or [u.raw_filename for u in uploads]
+
+    from audit_engine.services.pdf_flattener import cleanup_dir
+    from audit_engine.services.pdf_flattener import secure_delete as _shred
+    from audit_engine.services.pdf_merger import MergeError, merge_folder_to_zip
+
+    work_dir = Path(tempfile.mkdtemp(prefix="merge_", dir=str(REPORT_UPLOAD_DIR)))
+    source_root = work_dir / "source"
+    zip_path = work_dir / "Final_Output.zip"
+    try:
+        written = _rebuild_upload_tree(uploads, relative_paths, source_root)
+        if written == 0:
+            response.status = 400
+            return {"detail": "No PDFs found in that folder."}
+
+        result = merge_folder_to_zip(source_root, zip_path)
+        payload = zip_path.read_bytes()
+
+        response.content_type = "application/zip"
+        response.headers["Content-Disposition"] = 'attachment; filename="Final_Output.zip"'
+        response.headers["X-Merge-Branches"] = str(result["branch_count"])
+        response.headers["X-Merge-Sources"] = str(result["total_sources"])
+        response.headers["X-Merge-Pages"] = str(result["total_pages"])
+        # Skipped files and empty branches travel back so the operator is told
+        # rather than left to notice a missing branch later.
+        response.headers["X-Merge-Notes"] = json.dumps(result["notes"])[:3800]
+        return payload
+    except MergeError as e:
+        response.status = 400
+        return {"detail": str(e)}
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Merge failed")
+        response.status = 500
+        return {"detail": f"Could not merge those PDFs: {e}"}
+    finally:
+        for stray in source_root.rglob("*"):
+            if stray.is_file():
+                _shred(stray)
+        _shred(zip_path)
+        cleanup_dir(work_dir)
+
 
 @route("/api/flatten/upload", method=["OPTIONS", "POST"])
 def flatten_upload():
