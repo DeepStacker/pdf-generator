@@ -15,7 +15,8 @@ bank's output lands in both at once.
 ```
 src/audit_engine/          Shared backend — all business logic
 ├── services/              Per-bank report generation (IDFC, Equitas, Arvog),
-│                          the report validator, the PDF flattener
+│                          the report validator, the PDF flattener,
+│                          the branch-folder PDF merger
 ├── consolidator/          Multi-workbook consolidation
 ├── tasks/workers.py       The job workers all three banks run through
 ├── web/                   The /api/* handlers, shared by both front ends
