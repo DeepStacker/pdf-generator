@@ -15,6 +15,8 @@ Both front ends drive these same workers, so this applies to the desktop app
 and the browser server alike.
 """
 
+import os
+
 import pytest
 
 from audit_engine.tasks import workers
@@ -97,3 +99,26 @@ def test_the_output_folder_is_named_after_the_users_file(tmp_path):
     assert workers._output_name_for(theirs) == "mapped_totals"
 
     assert workers._output_name_for(str(tmp_path / "Q3_audit.xlsx")) == "Q3_audit"
+
+
+def test_two_masters_sharing_a_filename_still_get_a_folder_each(tmp_path):
+    """A batch must never merge, even when the names collide.
+
+    The folder was "{workbook}_{timestamp}" at one-second resolution, created
+    with exist_ok=True. An upload keeps only the basename, so two different
+    workbooks both called master.xlsx -- routine from a browser -- landed in
+    one folder and same-named branches overwrote each other. The earlier
+    "bulk is not merged" test used differently-named files and passed
+    throughout.
+    """
+    parent = tmp_path / "IDFC_First_Bank"
+    parent.mkdir()
+
+    first = workers._distinct_run_dir(str(parent), "master_20260101_120000")
+    second = workers._distinct_run_dir(str(parent), "master_20260101_120000")
+
+    assert first != second, "the second master reused the first one's folder"
+    assert os.path.isdir(first) and os.path.isdir(second)
+    assert sorted(os.listdir(parent)) == [
+        "master_20260101_120000", "master_20260101_120000_2",
+    ]

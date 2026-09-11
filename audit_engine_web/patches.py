@@ -73,7 +73,17 @@ def apply_patches():
     #
     # So nothing is written here. The desktop app is unaffected and keeps its
     # history; the browser's History screen simply stays empty.
-    legacy_mod.log_generation = lambda *a, **k: logger.debug("history write skipped (web mode)")
+    def _skip_history(*_a, **_k):
+        logger.debug("history write skipped (web mode)")
+
+    # Both bindings. workers.py does `from audit_engine.database import
+    # log_generation` at import time, so it holds its own reference and
+    # patching only the source module left the real function being called --
+    # which is exactly what happened: filenames kept landing in the history
+    # table after this patch was supposedly in place. Verified by asserting on
+    # workers_mod.log_generation, not on legacy_mod's.
+    legacy_mod.log_generation = _skip_history
+    workers_mod.log_generation = _skip_history
 
     # The service logs still name the workbook on the way in, and audit_engine.log
     # outlives the file. That log is on the server's own disk and no route can

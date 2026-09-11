@@ -49,6 +49,10 @@ import threading
 # this: inputs the moment their job ends, outputs the moment they are served.
 IDLE_FILE_TTL = 120
 
+# How long a workspace belonging to no running instance may sit. Only ever
+# applied to directories this process does not own -- see the sweeper.
+ORPHAN_WORKSPACE_TTL = 24 * 60 * 60
+
 
 def _start_temp_garbage_collector():
     """Delete what jobs leave behind, without deleting the workspace itself.
@@ -97,12 +101,20 @@ def _start_temp_garbage_collector():
                             pass
 
                 # Workspaces left by earlier runs of this server.
+                #
+                # The age bar is deliberately much higher than IDLE_FILE_TTL.
+                # A second instance's workspace looks identical to an
+                # abandoned one, and at the TTL this deleted the in-flight
+                # uploads of a server running alongside it -- seen for real
+                # when two instances were up at once. A day old means nothing
+                # is still using it, whereas two minutes old means very
+                # little.
                 keep = {UPLOAD_DIR.resolve(), OUTPUT_DIR.resolve()}
                 for stale in Path(tempfile.gettempdir()).glob("audit_engine_*"):
                     try:
                         if not stale.is_dir() or stale.resolve() in keep:
                             continue
-                        if now - stale.stat().st_mtime > IDLE_FILE_TTL:
+                        if now - stale.stat().st_mtime > ORPHAN_WORKSPACE_TTL:
                             shutil.rmtree(str(stale), ignore_errors=True)
                             logger.info("Zero-trace: removed orphaned workspace %s", stale.name)
                     except OSError:

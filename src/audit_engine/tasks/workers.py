@@ -21,6 +21,28 @@ global_tracker: ProgressTracker = ProgressTracker()
 cancel_event: threading.Event = threading.Event()
 
 
+def _distinct_run_dir(parent: str, label: str) -> str:
+    """Create a fresh output folder, never reusing one already there.
+
+    The folder was named "{workbook}_{timestamp}" at one-second resolution
+    and created with exist_ok=True. Two different workbooks that happen to
+    share a filename -- which browsers produce constantly, since an upload
+    keeps only the basename -- therefore landed in the SAME folder, and any
+    two branches with the same name silently overwrote each other.
+
+    That is precisely the merge a batch is supposed not to do. Colliding runs
+    now get "_2", "_3", so a batch always yields one folder per input.
+    """
+    candidate = os.path.join(parent, label)
+    suffix = 2
+    while os.path.exists(candidate):
+        candidate = os.path.join(parent, f"{label}_{suffix}")
+        suffix += 1
+    candidate = os.path.abspath(os.path.normpath(candidate))
+    os.makedirs(candidate)
+    return candidate
+
+
 def _output_name_for(path: str) -> str:
     """The name to label this run's output folder with.
 
@@ -94,9 +116,7 @@ def worker_idfc_thread(inp: str | list[str], out_base: str, typ: str, output_mod
             excel_name = _output_name_for(curr_inp)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            out = os.path.join(curr_out_base, f"{excel_name}_{timestamp}")
-            out = os.path.abspath(os.path.normpath(out))
-            os.makedirs(out, exist_ok=True)
+            out = _distinct_run_dir(curr_out_base, f"{excel_name}_{timestamp}")
 
             s, h, rows = pdf_logic.read_excel(curr_inp, lambda x: global_tracker.log("INFO", x))
             groups = pdf_logic.group_by_branch(rows)
@@ -211,9 +231,7 @@ def worker_equitas_thread(inp: str | list[str], out_base: str, stage: str, equit
             excel_name = _output_name_for(curr_inp)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            out = os.path.join(curr_out_base, f"{excel_name}_EQ_{stage.replace(' ', '')}_{timestamp}")
-            out = os.path.abspath(os.path.normpath(out))
-            os.makedirs(out, exist_ok=True)
+            out = _distinct_run_dir(curr_out_base, f"{excel_name}_EQ_{stage.replace(' ', '')}_{timestamp}")
 
             if stage == "STAGE 1":
                 pdf_c, exc_c = equitas_logic.run_equitas_stage1(
@@ -302,9 +320,7 @@ def worker_arvog_thread(inp: str | list[str], out_base: str, auto_open: bool, ou
             excel_name = _output_name_for(curr_inp)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            out = os.path.join(curr_out_base, f"{excel_name}_ARVOG_{timestamp}")
-            out = os.path.abspath(os.path.normpath(out))
-            os.makedirs(out, exist_ok=True)
+            out = _distinct_run_dir(curr_out_base, f"{excel_name}_ARVOG_{timestamp}")
 
             arvog_bank.process_excel(
                 input_excel=curr_inp,

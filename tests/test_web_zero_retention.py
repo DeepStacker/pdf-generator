@@ -105,3 +105,41 @@ def test_paths_outside_the_workspace_are_refused(web, tmp_path):
     assert web._within_workspace(web.OUTPUT_DIR / "fine.pdf") is True
     assert web._within_workspace(outsider) is False
     assert web._within_workspace(Path("/etc/passwd")) is False
+
+
+def test_web_mode_really_stops_the_history_write():
+    """Patching the source module was not enough, and looked like it was.
+
+    tasks/workers.py does `from audit_engine.database import log_generation`
+    at import time, so it holds its own reference. patches.py rebound only
+    audit_engine.database.legacy, which left the workers calling the real
+    function -- customer workbook names kept landing in the history table
+    after the patch was supposedly in place. Asserting on the source module
+    would still pass today; this asserts on the binding that actually runs.
+    """
+    from audit_engine_web.patches import apply_patches
+
+    apply_patches()
+
+    import audit_engine.database.legacy as legacy_mod
+    import audit_engine.tasks.workers as workers_mod
+
+    assert workers_mod.log_generation.__name__ == "_skip_history", (
+        "the workers still hold the real log_generation, so web mode is "
+        "recording customers' file names"
+    )
+    assert legacy_mod.log_generation.__name__ == "_skip_history"
+
+
+def test_the_sweeper_does_not_delete_a_running_neighbour(web):
+    """Two instances on one host must not eat each other's uploads.
+
+    The orphan sweep removed any /tmp/audit_engine_* that was not its own
+    root and older than the 2-minute idle TTL -- which describes a second
+    live server's workspace exactly. It happened during testing.
+    """
+    assert web.ORPHAN_WORKSPACE_TTL >= 60 * 60, (
+        f"orphan workspaces age out after {web.ORPHAN_WORKSPACE_TTL}s, which is "
+        f"short enough to hit a server that is still using one"
+    )
+    assert web.ORPHAN_WORKSPACE_TTL > web.IDLE_FILE_TTL
