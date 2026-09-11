@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import shutil
+import signal
 import sys
 import tempfile
 import uuid
@@ -40,6 +41,29 @@ def _cleanup_temp():
             shutil.rmtree(str(d), ignore_errors=True)
             logger.info("Cleaned up: %s", d)
 atexit.register(_cleanup_temp)
+
+
+def _cleanup_on_signal(signum, _frame):
+    """Clear the workspace on SIGTERM as well as on a clean exit.
+
+    atexit does not run when the process is signalled, and SIGTERM is exactly
+    how a container is stopped -- so every `podman compose down` or redeploy
+    left a workspace of customer uploads behind for the sweeper to find later.
+    Re-raising with the default handler afterwards keeps the exit status
+    honest for whatever is supervising.
+    """
+    _cleanup_temp()
+    signal.signal(signum, signal.SIG_DFL)
+    os.kill(os.getpid(), signum)
+
+
+for _sig in (signal.SIGTERM, signal.SIGINT):
+    try:
+        signal.signal(_sig, _cleanup_on_signal)
+    except (ValueError, OSError):
+        # Not the main thread, or a platform without it; atexit still covers
+        # the clean-exit path.
+        pass
 
 import time
 import threading
@@ -564,6 +588,32 @@ def serve_assets(filename):
             return {"error": "Asset not found"}
     return static_file(str(file_path.name), root=str(file_path.parent))
 
+def _safe_upload_name(upload) -> str:
+    """The uploaded file's own name, kept intact enough to still mean something.
+
+    bottle's FileUpload.filename collapses every run of whitespace to a dash
+    and drops anything outside [A-Za-z0-9-_.], so
+    "Axis Bank POA Payment Mar26.xlsx" arrives as
+    "Axis-Bank-POA-Payment-Mar26.xlsx" and "L & T Collection.xlsx" loses its
+    ampersand altogether. Consolidation matches a workbook to its client by
+    patterns written with real spaces -- "Axis Bank POA", "L & T Collection",
+    "^RBL -" -- so every uploaded file fell through to a generic label made
+    from the mangled name, and its configured column overrides were skipped.
+
+    So this starts from raw_filename and keeps the characters those patterns
+    depend on, while still being the only thing standing between a caller's
+    string and a path on disk: basename only, no separators, no traversal, no
+    control characters, no leading dot.
+    """
+    raw = getattr(upload, "raw_filename", "") or upload.filename or ""
+    # Path separators first, both kinds, so nothing can steer out of the directory.
+    raw = raw.replace("\\", "/").split("/")[-1]
+    kept = "".join(c for c in raw if c.isalnum() or c in " &-_.()',")
+    kept = " ".join(kept.split())          # collapse whitespace runs, strip ends
+    kept = kept.replace("..", ".").lstrip(".")
+    return kept[:200] or "upload.xlsx"
+
+
 @route("/api/upload", method=["OPTIONS", "POST"])
 def handle_upload():
     if request.method == "OPTIONS":
@@ -571,7 +621,7 @@ def handle_upload():
     upload = request.files.get("file")
     if not upload:
         return {"success": False, "error": "No file provided"}
-    safe_name = "".join(c for c in upload.filename if c.isalnum() or c in "._- ")
+    safe_name = _safe_upload_name(upload)
     subdir = UPLOAD_DIR / str(uuid.uuid4())[:8]
     subdir.mkdir(parents=True, exist_ok=True)
     dest = subdir / safe_name
@@ -589,7 +639,7 @@ def handle_upload_multiple():
         return {"success": False, "error": "No files provided"}
     paths_list = []
     for upload in uploaded:
-        safe_name = "".join(c for c in upload.filename if c.isalnum() or c in "._- ")
+        safe_name = _safe_upload_name(upload)
         subdir = UPLOAD_DIR / str(uuid.uuid4())[:8]
         subdir.mkdir(parents=True, exist_ok=True)
         dest = subdir / safe_name

@@ -143,3 +143,58 @@ def test_the_sweeper_does_not_delete_a_running_neighbour(web):
         f"short enough to hit a server that is still using one"
     )
     assert web.ORPHAN_WORKSPACE_TTL > web.IDLE_FILE_TTL
+
+
+def _safe_name(raw: str):
+    """Exercise the upload sanitiser without importing the whole server."""
+    import audit_engine_web.__main__ as web_main
+
+    class _Upload:
+        raw_filename = raw
+        filename = raw
+
+    return web_main._safe_upload_name(_Upload())
+
+
+def test_an_upload_keeps_the_name_consolidation_matches_on():
+    """bottle's sanitiser made every uploaded workbook unmatchable.
+
+    FileUpload.filename collapses whitespace runs to a dash and drops
+    anything outside [A-Za-z0-9-_.], so "Axis Bank POA Payment Mar26.xlsx"
+    arrived as "Axis-Bank-POA-Payment-Mar26.xlsx" and "L & T Collection.xlsx"
+    lost its ampersand. Consolidation matches a workbook to its client with
+    patterns written in real characters -- "Axis Bank POA",
+    "L & T Collection", "^RBL -" -- so uploads fell through to a generic
+    label built from the mangled name and skipped their column overrides.
+    """
+    assert _safe_name("Axis Bank POA Payment Mar26.xlsx") == "Axis Bank POA Payment Mar26.xlsx"
+    assert _safe_name("L & T Collection Mar26.xlsx") == "L & T Collection Mar26.xlsx"
+    assert _safe_name("RBL - Payment.xlsx") == "RBL - Payment.xlsx"
+
+
+def test_the_upload_name_still_cannot_escape_the_directory():
+    """It is the only thing between a caller's string and a path on disk."""
+    for hostile, expected in [
+        ("../../../etc/passwd", "passwd"),
+        ("/absolute/path/file.xlsx", "file.xlsx"),
+        ("....//evil.xlsx", "evil.xlsx"),
+        (".hidden", "hidden"),
+        ("", "upload.xlsx"),
+    ]:
+        got = _safe_name(hostile)
+        assert got == expected, f"{hostile!r} -> {got!r}"
+        assert "/" not in got and "\\" not in got and ".." not in got
+
+
+def test_a_signalled_shutdown_still_clears_the_workspace():
+    """atexit does not run on SIGTERM, and SIGTERM is how a container stops.
+
+    Every redeploy therefore left a workspace of customer uploads behind.
+    """
+    import audit_engine_web.__main__ as web_main
+
+    assert hasattr(web_main, "_cleanup_on_signal")
+    with open(web_main.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    assert "signal.signal(_sig, _cleanup_on_signal)" in src
+    assert "signal.SIGTERM" in src
