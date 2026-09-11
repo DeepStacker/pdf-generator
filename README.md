@@ -94,10 +94,5 @@ The desktop app is unaffected by all of the above. It opens no socket.
 
 ## Known issues
 
-- **The test suite writes to the real application database.** Running
-  `pytest` overwrites the output folder saved by the desktop app on that
-  machine (`~/Library/Application Support/AuditEngineElite/…` on macOS). It
-  needs an autouse fixture pointing `AUDIT_ENGINE_DB_PATH`,
-  `AUDIT_ENGINE_LOG_PATH` and `REPORT_STORAGE_DIR` at a temp directory.
 - Podman builds OCI images and ignores the Dockerfile `HEALTHCHECK`. The
   compose stack defines its own, so the deployed stack is still health-checked.
