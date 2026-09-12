@@ -1,8 +1,8 @@
 import React from 'react';
-import { ShieldCheck, FileStack, Combine, BarChart3, History, Settings, Users, LogOut } from 'lucide-react';
+import { ShieldCheck, FileStack, Combine, Users, LogOut } from 'lucide-react';
 import { BANKS } from '../banks';
 
-export type ActiveTab = 'audit' | 'consolidation' | 'flatten' | 'merge' | 'stats' | 'report' | 'history' | 'users' | 'settings';
+export type ActiveTab = 'audit' | 'consolidation' | 'flatten' | 'merge' | 'report' | 'users';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -36,11 +36,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selec
     { id: 'flatten', label: 'Flatten PDF', Icon: FileStack },
     { id: 'merge', label: 'Merge PDF', Icon: Combine },
   ];
-  const insights: { id: ActiveTab; label: string; Icon: React.FC<{ className?: string }> }[] = [
-    { id: 'stats', label: 'Analytics', Icon: BarChart3 },
-    { id: 'history', label: 'History', Icon: History },
-  ];
-
   const item = (id: ActiveTab, label: string, Icon: React.FC<{ className?: string }>) => (
     <button
       key={id}
@@ -102,16 +97,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, selec
           <span className="sidebar-group-label">Tools</span>
           {tools.map((t) => item(t.id, t.label, t.Icon))}
         </div>
-
-        <div className="sidebar-group">
-          <span className="sidebar-group-label">Insights</span>
-          {insights.map((t) => item(t.id, t.label, t.Icon))}
-        </div>
       </nav>
 
       <div className="sidebar-footer">
         {isAdmin && item('users', 'Users', Users)}
-        {item('settings', 'Settings', Settings)}
         <a href="/logout" className="sidebar-item nav-btn">
           <LogOut />
           <span className="sidebar-item-label">Sign out</span>

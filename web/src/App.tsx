@@ -12,28 +12,24 @@ const SCREEN_TITLES: Record<ActiveTab, string> = {
   report: 'Report Validator',
   flatten: 'Flatten PDF',
   merge: 'Merge PDF',
-  stats: 'Analytics',
-  history: 'History',
   users: 'Users',
-  settings: 'Settings',
 };
 
 const APP_VERSION = rawVersion.startsWith('{{') ? '' : rawVersion;
 import { TabBankAudit } from './components/TabBankAudit';
 import { TabConsolidation } from './components/TabConsolidation';
-import { TabStats } from './components/TabStats';
 import { TabReportAutomation } from './components/TabReportAutomation';
 import { TabFlatten } from './components/TabFlatten';
 import { TabMerge } from './components/TabMerge';
-import { TabHistory } from './components/TabHistory';
-import { TabSettings } from './components/TabSettings';
 import { TabUsers } from './components/TabUsers';
 
 export default function App() {
-  // Every valid tab, in one place. TabHistory and TabSettings were written but
-  // never reachable because this list and the nav were maintained separately.
+  // Every valid tab, in one place -- this list and the nav were once
+  // maintained separately, which left two screens unreachable. Anything not
+  // in here falls back to 'audit', so a stale #hash or a remembered tab from
+  // a removed screen lands somewhere real instead of a blank page.
   const TABS: ActiveTab[] = [
-    'audit', 'consolidation', 'report', 'flatten', 'merge', 'stats', 'history', 'users', 'settings',
+    'audit', 'consolidation', 'report', 'flatten', 'merge', 'users',
   ];
   const isTab = (value: string | null): value is ActiveTab =>
     !!value && (TABS as string[]).includes(value);
@@ -211,9 +207,6 @@ export default function App() {
           <div className={activeTab === 'consolidation' ? 'block' : 'hidden'}>
             <TabConsolidation onConsolidateRun={handleConsolidateRun} onUploadFiles={handleUploadFiles} />
           </div>
-          <div className={activeTab === 'stats' ? 'block' : 'hidden'}>
-            <TabStats />
-          </div>
           <div className={activeTab === 'report' ? 'block' : 'hidden'}>
             <TabReportAutomation />
           </div>
@@ -223,17 +216,11 @@ export default function App() {
           <div className={activeTab === 'merge' ? 'block' : 'hidden'}>
             <TabMerge />
           </div>
-          <div className={activeTab === 'history' ? 'block' : 'hidden'}>
-            <TabHistory />
-          </div>
           {me?.is_admin && (
             <div className={activeTab === 'users' ? 'block' : 'hidden'}>
               <TabUsers currentUser={me.username} />
             </div>
           )}
-          <div className={activeTab === 'settings' ? 'block' : 'hidden'}>
-            <TabSettings />
-          </div>
         </main>
       </div>
     </div>
