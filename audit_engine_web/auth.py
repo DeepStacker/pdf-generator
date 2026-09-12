@@ -48,6 +48,21 @@ USER_ENV = "GSS_AUTH_USER"
 COOKIE_NAME = "gss_session"
 SESSION_MAX_AGE = 12 * 60 * 60  # a working day; re-login the next morning
 
+# The session cookie is Secure by default, so a browser only ever sends it
+# back over HTTPS. That is right for any real deployment and wrong for
+# exactly one situation: a first smoke test against http://<host>:8080 before
+# TLS is in front of it. There the browser silently drops the cookie, the
+# login form posts, redirects, and lands back on the login page with no error
+# -- which reads like a wrong password and is not. Setting this to false lets
+# that test sign in. Anything reachable by other people must leave it alone.
+COOKIE_SECURE_ENV = "GSS_COOKIE_SECURE"
+
+
+def cookie_secure() -> bool:
+    return os.environ.get(COOKIE_SECURE_ENV, "true").strip().lower() not in (
+        "0", "false", "no", "off",
+    )
+
 _PBKDF2_ROUNDS = 240_000
 
 

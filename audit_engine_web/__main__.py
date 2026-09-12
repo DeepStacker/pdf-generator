@@ -574,7 +574,7 @@ def login():
         response.set_cookie(
             auth.COOKIE_NAME, auth.issue_session(account["username"]),
             httponly=True,           # not readable from JavaScript, so XSS cannot lift it
-            secure=True,             # only ever sent over TLS
+            secure=auth.cookie_secure(),   # only ever sent over TLS, unless explicitly relaxed
             samesite="lax",          # not attached to cross-site form posts
             max_age=auth.SESSION_MAX_AGE, path="/",
         )
@@ -1082,6 +1082,28 @@ def main():
     logger.info("Database: %s", paths.db)
     logger.info("Listening on http://%s:%d", args.host, args.port)
     logger.info("=" * 60)
+
+    # Say why, at the top of the log, once.
+    #
+    # An unconfigured server answers 503 to everything, which is the correct
+    # behaviour and an awful first impression: the container's healthcheck
+    # fails, compose reports "container is unhealthy" and aborts, and the log
+    # shows nothing but a line per probe. Somebody deploying this for the
+    # first time has no way to tell a missing password from a broken image.
+    if not _login_possible():
+        logger.error("=" * 60)
+        logger.error("NOT CONFIGURED: refusing every request.")
+        logger.error("No account exists and %s is not set, so nobody could sign in.", auth.PASSWORD_ENV)
+        logger.error("Generate the two values with:")
+        logger.error("    docker compose -f deploy/compose.aws.yml run --rm app python -m audit_engine_web.setpassword")
+        logger.error("put them in deploy/.env.production, and start the stack again.")
+        logger.error("=" * 60)
+    elif not auth.cookie_secure():
+        logger.warning(
+            "%s is off: session cookies will be sent over plain HTTP. "
+            "Use this only for a local smoke test, never for a server other people can reach.",
+            auth.COOKIE_SECURE_ENV,
+        )
 
     try:
         run(app=app, host=args.host, port=args.port, debug=args.debug, quiet=True)

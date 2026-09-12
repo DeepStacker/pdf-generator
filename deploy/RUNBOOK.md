@@ -1,4 +1,8 @@
-# Runbook — GSS-MIS browser app
+# Runbook — GSS-MIS browser app, home server
+
+This is the tailnet deployment. For a plain Docker host — AWS or anywhere
+else, with nginx or a load balancer in front — see **[AWS.md](AWS.md)**; the
+commands there are `docker`, and the stack is `compose.aws.yml`.
 
 The stack runs under **rootless Podman** on the host, alongside unrelated
 stacks. It publishes no host port: a Tailscale sidecar joins the tailnet as

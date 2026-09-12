@@ -68,7 +68,18 @@ deploying is enough; there is nothing to rebuild by hand.
 
 ## Deployment
 
-See **[deploy/RUNBOOK.md](deploy/RUNBOOK.md)**.
+On a plain Docker host (AWS, or anything else), clone it and run one script:
+
+```bash
+git clone https://github.com/DeepStacker/pdf-generator.git
+cd pdf-generator
+./deploy/bootstrap.sh          # asks for a password, then brings the stack up
+```
+
+Full instructions, TLS and day-to-day operations: **[deploy/AWS.md](deploy/AWS.md)**.
+
+The home server on the tailnet is a different stack, run under Podman with a
+Tailscale sidecar: **[deploy/RUNBOOK.md](deploy/RUNBOOK.md)**.
 
 ## Security posture
 

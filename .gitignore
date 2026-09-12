@@ -36,6 +36,10 @@ generated_pdfs/
 
 # Deployment secrets (Tailscale auth key). The example stays tracked.
 deploy/.env.production
+# TLS private keys and certificates. The proxy reads them from here; none of
+# them belongs in a repository, least of all a public one.
+deploy/certs/*
+!deploy/certs/.gitkeep
 
 # Claude Code local tooling (dev-server launch config, etc.)
 .claude/
